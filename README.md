@@ -189,6 +189,7 @@ See [Development Roadmap](docs/ROADMAP.md) for detailed implementation plan.
 - [API Reference](docs/API.md)
 - [Development Roadmap](docs/ROADMAP.md)
 - [Implementation Tasks](docs/TASKS.md)
+- [Final Implementation Plan](docs/FINAL_PLAN.md)
 - [Project History](CLAUDE.md)
 
 ## 🤝 Contributing
