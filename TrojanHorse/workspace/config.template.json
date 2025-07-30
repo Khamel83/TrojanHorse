@@ -1,0 +1,22 @@
+{
+  "audio": {
+    "chunk_duration": 300,
+    "sample_rate": 44100,
+    "quality": "medium",
+    "format": "wav"
+  },
+  "storage": {
+    "temp_path": "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/MacProAudio",
+    "base_path": "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Meeting Notes"
+  },
+  "transcription": {
+    "engine": "macwhisper",
+    "language": "auto",
+    "model_size": "base"
+  },
+  "cloud_analysis": {
+    "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
+    "model": "google/gemini-2.0-flash-001",
+    "base_url": "https://openrouter.ai/api/v1"
+  }
+}

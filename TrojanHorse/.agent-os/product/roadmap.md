@@ -26,16 +26,18 @@
 
 ### Features
 
-- [ ] Local LLM Analysis `[L]`
-- [ ] Cloud Intelligence `[M]`
-- [ ] Privacy Architecture `[M]`
-- [ ] Content Classification `[L]`
-- [ ] Cost Optimization `[S]`
+- [x] Local LLM Analysis `[L]` (analyze_local.py implemented)
+- [x] Cloud Intelligence `[M]` (cloud_analyze.py + process_gemini.py implemented)
+- [x] Privacy Architecture `[M]` (PII detection in analyze_local.py)
+- [ ] ~~Content Classification~~ `[L]` (merged into unified analysis router)
+- [x] Cost Optimization `[S]` (cost tracking in process_gemini.py)
+
+**Status:** Architecture needs unification - complex implementations exist but need simplification
 
 ### Dependencies
 
-- Ollama
-- OpenRouter
+- Ollama ✅
+- OpenRouter ✅
 
 ## Phase 3: Search & Memory (v0.3.0)
 
@@ -44,14 +46,18 @@
 
 ### Features
 
-- [ ] Search & Memory `[L]`
-- [ ] Semantic Search `[XL]`
-- [ ] Timeline Analysis `[L]`
-- [ ] Export System `[M]`
+- [ ] Search & Memory `[L]` (SQLite + FTS5 implementation)
+- [ ] Semantic Search `[XL]` (sentence-transformers + vector embeddings)
+- [ ] Timeline Analysis `[L]` (web interface with date filtering)
+- [ ] Export System `[M]` (merged into web interface)
+
+**Status:** Ready for implementation via system-completion spec
 
 ### Dependencies
 
-- SQLite + FTS5
+- SQLite + FTS5 (built-in)
+- sentence-transformers
+- Flask
 
 ## Phase 4: Future (v1.0.0)
 
