@@ -1,0 +1,197 @@
+# TrojanHorse - Context Capture System
+
+> **Note**: Despite the name, this is a legitimate personal productivity tool for audio capture and transcription. The name reflects the system's ability to "infiltrate" your daily workflow and capture context seamlessly.
+
+A local-first, privacy-focused audio capture and transcription system that continuously records, transcribes, and organizes work-related conversations and audio into a searchable knowledge base.
+
+## 🎯 Purpose
+
+This system solves the problem of lost context in remote work by:
+- Continuously capturing audio from meetings, calls, and conversations
+- Automatically transcribing everything using local AI models
+- Organizing content into daily folders for easy retrieval
+- Providing a foundation for AI-assisted analysis and search
+
+## 🏗️ Architecture
+
+Built following the **AgentOS** methodology with modular, autonomous components:
+
+- **capture.audio** - Continuous FFmpeg-based recording
+- **transcribe.whisper** - Multi-engine transcription pipeline
+- **ingest.notes** - Note organization and cleanup
+- **analyze.connect** - Content linking and relationship mapping
+- **process.llm** - AI-powered summarization and analysis
+- **log.errors** - Comprehensive monitoring and health checks
+
+## 🚀 Quick Start
+
+### Prerequisites
+```bash
+# Install dependencies
+brew install ffmpeg
+pip install faster-whisper  # optional, for local transcription
+
+# Set up BlackHole for system audio capture
+# Download from: https://existential.audio/blackhole/
+```
+
+### Installation
+```bash
+# Clone and setup
+git clone https://github.com/Khamel83/TrojanHorse.git
+cd TrojanHorse
+python3 setup.py install
+```
+
+### Verify Installation
+```bash
+python3 health_monitor.py status
+```
+
+## 📂 Project Structure
+
+```
+TrojanHorse/
+├── audio_capture.py          # Core audio recording engine
+├── transcribe.py             # Multi-engine transcription
+├── health_monitor.py         # System monitoring & restart
+├── setup.py                  # Installation & management
+├── com.contextcapture.audio.plist  # macOS service config
+├── config.json               # System configuration
+├── docs/                     # Documentation
+│   ├── ARCHITECTURE.md       # Technical architecture
+│   ├── SETUP.md             # Detailed setup guide
+│   └── API.md               # Module interfaces
+└── logs/                     # System logs
+```
+
+## 🎛️ Configuration
+
+The system uses `config.json` for all settings:
+
+```json
+{
+  "audio": {
+    "chunk_duration": 300,
+    "sample_rate": 44100,
+    "quality": "medium"
+  },
+  "transcription": {
+    "engine": "macwhisper",
+    "language": "auto", 
+    "model_size": "base"
+  },
+  "storage": {
+    "auto_delete_audio": true,
+    "base_path": "/path/to/Meeting Notes"
+  }
+}
+```
+
+## 🔧 Commands
+
+```bash
+# System Management
+python3 setup.py install      # Install service
+python3 setup.py uninstall    # Remove service  
+python3 setup.py check        # Verify dependencies
+
+# Health Monitoring
+python3 health_monitor.py status    # System status
+python3 health_monitor.py check     # Health verification
+python3 health_monitor.py restart   # Restart services
+python3 health_monitor.py monitor   # Continuous monitoring
+
+# Audio & Transcription
+python3 audio_capture.py --list-devices  # Show audio devices
+python3 transcribe.py /path/to/audio.wav # Manual transcription
+python3 transcribe.py                    # Process pending files
+```
+
+## 📊 Output Structure
+
+Daily organized folders with automatic cleanup:
+
+```
+Meeting Notes/
+├── 2025-07-30/
+│   ├── notes/
+│   │   └── 2025-07-30.md           # Manual/imported notes
+│   ├── transcribed_audio/
+│   │   ├── audio_140532.txt        # Transcribed content
+│   │   └── audio_141032.txt
+│   ├── files/
+│   │   └── screenshots/            # Associated files
+│   └── log.json                    # Daily activity log
+└── 2025-07-31/
+    └── ...
+```
+
+## 🔒 Privacy & Security
+
+- **Local-first**: All transcription happens on your machine
+- **No cloud dependencies**: Optional API usage only for advanced analysis
+- **Automatic cleanup**: Raw audio deleted after transcription
+- **Configurable retention**: Control data retention policies
+- **Encrypted storage**: Optional encryption for sensitive content
+
+## 🛠️ Development Status
+
+**MVP Complete (v0.1.0)**:
+- ✅ Continuous audio capture
+- ✅ Multi-engine transcription
+- ✅ Health monitoring
+- ✅ macOS service integration
+- ✅ Daily folder organization
+
+**Next Phase (v0.2.0)**:
+- 🔄 Local LLM integration (Ollama)
+- 🔄 SQLite indexing and search
+- 🔄 Note integration pipeline
+- 🔄 Basic analysis and tagging
+
+**Future (v1.0.0)**:
+- 📋 Full RAG implementation
+- 📋 Cross-day context linking
+- 📋 Advanced AI analysis
+- 📋 Export and integration APIs
+
+## 🐛 Troubleshooting
+
+**Service Issues**:
+- Check `logs/audio_capture.err` for FFmpeg errors
+- Verify microphone permissions in System Preferences
+- Ensure BlackHole is properly configured
+
+**Audio Problems**:
+- Run `python3 audio_capture.py --list-devices`
+- Check device indices in audio_capture.py
+- Test BlackHole system audio routing
+
+**Transcription Failures**:
+- Verify MacWhisper or faster-whisper installation
+- Check available disk space
+- Review transcription.log for errors
+
+## 📖 Documentation
+
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Detailed Setup Guide](docs/SETUP.md)
+- [API Reference](docs/API.md)
+- [Project History](CLAUDE.md)
+
+## 🤝 Contributing
+
+This is a personal project, but the modular architecture makes it easy to:
+- Add new transcription engines
+- Implement different storage backends
+- Extend analysis capabilities
+- Integrate with other tools
+
+## 📄 License
+
+Private project - not for public distribution.
+
+---
+
+*Built with Claude Code for continuous context capture and knowledge management.*
