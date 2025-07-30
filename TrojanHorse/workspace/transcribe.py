@@ -219,8 +219,39 @@ class AudioTranscriber:
             
             self.logger.info(f"Post-processed transcript: {transcript_file}")
             
+            # Trigger local analysis if available
+            self.trigger_local_analysis(transcript_file)
+            
         except Exception as e:
             self.logger.error(f"Post-processing failed: {e}")
+    
+    def trigger_local_analysis(self, transcript_file):
+        """Trigger local analysis using analyze_local.py"""
+        try:
+            # Import LocalAnalyzer from analyze_local module
+            import sys
+            from pathlib import Path
+            
+            # Add current directory to path to import analyze_local
+            current_dir = Path(__file__).parent
+            if str(current_dir) not in sys.path:
+                sys.path.insert(0, str(current_dir))
+            
+            from analyze_local import LocalAnalyzer
+            
+            # Initialize analyzer and process transcript
+            analyzer = LocalAnalyzer()
+            analysis = analyzer.process_transcript(transcript_file)
+            
+            if analysis and analyzer.save_analysis(analysis):
+                self.logger.info(f"Local analysis completed for: {transcript_file}")
+            else:
+                self.logger.warning(f"Local analysis failed for: {transcript_file}")
+                
+        except ImportError as e:
+            self.logger.info(f"Local analysis not available: {e}")
+        except Exception as e:
+            self.logger.error(f"Local analysis error: {e}")
     
     def process_pending_files(self):
         """Process all pending audio files in temp directory"""
