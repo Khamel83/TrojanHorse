@@ -144,17 +144,19 @@ Meeting Notes/
 - ✅ macOS service integration
 - ✅ Daily folder organization
 
-**Next Phase (v0.2.0)**:
-- 🔄 Local LLM integration (Ollama)
-- 🔄 SQLite indexing and search
-- 🔄 Note integration pipeline
-- 🔄 Basic analysis and tagging
+**Next Phase (v0.2.0)** - Based on Original Research:
+- 🔄 **Wearable Integration**: Connect Bee Pioneer ($49.99) or PLAUD NotePin ($159)
+- 🔄 **Local LLM integration**: Ollama for privacy-aware processing
+- 🔄 **Real-time LLM Pipeline**: Direct ChatGPT/Claude integration
+- 🔄 **SQLite indexing**: Full-text search and retrieval
+- 🔄 **Cost Optimization**: Target <$20/month total operating costs
 
 **Future (v1.0.0)**:
-- 📋 Full RAG implementation
-- 📋 Cross-day context linking
-- 📋 Advanced AI analysis
-- 📋 Export and integration APIs
+- 📋 **Advanced Wearables**: Integration with Limitless AI or custom hardware
+- 📋 **Cross-day Context**: RAG implementation for historical analysis
+- 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing
+- 📋 **Advanced Diarization**: Speaker identification and conversation mapping
+- 📋 **Export APIs**: Integration with productivity tools (Notion, Obsidian)
 
 ## 🐛 Troubleshooting
 

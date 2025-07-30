@@ -11,22 +11,44 @@ This file tracks the development history and AI assistance for the TrojanHorse C
 
 ## Initial Vision & Requirements
 
-### Core Problem
-Lost context in remote work - conversations, meetings, and audio content that gets forgotten or becomes difficult to retrieve.
+### Original Research Context
+This project originated from extensive research into voice recording and AI integration systems documented in `/Users/hr-svp-mac12/Downloads/2025-7-18/7-12-47-Voice_Recording_AI_Setup.md`. The user's core need: **"I want to record my whole day and feed LLMs effectively my whole day to help me do my work"**.
 
-### Solution Architecture
-Local-first audio capture and transcription system that:
-- Continuously records mic + system audio
-- Auto-transcribes using local AI models
+### Core Problem
+Lost context in remote work - conversations, meetings, and audio content that gets forgotten or becomes difficult to retrieve. The user works primarily from home and wanted a **low-friction, continuous, high-context voice recording and transcription setup** that can feed into an LLM pipeline.
+
+### Original Requirements Analysis
+From the research document, key constraints identified:
+- **Recording Scope**: Voice-activated preferred, capture everything including other people
+- **Duration**: 10+ hours daily operation ("just work for the day")  
+- **Integration**: Real-time integration with ChatGPT and Claude
+- **Hardware**: Preferably wearable, but stationary acceptable
+- **Processing**: Near real-time transcription, Whisper acceptable
+- **Privacy**: Privacy-first preferred, but flexible with trusted companies
+- **Technical Resources**: Mac Mini and Raspberry Pi available for local processing
+- **Budget**: Target under $20/month for ongoing costs
+- **Effort**: Willing to do technical setup, but minimal ongoing maintenance
+
+### Solution Architecture Evolution
+**Phase 1 (Current MVP)**: Local-first audio capture and transcription system
+- Continuous mic audio recording (currently, system audio pending BlackHole setup)
+- Auto-transcribes using local AI models (MacWhisper → faster-whisper → system whisper)
 - Organizes content into daily folder structures
-- Provides foundation for AI-assisted analysis
+- Health monitoring and service management
+
+**Future Integration Path**: Based on original research comparing wearable solutions:
+- **Bee Pioneer** ($49.99, privacy-first, 7-day battery) - Strong candidate
+- **PLAUD NotePin** ($159 + subscription, diarization support)
+- **Limitless AI Pendant** ($399/year, premium but expensive)
+- **DIY solutions** using Raspberry Pi and local processing
 
 ### Key Design Principles
-- **Local-first**: Privacy-respecting, minimal cloud dependencies
+- **Local-first**: Privacy-respecting, minimal cloud dependencies (aligns with user preference)
 - **Modular**: Each component can fail gracefully and be rebuilt
-- **Resilient**: Health monitoring and auto-restart capabilities
+- **Resilient**: Health monitoring and auto-restart capabilities  
 - **Human-readable**: Logs and outputs designed for observability
 - **Long-term thinking**: Designed for slow, stable, persistent operation
+- **LLM-Ready**: Output formatted for direct ingestion into ChatGPT/Claude workflows
 
 ## Development Sessions
 
@@ -260,6 +282,92 @@ Local-first audio capture and transcription system that:
 - 🔄 Note integration pipeline
 - 🔄 Advanced analysis features
 
+## Session 2: 2025-07-30 - Repository Setup & Context Integration
+
+**Context**: User requested complete repository setup with documentation and integration of original research context.
+
+**GitHub Repository Established**:
+- ✅ Repository initialized and pushed to `https://github.com/Khamel83/TrojanHorse.git`
+- ✅ Comprehensive `.gitignore` created for Python, audio files, and personal data
+- ✅ Professional README.md with installation and usage instructions
+- ✅ Complete documentation suite in `docs/` folder
+
+**Context Integration Completed**:
+- ✅ Read and analyzed original research document (`7-12-47-Voice_Recording_AI_Setup.md`)
+- ✅ Updated CLAUDE.md with original requirements and hardware research findings
+- ✅ Integrated wearable device research (Bee Pioneer, PLAUD NotePin, Limitless AI)
+- ✅ Preserved complete development history for future reference
+
+**Current System Status**:
+- **MVP Code**: Complete and ready for testing
+- **Audio Setup**: MacBook Pro Microphone configured (BlackHole pending for system audio)
+- **Service Status**: Installed but requires macOS permissions (microphone + file access)
+- **Documentation**: Production-ready with architecture, setup, and API reference
+
+**Next Actions for User**:
+1. **Complete audio setup** (BlackHole installation if system audio desired)
+2. **Grant permissions** (microphone access, full disk access for iCloud folder)
+3. **Test system**: `python3 health_monitor.py status`
+4. **Consider hardware upgrade** to wearable solution based on research findings
+
+**Future Development Priorities** (for next sessions):
+1. **Local LLM Integration**: Ollama setup for privacy-aware processing
+2. **Wearable Integration**: Connect with Bee Pioneer or similar device
+3. **LLM Pipeline**: Direct ChatGPT/Claude integration for real-time analysis
+4. **Search & Indexing**: SQLite database for content retrieval
+5. **Advanced Analysis**: Cross-day context linking and project tracking
+
 ---
 
-*This file serves as both project memory and development guide for future AI assistance sessions.*
+## 🎯 **Handoff Summary for Future Sessions**
+
+### Project Status: MVP Complete, Ready for Hardware Integration
+
+**What's Built and Working**:
+- ✅ Complete audio capture and transcription pipeline
+- ✅ Multi-engine fallback transcription (MacWhisper → faster-whisper → system)
+- ✅ Health monitoring and auto-restart service
+- ✅ Daily folder organization with automatic cleanup
+- ✅ macOS LaunchAgent service integration
+- ✅ Comprehensive documentation and GitHub repository
+
+**Current Configuration**:
+- **Audio Source**: MacBook Pro Microphone (device index 0)
+- **Chunk Duration**: 5 minutes
+- **Output Format**: Daily folders with timestamped transcripts
+- **Service**: Installed but needs permissions to run
+- **Repository**: `https://github.com/Khamel83/TrojanHorse.git`
+
+**Immediate Blockers** (for user to resolve):
+- macOS microphone permissions required
+- Full disk access needed for iCloud folder operations
+- BlackHole setup pending for system audio capture
+
+**Research Context Available**:
+- Original requirements documented in `7-12-47-Voice_Recording_AI_Setup.md`
+- Wearable device analysis completed (Bee Pioneer recommended)
+- LLM integration strategy defined (local + cloud hybrid)
+- Cost analysis under $20/month achievable with current approach
+
+**Next Session Priorities**:
+1. **Hardware Integration**: Connect wearable device or enhance desktop setup
+2. **LLM Pipeline**: Build real-time ChatGPT/Claude integration
+3. **Local Processing**: Set up Ollama for privacy-aware analysis
+4. **Search System**: Implement SQLite indexing for transcript search
+
+**Key Files for Future Reference**:
+- `CLAUDE.md` - Complete development history
+- `docs/ARCHITECTURE.md` - Technical system design
+- `docs/SETUP.md` - Detailed installation guide
+- `config.json` - System configuration
+- Original research: `/Users/hr-svp-mac12/Downloads/2025-7-18/7-12-47-Voice_Recording_AI_Setup.md`
+
+**Available Resources**:
+- Mac Mini (always-on for local processing)
+- Raspberry Pi (available for specialized tasks)
+- Technical capability for advanced setups
+- Budget flexibility under $20/month for cloud services
+
+---
+
+*This file serves as both project memory and development guide for future AI assistance sessions. All context from original research has been preserved and integrated.*

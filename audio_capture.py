@@ -70,10 +70,12 @@ class AudioCapture:
         """Get available audio input devices"""
         try:
             result = subprocess.run(['ffmpeg', '-hide_banner', '-f', 'avfoundation', '-list_devices', 'true', '-i', ''],
-                                  capture_output=True, text=True, stderr=subprocess.STDOUT)
+                                  capture_output=True, text=True)
+            output = result.stderr  # FFmpeg sends device list to stderr
             self.logger.info("Available audio devices:")
-            self.logger.info(result.stdout)
-            return result.stdout
+            self.logger.info(output)
+            print(output)  # Also print to console
+            return output
         except Exception as e:
             self.logger.error(f"Failed to list audio devices: {e}")
             return None
@@ -104,17 +106,13 @@ class AudioCapture:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         temp_file = Path(self.config["storage"]["temp_path"]) / f"audio_{timestamp}.wav"
         
-        # FFmpeg command for capturing both mic and system audio
-        # This assumes BlackHole is set up and configured
-        # You may need to adjust device indices based on your setup
+        # FFmpeg command for capturing microphone audio
+        # Using MacBook Pro Microphone (index 0) for now
+        # To add system audio later, install BlackHole and update to use both inputs
         cmd = [
             'ffmpeg',
             '-f', 'avfoundation',
-            '-i', ':0',  # System audio (BlackHole)
-            '-f', 'avfoundation', 
-            '-i', ':1',  # Microphone
-            '-filter_complex', '[0:a][1:a]amix=inputs=2[out]',
-            '-map', '[out]',
+            '-i', ':0',  # MacBook Pro Microphone
             '-t', str(self.config["audio"]["chunk_duration"]),
             '-acodec', 'pcm_s16le',
             '-ar', str(self.config["audio"]["sample_rate"]),
