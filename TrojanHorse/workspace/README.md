@@ -53,7 +53,10 @@ python3 health_monitor.py status
 ```
 TrojanHorse/
 ├── audio_capture.py          # Core audio recording engine
-├── transcribe.py             # Multi-engine transcription
+├── transcribe.py             # Multi-engine transcription with analysis integration
+├── analyze_local.py          # Local Ollama-based analysis with PII detection
+├── cloud_analyze.py          # OpenRouter cloud analysis integration
+├── process_gemini.py         # Advanced Gemini analysis with cost tracking
 ├── health_monitor.py         # System monitoring & restart
 ├── setup.py                  # Installation & management
 ├── com.contextcapture.audio.plist  # macOS service config
@@ -84,6 +87,14 @@ The system uses `config.json` for all settings:
   "storage": {
     "auto_delete_audio": true,
     "base_path": "/path/to/Meeting Notes"
+  },
+  "cloud_analysis": {
+    "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
+    "model": "google/gemini-2.0-flash-001",
+    "base_url": "https://openrouter.ai/api/v1"
+  },
+  "analysis": {
+    "default_type": "prompt"
   }
 }
 ```
@@ -144,18 +155,18 @@ Meeting Notes/
 - ✅ macOS service integration
 - ✅ Daily folder organization
 
-**Next Phase (v0.2.0)** - Local-First Intelligence:
-- 🔄 **Local LLM Analysis**: Ollama + qwen3:8b for privacy-first processing
-- 🔄 **Cloud Intelligence**: Gemini Flash 2.0 via OpenRouter for advanced insights
-- 🔄 **Privacy Architecture**: Local PII filtering, sanitized cloud analysis
-- 🔄 **Content Classification**: Automated categorization and action item extraction
-- 🔄 **Cost Optimization**: <$5/month with intelligent local/cloud routing
+**Phase 2 (v0.2.0)** - Local-First Intelligence:
+- ✅ **Local LLM Analysis**: Implemented (analyze_local.py with Ollama + qwen3:8b)
+- ✅ **Cloud Intelligence**: Implemented (cloud_analyze.py + process_gemini.py)
+- ✅ **Privacy Architecture**: Implemented (PII detection in analyze_local.py)
+- ✅ **Cost Optimization**: Implemented (cost tracking in process_gemini.py)
+- 🔄 **Architecture Unification**: Replace complex implementations with unified analysis_router.py
 
-**Phase 3 (v0.3.0)**:
-- 🔄 **Search & Memory**: SQLite + FTS5 for instant content retrieval
+**Phase 3 (v0.3.0)** - Search & Memory:
+- 🔄 **Search Engine**: SQLite + FTS5 for instant content retrieval
 - 🔄 **Semantic Search**: Vector embeddings for concept-based queries
-- 🔄 **Timeline Analysis**: Track thought evolution and project progress
-- 🔄 **Export System**: Integration with productivity tools
+- 🔄 **Web Interface**: Flask-based search and browsing interface
+- 🔄 **Batch Indexing**: Retroactive processing of existing transcripts
 
 **Future (v1.0.0)**:
 - 📋 **Workflow Integration**: Real-time context injection for work

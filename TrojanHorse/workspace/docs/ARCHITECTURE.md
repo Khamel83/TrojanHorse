@@ -19,17 +19,17 @@ TrojanHorse follows the **AgentOS** methodology, treating each component as an a
 │                    TrojanHorse System                       │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   capture   │  │ transcribe  │  │   ingest    │         │
-│  │   .audio    │──┤  .whisper   │──┤   .notes    │         │
+│  │   capture   │  │ transcribe  │  │   analyze   │         │
+│  │   .audio    │──┤  .whisper   │──┤  .router    │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
-│         │                                   │               │
+│                                            │                │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │    log      │  │   analyze   │  │   process   │         │
-│  │   .errors   │  │  .connect   │  │    .llm     │         │
+│  │   search    │  │    web      │  │   health    │         │
+│  │  .engine    │  │ .interface  │  │  .monitor   │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
 ├─────────────────────────────────────────────────────────────┤
-│                 Health Monitor                              │
-│              (System Orchestration)                         │
+│    Local Analysis (Ollama)  │  Cloud Analysis (OpenRouter) │
+│         analyze_local.py    │        cloud_analyze.py      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,6 +58,45 @@ TrojanHorse follows the **AgentOS** methodology, treating each component as an a
 **Key Features**:
 - Multi-engine fallback strategy
 - Automatic language detection
+- Post-processing and metadata addition
+- Integration with analysis router for immediate processing
+
+### analyze.router
+**Purpose**: Unified analysis interface for local and cloud processing
+**Inputs**: Transcript files, user choice (local/cloud/both)
+**Outputs**: Analysis results, daily summary updates
+**Technology**: Python router calling specialized analysis modules
+**Failure Mode**: Graceful degradation, preserve transcript if analysis fails
+
+**Key Features**:
+- Interactive analysis choice with auto-mode settings
+- Backward compatibility with existing analysis formats
+- Unified interface replacing complex analyze_local.py and process_gemini.py
+- Cost tracking and privacy filtering
+
+### search.engine
+**Purpose**: Fast keyword and semantic search across all transcripts
+**Inputs**: Search queries, date filters, content type filters
+**Outputs**: Ranked search results with snippets
+**Technology**: SQLite + FTS5 + sentence-transformers embeddings
+**Failure Mode**: Fallback to basic file search, continue indexing
+
+**Key Features**:
+- Hybrid search combining keyword + semantic similarity
+- Batch indexing of existing transcripts
+- Performance optimization for large transcript volumes
+
+### web.interface
+**Purpose**: Browser-based search and browsing interface
+**Inputs**: HTTP requests, search queries
+**Outputs**: HTML search interface and results
+**Technology**: Flask with responsive design
+**Failure Mode**: Fallback to command-line search tools
+
+**Key Features**:
+- Timeline view for conversation patterns
+- Mobile-responsive design
+- Basic authentication for security
 - Post-processing and metadata addition
 - Audio cleanup after successful transcription
 
