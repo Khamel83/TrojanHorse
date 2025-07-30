@@ -144,19 +144,26 @@ Meeting Notes/
 - ✅ macOS service integration
 - ✅ Daily folder organization
 
-**Next Phase (v0.2.0)** - Based on Original Research:
-- 🔄 **Wearable Integration**: Connect Bee Pioneer ($49.99) or PLAUD NotePin ($159)
-- 🔄 **Local LLM integration**: Ollama for privacy-aware processing
-- 🔄 **Real-time LLM Pipeline**: Direct ChatGPT/Claude integration
-- 🔄 **SQLite indexing**: Full-text search and retrieval
-- 🔄 **Cost Optimization**: Target <$20/month total operating costs
+**Next Phase (v0.2.0)** - Local-First Intelligence:
+- 🔄 **Local LLM Analysis**: Ollama + qwen3:8b for privacy-first processing
+- 🔄 **Cloud Intelligence**: Gemini Flash 2.0 via OpenRouter for advanced insights
+- 🔄 **Privacy Architecture**: Local PII filtering, sanitized cloud analysis
+- 🔄 **Content Classification**: Automated categorization and action item extraction
+- 🔄 **Cost Optimization**: <$5/month with intelligent local/cloud routing
+
+**Phase 3 (v0.3.0)**:
+- 🔄 **Search & Memory**: SQLite + FTS5 for instant content retrieval
+- 🔄 **Semantic Search**: Vector embeddings for concept-based queries
+- 🔄 **Timeline Analysis**: Track thought evolution and project progress
+- 🔄 **Export System**: Integration with productivity tools
 
 **Future (v1.0.0)**:
-- 📋 **Advanced Wearables**: Integration with Limitless AI or custom hardware
-- 📋 **Cross-day Context**: RAG implementation for historical analysis
+- 📋 **Workflow Integration**: Real-time context injection for work
+- 📋 **Advanced Analytics**: Cross-day pattern recognition and insights
 - 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing
-- 📋 **Advanced Diarization**: Speaker identification and conversation mapping
-- 📋 **Export APIs**: Integration with productivity tools (Notion, Obsidian)
+- 📋 **API Ecosystem**: Integration with external tools and services
+
+See [Development Roadmap](docs/ROADMAP.md) for detailed implementation plan.
 
 ## 🐛 Troubleshooting
 
@@ -180,6 +187,8 @@ Meeting Notes/
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Detailed Setup Guide](docs/SETUP.md)
 - [API Reference](docs/API.md)
+- [Development Roadmap](docs/ROADMAP.md)
+- [Implementation Tasks](docs/TASKS.md)
 - [Project History](CLAUDE.md)
 
 ## 🤝 Contributing
