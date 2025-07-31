@@ -1,12 +1,13 @@
 # Spec Requirements Document
 
-> Spec: TrojanHorse System Completion (Phases 2-3)
+> Spec: Phase 3 - Search & Memory System
 > Created: 2025-07-30
-> Status: Planning
+> Updated: 2025-07-31
+> Status: Ready for Implementation
 
 ## Overview
 
-Complete the TrojanHorse Context Capture System through Phase 3 by fixing recording reliability, unifying the analysis architecture, and implementing search & memory capabilities. Priority #1: Audio recording must ALWAYS work when supposed to record.
+Implement comprehensive search and memory capabilities for the TrojanHorse Context Capture System. This completes the core system functionality by enabling fast keyword search, semantic search, and web-based browsing of all captured conversations.
 
 ## User Stories
 
@@ -28,12 +29,12 @@ As a knowledge worker building context over months, I want to search through all
 
 ## Spec Scope
 
-1. **Recording Reliability Foundation** - Fix service paths, consolidate configurations, implement bulletproof audio capture
-2. **Analysis Architecture Unification** - Replace complex implementations with simple, unified analysis router  
-3. **Search & Memory System** - Implement SQLite + FTS5 for keyword search and vector embeddings for semantic search
-4. **Web Interface** - Simple browser-based search and retrieval interface
-5. **Batch Processing System** - Retroactively index existing transcripts and analysis results
-6. **Testing & Validation** - Comprehensive testing focused on recording reliability scenarios
+1. **Search Engine** - SQLite + FTS5 for fast keyword search across all transcripts
+2. **Semantic Search** - Vector embeddings using sentence-transformers for conceptual queries  
+3. **Web Interface** - Clean browser-based search, browsing, and timeline view
+4. **Batch Indexing** - Retroactively index all existing transcripts and analysis results
+5. **Timeline Analysis** - Date-based filtering and conversation pattern visualization
+6. **Export Capabilities** - Export search results and conversations in multiple formats
 
 ## Out of Scope
 
@@ -45,12 +46,12 @@ As a knowledge worker building context over months, I want to search through all
 
 ## Expected Deliverable
 
-1. 100% reliable audio recording system that survives restarts, crashes, and permission issues
-2. Unified analysis system with simple local/cloud choice that works with existing transcripts
-3. Fast keyword search through all transcripts using SQLite FTS5
-4. Semantic search capability using vector embeddings for conceptual queries
-5. Clean web interface for searching and browsing conversation history
-6. Batch indexing system that can process all existing transcripts retroactively
+1. **Fast Keyword Search** - SQLite FTS5 implementation with sub-second search across all transcripts
+2. **Semantic Search** - Vector embedding search for conceptual and meaning-based queries
+3. **Web Interface** - Clean, responsive browser interface for search and conversation browsing
+4. **Timeline View** - Date-based filtering and conversation pattern visualization
+5. **Batch Processing** - Index all existing transcripts and analysis results retroactively
+6. **Export System** - Multiple export formats (JSON, CSV, Markdown) for search results
 
 ## Spec Documentation
 
