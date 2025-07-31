@@ -25,47 +25,87 @@ Built following the **AgentOS** methodology with modular, autonomous components:
 
 ## 🚀 Quick Start
 
-### Prerequisites
-```bash
-# Install dependencies
-brew install ffmpeg
-pip install faster-whisper  # optional, for local transcription
+> **📖 For complete setup instructions, see [MACHINE_SETUP.md](MACHINE_SETUP.md)**
 
-# Set up BlackHole for system audio capture
-# Download from: https://existential.audio/blackhole/
+### Prerequisites
+- **macOS 10.15+** with administrator privileges
+- **8GB+ RAM** (16GB recommended)
+- **20GB+ free disk space**
+
+### Essential Dependencies
+```bash
+# Install Homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install core dependencies
+brew install ffmpeg python3 git
+brew install --cask blackhole-2ch
+
+# Install Python dependencies
+pip3 install --user -r requirements.txt
 ```
 
-### Installation
+### Quick Installation
 ```bash
 # Clone and setup
 git clone https://github.com/Khamel83/TrojanHorse.git
 cd TrojanHorse
-python3 setup.py install
+
+# Configure audio (see MACHINE_SETUP.md for detailed steps)
+cp config.template.json config.json
+# Edit config.json with your settings
+
+# Install system service
+python3 src/setup.py install
+
+# Initialize search database
+python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db
 ```
 
 ### Verify Installation
 ```bash
-python3 health_monitor.py status
+# Check system status
+python3 src/health_monitor.py status
+
+# Start web interface
+python3 src/web_interface.py --database trojan_search.db --port 5000
+
+# Open in browser
+open "http://127.0.0.1:5000"
 ```
 
 ## 📂 Project Structure
 
 ```
 TrojanHorse/
-├── audio_capture.py          # Core audio recording engine
-├── transcribe.py             # Multi-engine transcription with analysis integration
-├── analyze_local.py          # Local Ollama-based analysis with PII detection
-├── cloud_analyze.py          # OpenRouter cloud analysis integration
-├── process_gemini.py         # Advanced Gemini analysis with cost tracking
-├── health_monitor.py         # System monitoring & restart
-├── setup.py                  # Installation & management
-├── com.contextcapture.audio.plist  # macOS service config
-├── config.json               # System configuration
-├── docs/                     # Documentation
-│   ├── ARCHITECTURE.md       # Technical architecture
-│   ├── SETUP.md             # Detailed setup guide
-│   └── API.md               # Module interfaces
-└── logs/                     # System logs
+├── src/                           # Core source code
+│   ├── audio_capture.py          # Core audio recording engine
+│   ├── transcribe.py             # Multi-engine transcription 
+│   ├── analysis_router.py        # Unified analysis interface
+│   ├── analyze_local.py          # Local Ollama-based analysis
+│   ├── cloud_analyze.py          # OpenRouter cloud analysis
+│   ├── search_engine.py          # SQLite + FTS5 search engine
+│   ├── semantic_search.py        # Vector embeddings + semantic search
+│   ├── web_interface.py          # Flask web interface
+│   ├── batch_indexer.py          # Retroactive transcript indexing
+│   ├── health_monitor.py         # System monitoring & restart
+│   ├── setup.py                  # Installation & management
+│   └── database_schema.sql       # Search database schema
+├── templates/                     # Web interface templates
+│   ├── base.html                 # Base template with Bootstrap
+│   ├── index.html                # Main search interface
+│   └── transcript.html           # Individual transcript view
+├── static/                        # Web interface assets
+│   ├── css/style.css             # Custom styles
+│   └── js/app.js                 # JavaScript functionality
+├── .agent-os/                     # Agent OS development framework
+│   ├── product/                  # Product documentation
+│   └── specs/                    # Feature specifications
+├── docs/                          # Technical documentation
+├── config.json                    # System configuration
+├── requirements.txt               # Python dependencies
+├── MACHINE_SETUP.md              # Complete setup guide
+└── logs/                         # System logs
 ```
 
 ## 🎛️ Configuration
@@ -103,20 +143,31 @@ The system uses `config.json` for all settings:
 
 ```bash
 # System Management
-python3 setup.py install      # Install service
-python3 setup.py uninstall    # Remove service  
-python3 setup.py check        # Verify dependencies
+python3 src/setup.py install      # Install service
+python3 src/setup.py uninstall    # Remove service  
+python3 src/setup.py check        # Verify dependencies
 
 # Health Monitoring
-python3 health_monitor.py status    # System status
-python3 health_monitor.py check     # Health verification
-python3 health_monitor.py restart   # Restart services
-python3 health_monitor.py monitor   # Continuous monitoring
+python3 src/health_monitor.py status    # System status
+python3 src/health_monitor.py check     # Health verification
+python3 src/health_monitor.py restart   # Restart services
+python3 src/health_monitor.py monitor   # Continuous monitoring
 
 # Audio & Transcription
-python3 audio_capture.py --list-devices  # Show audio devices
-python3 transcribe.py /path/to/audio.wav # Manual transcription
-python3 transcribe.py                    # Process pending files
+python3 src/audio_capture.py --list-devices  # Show audio devices
+python3 src/transcribe.py /path/to/audio.wav # Manual transcription
+python3 src/transcribe.py                    # Process pending files
+
+# Search & Analysis
+python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db  # Index transcripts
+python3 src/web_interface.py --database trojan_search.db --port 5000  # Start web interface
+python3 src/search_engine.py  # Test search functionality
+python3 src/semantic_search.py  # Test semantic search
+
+# Analysis
+python3 src/analysis_router.py --file transcript.txt  # Analyze single file
+python3 src/analyze_local.py --test   # Test local analysis
+python3 src/cloud_analyze.py --test   # Test cloud analysis
 ```
 
 ## 📊 Output Structure
@@ -148,31 +199,36 @@ Meeting Notes/
 
 ## 🛠️ Development Status
 
-**MVP Complete (v0.1.0)**:
-- ✅ Continuous audio capture
-- ✅ Multi-engine transcription
-- ✅ Health monitoring
-- ✅ macOS service integration
-- ✅ Daily folder organization
+**✅ Phase 1 Complete (v0.1.0)** - MVP:
+- ✅ Continuous audio capture with FFmpeg
+- ✅ Multi-engine transcription (MacWhisper, faster-whisper)
+- ✅ Health monitoring and auto-restart
+- ✅ macOS service integration with LaunchAgent
+- ✅ Daily folder organization with automatic cleanup
 
-**Phase 2 (v0.2.0)** - Local-First Intelligence:
-- ✅ **Local LLM Analysis**: Implemented (analyze_local.py with Ollama + qwen3:8b)
-- ✅ **Cloud Intelligence**: Implemented (cloud_analyze.py + process_gemini.py)
-- ✅ **Privacy Architecture**: Implemented (PII detection in analyze_local.py)
-- ✅ **Cost Optimization**: Implemented (cost tracking in process_gemini.py)
-- 🔄 **Architecture Unification**: Replace complex implementations with unified analysis_router.py
+**✅ Phase 2 Complete (v0.2.0)** - Local-First Intelligence:
+- ✅ **Local LLM Analysis**: Ollama integration with qwen2.5:7b model
+- ✅ **Cloud Intelligence**: OpenRouter API with Gemini 2.0 Flash
+- ✅ **Privacy Architecture**: PII detection and local-first processing
+- ✅ **Cost Optimization**: Usage tracking and daily limits
+- ✅ **Architecture Unification**: Unified analysis_router.py interface
 
-**Phase 3 (v0.3.0)** - Search & Memory:
-- 🔄 **Search Engine**: SQLite + FTS5 for instant content retrieval
-- 🔄 **Semantic Search**: Vector embeddings for concept-based queries
-- 🔄 **Web Interface**: Flask-based search and browsing interface
-- 🔄 **Batch Indexing**: Retroactive processing of existing transcripts
+**✅ Phase 3 Complete (v0.3.0)** - Search & Memory:
+- ✅ **Search Engine**: SQLite + FTS5 full-text search with ranking
+- ✅ **Semantic Search**: sentence-transformers with vector embeddings
+- ✅ **Hybrid Search**: Combined keyword + semantic search with scoring
+- ✅ **Web Interface**: Flask + Bootstrap responsive interface
+- ✅ **Timeline Analysis**: Interactive Chart.js visualization
+- ✅ **Export System**: JSON, CSV, and Markdown export formats
+- ✅ **Batch Indexing**: Retroactive processing of existing transcripts
 
-**Future (v1.0.0)**:
+**📋 Phase 4 Future (v1.0.0)** - Advanced Features:
 - 📋 **Workflow Integration**: Real-time context injection for work
 - 📋 **Advanced Analytics**: Cross-day pattern recognition and insights
 - 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing
 - 📋 **API Ecosystem**: Integration with external tools and services
+
+**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, and search capabilities. Web interface available for browsing and searching all captured content.
 
 See [Development Roadmap](.agent-os/product/roadmap.md) for detailed implementation phases.
 
