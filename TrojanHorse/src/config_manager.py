@@ -172,12 +172,13 @@ class ConfigManager:
         if not isinstance(base_path, str):
             raise ValueError("Config error: storage.base_path must be a string.")
 
-        # Check if base_path exists and is writable
-        p = Path(base_path)
+        # Check if base_path exists and is writable (expand user home directory)
+        expanded_path = os.path.expanduser(base_path)
+        p = Path(expanded_path)
         if not p.is_dir():
-            raise ValueError(f"Config error: storage.base_path directory does not exist: {base_path}")
+            raise ValueError(f"Config error: storage.base_path directory does not exist: {base_path} (expanded: {expanded_path})")
         if not os.access(p, os.W_OK):
-            raise ValueError(f"Config error: storage.base_path directory is not writable: {base_path}")
+            raise ValueError(f"Config error: storage.base_path directory is not writable: {base_path} (expanded: {expanded_path})")
     
     def interactive_setup(self) -> None:
         """Interactive configuration setup"""
