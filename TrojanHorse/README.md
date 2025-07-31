@@ -174,7 +174,7 @@ Meeting Notes/
 - 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing
 - 📋 **API Ecosystem**: Integration with external tools and services
 
-See [Development Roadmap](docs/ROADMAP.md) for detailed implementation plan.
+See [Development Roadmap](.agent-os/product/roadmap.md) for detailed implementation phases.
 
 ## 🐛 Troubleshooting
 
