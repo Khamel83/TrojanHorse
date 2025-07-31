@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import re
 from dataclasses import dataclass
+from contextlib import contextmanager
 
 @dataclass
 class SearchResult:
@@ -57,6 +58,23 @@ class SearchEngine:
         except Exception as e:
             self.logger.error(f"Failed to initialize database: {e}")
             raise
+    
+    @contextmanager
+    def get_connection(self):
+        """Context manager for database connections with proper cleanup"""
+        conn = None
+        try:
+            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            yield conn
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            self.logger.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            if conn:
+                conn.close()
     
     def add_transcript(self, filename: str, date_str: str, timestamp_str: str, 
                       engine: str, file_path: str, content: str) -> int:

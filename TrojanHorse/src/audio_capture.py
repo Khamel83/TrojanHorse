@@ -20,6 +20,18 @@ from config_manager import ConfigManager
 class AudioCapture:
     def __init__(self, config_path="config.json"):
         self.config = ConfigManager(config_path=config_path).config
+        
+        # Initialize failure tracking
+        self.failure_count = 0
+        self.max_failures = 5
+        self.base_delay = 5  # seconds
+        
+        # Initialize cleanup tracking  
+        self.cleanup_check_interval = timedelta(hours=1)
+        self.last_cleanup_check = datetime.now()
+        
+        # Initialize process tracking
+        self.process = None
     
     def setup_logging(self):
         """Setup logging to daily folder"""

@@ -68,7 +68,7 @@ class AudioTranscriber:
             self.logger.warning("MacWhisper not available, falling back to faster-whisper")
             return None
     
-    def transcribe_with_faster_whisper(self, audio_.py
+    def transcribe_with_faster_whisper(self, audio_path: str) -> str:
         """Transcribe using faster-whisper (fallback)"""
         try:
             # Try to import faster-whisper

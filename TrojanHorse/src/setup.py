@@ -134,11 +134,10 @@ def check_dependencies():
         print("\n--- Missing System Dependencies ---")
         print("Please install them manually:")
         if "brew" in missing_system_deps:
-            print("  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"")
+            print('  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
         if "ffmpeg" in missing_system_deps:
             print("  brew install ffmpeg")
-        print("-----------------------------------
-")
+        print("-----------------------------------")
         return False
 
     print("\nChecking Python dependencies...")
