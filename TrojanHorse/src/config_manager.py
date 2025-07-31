@@ -314,14 +314,12 @@ def main():
             config_manager.save_config()
     
     elif args.command == "validate":
-        issues = config_manager.validate_config()
-        if issues:
-            print("Configuration Issues:")
-            for issue in issues:
-                print(f"  ❌ {issue}")
-            sys.exit(1)
-        else:
+        try:
+            config_manager.validate_config()
             print("✅ Configuration is valid")
+        except ValueError as e:
+            print(f"❌ Configuration error: {e}")
+            sys.exit(1)
     
     elif args.command == "setup":
         config_manager.interactive_setup()

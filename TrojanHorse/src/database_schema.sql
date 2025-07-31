@@ -94,7 +94,6 @@ CREATE INDEX IF NOT EXISTS idx_transcripts_engine ON transcripts(engine);
 CREATE INDEX IF NOT EXISTS idx_analysis_transcript_id ON analysis(transcript_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_mode ON analysis(mode);
 CREATE INDEX IF NOT EXISTS idx_analysis_classification ON analysis(classification);
-CREATE INDEX IF NOT EXISTS idx_transcripts_timestamp ON transcripts(timestamp);
 
 -- Future: Vector embeddings table for semantic search (Phase 3, Task 4)
 CREATE TABLE IF NOT EXISTS embeddings (

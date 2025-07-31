@@ -35,7 +35,7 @@ class HealthMonitor:
 
     def _start_service(self, service_name: str) -> bool:
         service = self.services[service_name]
-        if self._check_service_status(service_name) == "running":
+        if self.check_service_status(service_name) == "running":
             self.logger.info(f"{service_name} is already running.")
             return True
         
@@ -56,7 +56,7 @@ class HealthMonitor:
 
     def _stop_service(self, service_name: str) -> bool:
         service = self.services[service_name]
-        if self._check_service_status(service_name) == "stopped":
+        if self.check_service_status(service_name) == "stopped":
             self.logger.info(f"{service_name} is already stopped.")
             return True
         
@@ -242,7 +242,7 @@ class HealthMonitor:
         
         # Check status of all managed services
         for service_name in self.services:
-            status = self._check_service_status(service_name)
+            status = self.check_service_status(service_name)
             if status != "running":
                 issues.append(f"Service {service_name} is {status}")
 
@@ -305,7 +305,7 @@ class HealthMonitor:
         print("=" * 40)
         
         for service_name, service_info in self.services.items():
-            status = self._check_service_status(service_name)
+            status = self.check_service_status(service_name)
             print(f"Service '{service_name}': {'✓' if status == 'running' else '✗'} {status}")
 
         # Original checks (audio files, disk space, analysis capabilities, etc.)
@@ -329,7 +329,7 @@ class HealthMonitor:
             print(f"Analysis Activity: {'✓' if analysis_recent_ok else '✗'} {analysis_recent_status}")
         
         # Overall health (simplified for now, can be expanded)
-        overall_healthy = all(self._check_service_status(s) == "running" for s in self.services) and \
+        overall_healthy = all(self.check_service_status(s) == "running" for s in self.services) and \
                           files_ok and disk_ok and analysis_ok and analysis_recent_ok
         print(f"Overall Health: {'✓' if overall_healthy else '✗'} {'Healthy' if overall_healthy else 'Issues detected'}")
 

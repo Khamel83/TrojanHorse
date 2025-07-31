@@ -109,6 +109,10 @@ TrojanHorse/
 ├── static/                        # Web interface assets
 │   ├── css/style.css             # Custom styles
 │   └── js/app.js                 # JavaScript functionality
+├── tests/                          # Unit tests
+│   ├── test_config_manager.py    # Configuration management tests
+│   ├── test_search_engine.py     # Search engine tests
+│   └── run_tests.py              # Test runner
 ├── .agent-os/                     # Agent OS development framework
 │   ├── product/                  # Product documentation
 │   └── specs/                    # Feature specifications
@@ -194,6 +198,24 @@ python3 src/health_monitor.py optimize
 python3 src/health_monitor.py analyze
 ```
 
+**Testing & Validation:**
+
+```bash
+# Run unit tests
+python3 tests/run_tests.py
+
+# Validate configuration
+python3 src/config_manager.py validate
+
+# Test search functionality
+python3 -c "from src.search_engine import SearchEngine; s=SearchEngine(); print(s.get_stats())"
+
+# Test internal API (in separate terminal)
+python3 src/internal_api.py &
+curl "http://localhost:5001/health"
+curl "http://localhost:5001/search?query=test"
+```
+
 **Other Utility Commands:**
 
 ```bash
@@ -275,7 +297,7 @@ Meeting Notes/
 - 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing (Future)
 - 📋 **API Ecosystem**: Integration with external tools (Future)
 
-**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, search, advanced analytics, and workflow integration capabilities. Web interface available for browsing and searching all captured content.
+**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, search, advanced analytics, and workflow integration capabilities. Includes comprehensive unit tests and validation tools. Web interface available for browsing and searching all captured content.
 
 See [Development Roadmap](.agent-os/product/roadmap.md) for detailed implementation phases.
 
