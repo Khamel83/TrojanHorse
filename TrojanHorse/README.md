@@ -193,15 +193,37 @@ See [Development Roadmap](docs/ROADMAP.md) for detailed implementation plan.
 - Check available disk space
 - Review transcription.log for errors
 
+## 🚀 Agent OS Integration
+
+This project uses **Agent OS** for structured AI-assisted development:
+
+### Development Workflows
+- **Product Planning**: Managed via `.agent-os/product/` documentation
+- **Feature Development**: Specs created in `.agent-os/specs/YYYY-MM-DD-feature-name/`
+- **Task Execution**: Guided by Agent OS task breakdown and execution workflows
+
+### Available Commands
+- `/plan-product` - Initialize or update product documentation
+- `/create-spec` - Plan and specify new features
+- `/execute-tasks` - Implement features following Agent OS workflows
+- `/analyze-product` - Add Agent OS to existing codebases
+
+### Current Status
+- **Phase 1**: ✅ MVP Complete (audio capture + transcription)
+- **Phase 2**: ✅ Mostly Complete (local + cloud AI analysis)
+- **Phase 3**: 🎯 Current Target (search & memory system)
+- **Phase 4**: 📋 Future (workflow integration + advanced analytics)
+
+See `.agent-os/product/roadmap.md` for detailed development phases.
+
 ## 📖 Documentation
 
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Detailed Setup Guide](docs/SETUP.md)
 - [API Reference](docs/API.md)
-- [Development Roadmap](docs/ROADMAP.md)
-- [Implementation Tasks](docs/TASKS.md)
-- [Final Implementation Plan](docs/FINAL_PLAN.md)
-- [Project History](CLAUDE.md)
+- [Agent OS Integration](.agent-os/README.md)
+- [Product Roadmap](.agent-os/product/roadmap.md)
+- [Project History](docs/HISTORY.md)
 
 ## 🤝 Contributing
 
