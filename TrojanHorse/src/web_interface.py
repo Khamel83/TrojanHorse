@@ -16,6 +16,8 @@ from flask_cors import CORS
 
 from search_engine import SearchEngine
 from semantic_search import SemanticSearch
+from config_manager import ConfigManager
+from analytics_engine import AnalyticsEngine
 
 class TrojanWebInterface:
     """Flask web interface for TrojanHorse search and analysis"""
@@ -30,6 +32,7 @@ class TrojanWebInterface:
         # Initialize search engines
         self.search_engine = SearchEngine(db_path)
         self.semantic_search = SemanticSearch(db_path)
+        self.analytics_engine = AnalyticsEngine(db_path)
         
         # Initialize Flask app
         self.app = Flask(__name__, 
@@ -47,6 +50,11 @@ class TrojanWebInterface:
             """Main search interface"""
             stats = self.search_engine.get_stats()
             return render_template('index.html', stats=stats)
+
+        @self.app.route('/dashboard')
+        def dashboard():
+            """Analytics dashboard"""
+            return render_template('dashboard.html')
         
         @self.app.route('/api/search', methods=['POST'])
         def api_search():
@@ -172,6 +180,38 @@ class TrojanWebInterface:
             except Exception as e:
                 self.logger.error(f"Transcript view error: {e}")
                 return f"Error: {e}", 500
+
+        @self.app.route('/api/analytics/top_entities')
+        def api_analytics_top_entities():
+            """API endpoint for top entities"""
+            try:
+                start_date = request.args.get('start_date')
+                end_date = request.args.get('end_date')
+                cursor = self.analytics_engine.conn.execute("""
+                    SELECT entity_text, entity_type, COUNT(*) as count
+                    FROM analytics_entities
+                    WHERE (? IS NULL OR timestamp >= ?)
+                    AND (? IS NULL OR timestamp <= ?)
+                    GROUP BY entity_text, entity_type
+                    ORDER BY count DESC
+                    LIMIT 10
+                """, (start_date, start_date, end_date, end_date))
+                results = [dict(row) for row in cursor.fetchall()]
+                return jsonify(results)
+            except Exception as e:
+                self.logger.error(f"Top entities API error: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/analytics/trends')
+        def api_analytics_trends():
+            """API endpoint for trends"""
+            try:
+                cursor = self.analytics_engine.conn.execute("SELECT entity_text, trend_score FROM analytics_trends ORDER BY trend_score DESC")
+                results = [dict(row) for row in cursor.fetchall()]
+                return jsonify(results)
+            except Exception as e:
+                self.logger.error(f"Trends API error: {e}")
+                return jsonify({'error': str(e)}), 500
     
     def _keyword_search(self, query: str, limit: int, date_from: Optional[str], 
                        date_to: Optional[str], classification: Optional[str]) -> List[Dict]:
@@ -356,6 +396,14 @@ class TrojanWebInterface:
 def main():
     """Run the web interface"""
     import argparse
+    import sys
+
+    try:
+        config_manager = ConfigManager()
+        config_manager.validate_config()
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
     
     parser = argparse.ArgumentParser(description='TrojanHorse Web Interface')
     parser.add_argument('--database', '-d', default='trojan_search.db',

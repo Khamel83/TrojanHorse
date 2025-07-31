@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Literal
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -118,6 +119,20 @@ class AnalysisRouter:
         
         return default_mode if default_mode in ["local", "cloud"] else "local"
     
+    def _redact_text(self, text: str) -> str:
+        """Redact keywords from text based on config"""
+        privacy_config = self.config.get("privacy", {})
+        keywords = privacy_config.get("redaction_keywords", [])
+        
+        if not keywords:
+            return text
+        
+        for keyword in keywords:
+            # Use case-insensitive replacement
+            text = re.sub(f'(?i){re.escape(keyword)}', '[REDACTED]', text)
+            
+        return text
+
     def analyze_transcript(self, 
                          transcript_path: Union[str, Path],
                          mode: Optional[str] = None) -> Dict:
@@ -150,6 +165,9 @@ class AnalysisRouter:
                 logger.warning(f"Empty transcript: {transcript_path}")
                 return {"error": "Empty transcript", "status": "failed"}
             
+            # Redact text if necessary
+            text = self._redact_text(text)
+
             # Determine analysis mode
             analysis_mode = self.determine_analysis_mode(text, mode)
             logger.info(f"Analyzing {transcript_path.name} using {analysis_mode} analysis")

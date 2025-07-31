@@ -11,31 +11,12 @@ import subprocess
 import logging
 from pathlib import Path
 from datetime import datetime
+from config_manager import ConfigManager
 
 class AudioTranscriber:
     def __init__(self, config_path="config.json"):
-        self.config = self.load_config(config_path)
+        self.config = ConfigManager(config_path=config_path).config
         self.setup_logging()
-    
-    def load_config(self, config_path):
-        """Load configuration"""
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                # Expand paths
-                for key, value in config.get("storage", {}).items():
-                    if isinstance(value, str):
-                        config["storage"][key] = os.path.expanduser(value)
-                return config
-        else:
-            # Default config
-            return {
-                "transcription": {
-                    "engine": "macwhisper",
-                    "language": "auto",
-                    "model_size": "base"
-                }
-            }
     
     def setup_logging(self):
         """Setup logging to daily folder"""
@@ -201,6 +182,15 @@ class AudioTranscriber:
                 continue
         
         self.logger.error("All transcription methods failed")
+        # Move failed file
+        try:
+            failed_dir = audio_file.parent / "failed"
+            failed_dir.mkdir(exist_ok=True)
+            audio_file.rename(failed_dir / audio_file.name)
+            self.logger.info(f"Moved failed audio file to: {failed_dir / audio_file.name}")
+        except Exception as e:
+            self.logger.error(f"Could not move failed audio file: {e}")
+
         return None
     
     def post_process_transcript(self, transcript_file):
@@ -254,6 +244,13 @@ class AudioTranscriber:
                 self.logger.error(f"Failed to process {audio_file}: {e}")
 
 def main():
+    try:
+        config_manager = ConfigManager()
+        config_manager.validate_config()
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
+
     transcriber = AudioTranscriber()
     
     if len(sys.argv) > 1:

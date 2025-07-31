@@ -27,21 +27,15 @@ brew install ffmpeg
 2. Run the installer package
 3. Restart your computer (required for audio driver installation)
 
-### Optional Dependencies
-
-#### MacWhisper Pro (Recommended)
-1. Purchase and download from Mac App Store
-2. Install the CLI component from the app's preferences
-3. Verify installation: `macwhisper --version`
-
-#### faster-whisper (Fallback Transcription)
+#### 4. Install Python Dependencies
 ```bash
-pip3 install faster-whisper
+pip3 install -r requirements.txt
 ```
 
-#### System Whisper (Last Resort)
+#### 5. Download spaCy Language Model
+This is required for Advanced Analytics.
 ```bash
-pip3 install openai-whisper
+python3 -m spacy download en_core_web_sm
 ```
 
 ## Audio Setup
@@ -93,21 +87,16 @@ git clone https://github.com/Khamel83/TrojanHorse.git
 cd TrojanHorse
 ```
 
-### 2. Run Setup Script
+### 2. Install TrojanHorse Service
+The `health_monitor.py` script now manages all core services (audio capture, internal API, hotkey client). This step sets up `health_monitor.py` as a `launchd` service.
+
 ```bash
 python3 setup.py install
 ```
 
-The setup script will:
-- Check for required dependencies
-- Create necessary directory structure
-- Generate default configuration
-- Install and start the macOS service
-- Set up logging directories
+### 3. Configure Audio Devices and Other Settings
 
-### 3. Configure Audio Devices
-
-Edit `config.json` to match your audio setup:
+Edit `config.json` to match your audio setup and other preferences. This file now includes sections for `privacy` and `workflow_integration`.
 
 ```json
 {
@@ -120,11 +109,40 @@ Edit `config.json` to match your audio setup:
       "microphone": 0,
       "system_audio": 1
     }
+  },
+  "transcription": {
+    "engine": "macwhisper",
+    "language": "auto",
+    "model_size": "base"
+  },
+  "storage": {
+    "auto_delete_audio": true,
+    "base_path": "/Users/YOUR_USERNAME/Documents/Meeting Notes"
+  },
+  "cloud_analysis": {
+    "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
+    "model": "google/gemini-2.0-flash-001",
+    "base_url": "https://openrouter.ai/api/v1"
+  },
+  "analysis": {
+    "default_mode": "local",
+    "local_model": "qwen3:8b",
+    "cloud_model": "google/gemini-2.0-flash-001",
+    "cost_limit_daily": 0.20,
+    "enable_pii_detection": true,
+    "hybrid_threshold_words": 1000
+  },
+  "privacy": {
+    "redaction_keywords": []
+  },
+  "workflow_integration": {
+    "hotkey": "<cmd>+<shift>+c",
+    "internal_api_port": 5001
   }
 }
 ```
 
-Update the `device_indices` based on your `--list-devices` output.
+Update the `device_indices` based on your `--list-devices` output. Replace `YOUR_USERNAME` with your actual username, and update paths as needed. Ensure `openrouter_api_key` is set if you plan to use cloud analysis.
 
 ### 4. Grant Permissions
 
@@ -151,9 +169,13 @@ Expected output:
 ```
 Context Capture System Status Report
 ====================================
-Service Status: ✓ running
+Service 'audio_capture': ✓ running
+Service 'internal_api': ✓ running
+Service 'hotkey_client': ✓ running
 Recent Audio Files: ✓ found_1_recent_files
 Disk Space: ✓ disk_space_ok_45.2GB
+Analysis Capabilities: ✓ both_local_and_cloud_available
+Analysis Activity: ✓ found_1_recent_analyses
 Overall Health: ✓ Healthy
 ```
 
@@ -176,9 +198,27 @@ ls -la "/Users/$(whoami)/Library/Mobile Documents/com~apple~CloudDocs/Work Autom
 
 You should see corresponding `.txt` files with transcribed content.
 
+### 4. Test Web Interface
+```bash
+# Open in browser
+open "http://127.0.0.1:5000"
+
+# Test search functionality via API
+curl -X POST -H "Content-Type: application/json" -d '{"query": "test", "type": "hybrid"}' http://127.0.0.1:5000/api/search
+
+# Test analytics dashboard
+open "http://127.0.0.1:5000/dashboard"
+```
+
+### 5. Test Workflow Integration (Hotkey Client)
+1.  Ensure `health_monitor.py` is running (e.g., `python3 src/health_monitor.py monitor &`).
+2.  Copy some text to your clipboard (e.g., from a web page or document).
+3.  Press the configured hotkey (default: `Cmd+Shift+C`).
+4.  You should see a macOS notification with a search result snippet from your transcripts.
+
 ## Configuration Options
 
-### config.json Structure
+### `config.json` Structure
 
 ```json
 {
@@ -208,6 +248,21 @@ You should see corresponding `.txt` files with transcribed content.
     "max_restart_attempts": 3,    // Service restart attempts
     "restart_delay": 30,          // Delay between restart attempts
     "health_check_window": 300    // Recent activity window (seconds)
+  },
+  "analysis": {
+    "default_mode": "local",      // local, cloud, hybrid, prompt
+    "local_model": "qwen3:8b",    // Ollama model name
+    "cloud_model": "google/gemini-2.0-flash-001", // OpenRouter model name
+    "cost_limit_daily": 0.20,     // Daily cost limit for cloud analysis
+    "enable_pii_detection": true, // Enable PII detection
+    "hybrid_threshold_words": 1000 // Word count threshold for hybrid mode
+  },
+  "privacy": {
+    "redaction_keywords": []      // List of keywords to redact from analysis
+  },
+  "workflow_integration": {
+    "hotkey": "<cmd>+<shift>+c",  // System-wide hotkey for quick search
+    "internal_api_port": 5001     // Port for the internal API server
   }
 }
 ```
@@ -246,7 +301,7 @@ You should see corresponding `.txt` files with transcribed content.
 
 ## Troubleshooting
 
-### Service Won't Start
+### Service Won't Start or is Unhealthy
 
 1. **Check dependencies**:
    ```bash
@@ -255,16 +310,20 @@ You should see corresponding `.txt` files with transcribed content.
 
 2. **Check service logs**:
    ```bash
+   cat logs/health_monitor.log
    cat logs/audio_capture.err
    ```
 
 3. **Manual service management**:
    ```bash
-   # Unload service
-   launchctl unload ~/Library/LaunchAgents/com.contextcapture.audio.plist
+   # Stop all services
+   python3 src/health_monitor.py stop
    
-   # Reload service
-   launchctl load ~/Library/LaunchAgents/com.contextcapture.audio.plist
+   # Start all services
+   python3 src/health_monitor.py start
+   
+   # Restart all services
+   python3 src/health_monitor.py restart
    ```
 
 ### No Audio Being Captured
@@ -276,7 +335,7 @@ You should see corresponding `.txt` files with transcribed content.
 
 2. **Check device indices**:
    ```bash
-   python3 audio_capture.py --list-devices
+   python3 src/audio_capture.py --list-devices
    ```
    Update `config.json` with correct indices.
 
@@ -302,7 +361,7 @@ You should see corresponding `.txt` files with transcribed content.
 
 2. **Manual transcription test**:
    ```bash
-   python3 transcribe.py /path/to/test.wav
+   python3 src/transcribe.py /path/to/test.wav
    ```
 
 3. **Check transcription logs**:
@@ -343,6 +402,41 @@ You should see corresponding `.txt` files with transcribed content.
        "retention_days": 30
      }
    }
+   ```
+
+### Search & Web Interface Issues
+
+1. **Check web interface logs**:
+   ```bash
+   python3 src/web_interface.py --database trojan_search.db --port 5000 --verbose
+   ```
+
+2. **Rebuild search database** (WARNING: This will delete existing search data):
+   ```bash
+   rm trojan_search.db
+   python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db
+   ```
+
+### Performance Issues
+
+1. **Check disk space**:
+   ```bash
+   df -h
+   ```
+
+2. **Check memory usage**:
+   ```bash
+   top -l 1 | grep -E "(PhysMem|Processes)"
+   ```
+
+3. **Monitor system resources**:
+   ```bash
+   python3 src/health_monitor.py monitor
+   ```
+
+4. **Optimize database**:
+   ```bash
+   python3 src/health_monitor.py optimize
    ```
 
 ## Advanced Configuration

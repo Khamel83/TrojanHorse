@@ -15,54 +15,11 @@ import json
 import logging
 import shutil
 
+from config_manager import ConfigManager
+
 class AudioCapture:
     def __init__(self, config_path="config.json"):
-        self.config = self.load_config(config_path)
-        self.setup_logging()
-        self.running = False
-        self.process = None
-        self.failure_count = 0
-        self.max_failures = 5
-        self.base_delay = 10
-        self.last_cleanup_check = 0
-        self.cleanup_check_interval = 3600  # Check every hour
-        
-    def load_config(self, config_path):
-        """Load configuration or use defaults"""
-        default_config = {
-            "audio": {
-                "chunk_duration": 300,  # 5 minutes
-                "sample_rate": 44100,
-                "quality": "medium",
-                "format": "wav"
-            },
-            "storage": {
-                "temp_path": "~/TrojanHorse/temp",
-                "base_path": "~/TrojanHorse/notes"
-            }
-        }
-        
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                # Merge with defaults
-                for key in default_config:
-                    if key not in config:
-                        config[key] = default_config[key]
-                # Expand paths
-                for key, value in config.get("storage", {}).items():
-                    if isinstance(value, str):
-                        config["storage"][key] = os.path.expanduser(value)
-                return config
-        else:
-            # Create default config
-            with open(config_path, 'w') as f:
-                json.dump(default_config, f, indent=2)
-            # Expand paths
-            for key, value in default_config.get("storage", {}).items():
-                if isinstance(value, str):
-                    default_config["storage"][key] = os.path.expanduser(value)
-            return default_config
+        self.config = ConfigManager(config_path=config_path).config
     
     def setup_logging(self):
         """Setup logging to daily folder"""
@@ -400,7 +357,16 @@ class AudioCapture:
             self.logger.error(f"Error checking disk space: {e}")
             return False
 
+from config_manager import ConfigManager
+
 def main():
+    try:
+        config_manager = ConfigManager()
+        config_manager.validate_config()
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
+
     capture = AudioCapture()
     
     if len(sys.argv) > 1 and sys.argv[1] == "--list-devices":

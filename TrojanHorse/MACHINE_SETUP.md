@@ -30,6 +30,12 @@ TrojanHorse is a complete audio capture, transcription, and analysis system that
 
 # Install core dependencies
 brew install ffmpeg python3 git curl
+
+# Install Python dependencies
+pip3 install --user -r requirements.txt
+
+# Download spaCy language model (required for Advanced Analytics)
+python3 -m spacy download en_core_web_sm
 ```
 
 ## 🔊 Step 1: Audio System Setup
@@ -121,17 +127,19 @@ Edit `config.json` with your specific settings:
     "chunk_duration": 300,
     "sample_rate": 44100,
     "quality": "medium",
+    "format": "wav",
     "input_device": "BlackHole 2ch",
     "microphone_device": "Built-in Microphone"
+  },
+  "storage": {
+    "temp_path": "~/TrojanHorse/temp",
+    "base_path": "~/TrojanHorse/notes",
+    "auto_delete_audio": true
   },
   "transcription": {
     "engine": "macwhisper",
     "language": "auto",
     "model_size": "base"
-  },
-  "storage": {
-    "auto_delete_audio": true,
-    "base_path": "/Users/YOUR_USERNAME/Documents/Meeting Notes"
   },
   "cloud_analysis": {
     "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
@@ -139,18 +147,24 @@ Edit `config.json` with your specific settings:
     "base_url": "https://openrouter.ai/api/v1"
   },
   "analysis": {
-    "default_type": "local",
-    "local_model": "qwen2.5:7b"
+    "default_mode": "local",
+    "local_model": "qwen3:8b",
+    "cloud_model": "google/gemini-2.0-flash-001",
+    "cost_limit_daily": 0.20,
+    "enable_pii_detection": true,
+    "hybrid_threshold_words": 1000
   },
-  "search": {
-    "database_path": "trojan_search.db",
-    "enable_semantic": true,
-    "web_interface_port": 5000
+  "privacy": {
+    "redaction_keywords": []
+  },
+  "workflow_integration": {
+    "hotkey": "<cmd>+<shift>+c",
+    "internal_api_port": 5001
   }
 }
 ```
 
-**Important**: Replace `YOUR_USERNAME` with your actual username, and update paths as needed.
+**Important**: Replace `YOUR_USERNAME` with your actual username, and update paths as needed. Ensure `openrouter_api_key` is set if you plan to use cloud analysis. The `privacy` and `workflow_integration` sections are new and provide enhanced control and functionality.
 
 ## 🧠 Step 3: AI/ML Setup
 
@@ -184,17 +198,24 @@ ollama run qwen2.5:7b "Hello, can you analyze meeting transcripts?"
    ```
 
 ### Install Transcription Engine
+
+TrojanHorse supports multiple transcription engines. Choose one or more:
+
+*   **Option 1: MacWhisper (Recommended for macOS)**
+    *   Download from Mac App Store: [https://apps.apple.com/app/macwhisper/id1458140153](https://apps.apple.com/app/macwhisper/id1458140153)
+    *   If you have `mas-cli` installed: `mas install 1458140153`
+
+*   **Option 2: Faster-Whisper (Open Source Alternative)**
+    *   Install via pip: `pip3 install --user faster-whisper`
+
+*   **Option 3: OpenAI Whisper (CLI)**
+    *   Install via pip: `pip3 install --user openai-whisper`
+
+**Test Transcription:**
 ```bash
-# Option 1: MacWhisper (recommended for Mac)
-mas install 1458140153  # if you have mas-cli
-# Or download from Mac App Store: https://apps.apple.com/app/macwhisper/id1458140153
-
-# Option 2: Faster-Whisper (open source alternative)
-pip3 install --user faster-whisper
-
-# Test transcription
-python3 src/transcribe.py --test
+python3 src/transcribe.py
 ```
+This command will process any pending audio files in your `temp` directory. Check the `Meeting Notes` folder for `.txt` files.
 
 ## 🔍 Step 4: Search System Setup
 
@@ -227,9 +248,11 @@ open "http://127.0.0.1:5000"
 
 ## 🔧 Step 5: Service Configuration
 
+TrojanHorse now uses `health_monitor.py` to manage all its core services (audio capture, internal API, hotkey client).
+
 ### Install as macOS Service
 ```bash
-# Install the system service
+# Install the system service (this sets up a launchd plist for health_monitor.py)
 python3 src/setup.py install
 
 # Verify installation
@@ -238,11 +261,11 @@ python3 src/health_monitor.py status
 
 ### Configure Auto-Start
 ```bash
-# Enable service to start automatically
+# Enable the health_monitor service to start automatically on login
 launchctl load ~/Library/LaunchAgents/com.contextcapture.audio.plist
 
 # Verify service is running
-launchctl list | grep contextcapture
+python3 src/health_monitor.py status
 ```
 
 ### Set Up Health Monitoring
@@ -250,87 +273,114 @@ launchctl list | grep contextcapture
 # Test health monitoring
 python3 src/health_monitor.py check
 
-# Set up continuous monitoring (optional)
-# Add to your shell profile (.zshrc, .bash_profile):
+# Start continuous monitoring loop (optional, runs in background)
+python3 src/health_monitor.py monitor &
+
+# Add aliases to your shell profile (.zshrc, .bash_profile) for convenience:
 echo 'alias trojan-status="python3 ~/Documents/TrojanHorse/src/health_monitor.py status"' >> ~/.zshrc
+echo 'alias trojan-start="python3 ~/Documents/TrojanHorse/src/health_monitor.py start"' >> ~/.zshrc
+echo 'alias trojan-stop="python3 ~/Documents/TrojanHorse/src/health_monitor.py stop"' >> ~/.zshrc
 echo 'alias trojan-restart="python3 ~/Documents/TrojanHorse/src/health_monitor.py restart"' >> ~/.zshrc
 ```
 
 ## ✅ Step 6: Verification & Testing
 
+After completing the setup, verify that all components of TrojanHorse are functioning correctly.
+
+### Overall System Status
+```bash
+python3 src/health_monitor.py status
+```
+This should show all services (audio_capture, internal_api, hotkey_client) as running.
+
 ### Audio Capture Test
 ```bash
-# Test audio capture for 30 seconds
-python3 src/audio_capture.py --test --duration 30
-
-# Check if audio file was created
-ls -la temp/
+# Audio capture runs continuously in the background once health_monitor is started.
+# Check for recent audio files in your temp directory:
+ls -la ~/TrojanHorse/temp/
 ```
 
 ### Transcription Test
 ```bash
-# Test transcription on captured audio
-python3 src/transcribe.py --test
-
-# Check transcription output
-ls -la "Meeting Notes/$(date +%Y-%m-%d)/transcribed_audio/"
+# Transcription runs automatically on new audio files.
+# Check for transcribed text files in your Meeting Notes folder:
+ls -la "/Users/YOUR_USERNAME/Documents/Meeting Notes/$(date +%Y-%m-%d)/transcribed_audio/"
 ```
 
 ### Analysis Test
 ```bash
-# Test local analysis
-python3 src/analyze_local.py --test
+# Run a full analysis pass (entity extraction, trend calculation)
+python3 src/health_monitor.py analyze
 
-# Test cloud analysis (if configured)
-python3 src/cloud_analyze.py --test
+# Check for analysis files in your Meeting Notes folder:
+ls -la "/Users/YOUR_USERNAME/Documents/Meeting Notes/$(date +%Y-%m-%d)/analysis/"
 ```
 
 ### Search System Test
 ```bash
-# Test search functionality
-python3 -c "
-from src.search_engine import SearchEngine
-search = SearchEngine('trojan_search.db')
-results = search.search('test')
-print(f'Found {len(results)} results')
-search.close()
-"
+# Start the web interface (if not already running via health_monitor)
+python3 src/web_interface.py --database trojan_search.db --port 5000 --verbose
+
+# Open in browser
+open "http://127.0.0.1:5000"
+
+# Test search functionality via API
+curl -X POST -H "Content-Type: application/json" -d '{"query": "test", "type": "hybrid"}' http://127.0.0.1:5000/api/search
+
+# Test analytics dashboard
+open "http://127.0.0.1:5000/dashboard"
 ```
+
+### Workflow Integration Test (Hotkey Client)
+1.  Ensure `health_monitor.py` is running (e.g., `python3 src/health_monitor.py monitor &`).
+2.  Copy some text to your clipboard (e.g., from a web page or document).
+3.  Press the configured hotkey (default: `Cmd+Shift+C`).
+4.  You should see a macOS notification with a search result snippet from your transcripts.
 
 ### End-to-End Test
 ```bash
-# Complete system test
-python3 src/test_reliability.py --duration 60 --full-test
+# Complete system test (if test_reliability.py is updated for new services)
+# python3 src/test_reliability.py --duration 60 --full-test
 ```
 
 ## 🎮 Step 7: Daily Usage
 
 ### Starting the System
+To start all core TrojanHorse services (audio capture, internal API, hotkey client):
 ```bash
-# Start all services
-python3 src/health_monitor.py restart
-
-# Start web interface (in separate terminal)
-python3 src/web_interface.py --database trojan_search.db --port 5000
+python3 src/health_monitor.py start
 ```
 
 ### Accessing Your Data
-- **Web Interface**: http://127.0.0.1:5000
-- **Files**: `~/Documents/Meeting Notes/YYYY-MM-DD/`
-- **Logs**: `~/Documents/TrojanHorse/logs/`
+-   **Web Interface**: `http://127.0.0.1:5000` (or the port configured in `config.json`)
+-   **Analytics Dashboard**: `http://127.0.0.1:5000/dashboard`
+-   **Files**: `~/Documents/Meeting Notes/YYYY-MM-DD/` (or the `base_path` configured in `config.json`)
+-   **Logs**: `~/Documents/TrojanHorse/logs/`
 
 ### Common Commands
 ```bash
 # Check system status
 python3 src/health_monitor.py status
 
-# Process pending transcriptions
+# Stop all services
+python3 src/health_monitor.py stop
+
+# Restart all services
+python3 src/health_monitor.py restart
+
+# Run advanced analytics (entity extraction, trend calculation)
+python3 src/health_monitor.py analyze
+
+# Optimize the search database (runs VACUUM)
+python3 src/health_monitor.py optimize
+
+# Process pending transcriptions (if auto-processing is off or for manual re-runs)
 python3 src/transcribe.py
 
-# Reindex transcripts for search
+# Reindex transcripts for search (if new transcripts are added manually)
 python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db
 
-# Update embeddings
+# Update semantic embeddings (if new models are used or for full re-embedding)
 python3 -c "from src.semantic_search import SemanticSearch; s=SemanticSearch('trojan_search.db'); s.batch_generate_embeddings(force_regenerate=True); s.close()"
 ```
 
@@ -343,6 +393,25 @@ python3 -c "from src.semantic_search import SemanticSearch; s=SemanticSearch('tr
 - **Web interface runs locally** and is not accessible from internet
 
 ## 🐛 Troubleshooting
+
+### Service Issues
+If services are not starting or are unhealthy, check the logs and use `health_monitor.py`:
+```bash
+# Check service logs
+tail -f logs/health_monitor.log
+tail -f logs/audio_capture.err
+tail -f logs/audio_capture.out
+
+# Check overall system health
+python3 src/health_monitor.py status
+
+# Restart all services
+python3 src/health_monitor.py restart
+
+# Reinstall service (if launchd plist is corrupted)
+python3 src/setup.py uninstall
+python3 src/setup.py install
+```
 
 ### Audio Issues
 ```bash
@@ -363,27 +432,23 @@ print('Audio captured successfully' if audio.max() > 0.01 else 'No audio detecte
 tccutil reset Microphone com.apple.Terminal
 ```
 
-### Service Issues
+### Transcription Failures
 ```bash
-# Check service logs
-tail -f logs/audio_capture.err
-tail -f logs/audio_capture.out
+# Check transcription logs
+tail -f "/Users/YOUR_USERNAME/Documents/Meeting Notes/$(date +%Y-%m-%d)/transcription.log"
 
-# Restart services
-python3 src/health_monitor.py restart
-
-# Reinstall service
-python3 src/setup.py uninstall
-python3 src/setup.py install
+# Verify MacWhisper or faster-whisper installation
+# Check available disk space
+df -h
 ```
 
-### Search Issues
+### Search & Web Interface Issues
 ```bash
-# Rebuild search database
+# Rebuild search database (WARNING: This will delete existing search data)
 rm trojan_search.db
 python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db
 
-# Check web interface logs
+# Check web interface logs (run web interface with --verbose)
 python3 src/web_interface.py --database trojan_search.db --port 5000 --verbose
 ```
 
@@ -397,6 +462,9 @@ top -l 1 | grep -E "(PhysMem|Processes)"
 
 # Monitor system resources
 python3 src/health_monitor.py monitor
+
+# Optimize database
+python3 src/health_monitor.py optimize
 ```
 
 ## 📞 Support

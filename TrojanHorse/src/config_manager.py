@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -154,39 +155,29 @@ class ConfigManager:
             logger.error(f"Section '{section}' not found in defaults")
             return False
     
-    def validate_config(self) -> List[str]:
-        """Validate configuration and return list of issues"""
-        issues = []
+    def validate_config(self) -> None:
+        """Validate configuration and raise ValueError on failure"""
         
         # Check required sections
         required_sections = ["audio", "storage", "transcription", "analysis", "prompts"]
         for section in required_sections:
             if section not in self.config:
-                issues.append(f"Missing required section: {section}")
-        
-        # Validate paths exist (if specified as absolute paths)
-        for path_key in ["storage.temp_path", "storage.base_path"]:
-            path_value = self.get_value(path_key)
-            if path_value and Path(path_value).is_absolute():
-                if not Path(path_value).exists():
-                    issues.append(f"Path does not exist: {path_key} = {path_value}")
-        
-        # Validate prompt files exist
-        for prompt_key in ["prompts.local_analysis_file", "prompts.gemini_analysis_file"]:
-            prompt_file = self.get_value(prompt_key)
-            if prompt_file and not Path(prompt_file).exists():
-                issues.append(f"Prompt file not found: {prompt_key} = {prompt_file}")
-        
-        # Validate numeric ranges
-        chunk_duration = self.get_value("audio.chunk_duration")
-        if chunk_duration and (chunk_duration < 30 or chunk_duration > 3600):
-            issues.append(f"Audio chunk duration should be 30-3600 seconds: {chunk_duration}")
-        
-        cost_limit = self.get_value("analysis.cost_limit_daily")
-        if cost_limit and (cost_limit < 0 or cost_limit > 10):
-            issues.append(f"Daily cost limit should be 0-10 USD: {cost_limit}")
-        
-        return issues
+                raise ValueError(f"Missing required section in config: {section}")
+
+        # Check nested keys and types
+        if not isinstance(self.get_value("audio.chunk_duration"), int):
+            raise ValueError("Config error: audio.chunk_duration must be an integer.")
+
+        base_path = self.get_value("storage.base_path")
+        if not isinstance(base_path, str):
+            raise ValueError("Config error: storage.base_path must be a string.")
+
+        # Check if base_path exists and is writable
+        p = Path(base_path)
+        if not p.is_dir():
+            raise ValueError(f"Config error: storage.base_path directory does not exist: {base_path}")
+        if not os.access(p, os.W_OK):
+            raise ValueError(f"Config error: storage.base_path directory is not writable: {base_path}")
     
     def interactive_setup(self) -> None:
         """Interactive configuration setup"""

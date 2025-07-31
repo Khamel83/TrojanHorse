@@ -18,7 +18,6 @@ class AudioCapture:
     def capture_chunk(self) -> None
     def get_audio_devices(self) -> str
     def move_to_daily_folder(self, temp_file: Path) -> None
-    def trigger_transcription(self, audio_file: Path) -> None
 ```
 
 **Configuration Schema**:
@@ -84,29 +83,18 @@ class AudioTranscriber:
 
 #### HealthMonitor Class
 
-**Purpose**: System health monitoring and service management
+**Purpose**: Centralized system health monitoring and service management for all core TrojanHorse components.
 
 ```python
 class HealthMonitor:
     def __init__(self, config_path="config.json")
-    def check_service_status(self) -> Tuple[bool, str]
-    def check_audio_files_recent(self) -> Tuple[bool, str]  
-    def check_disk_space(self) -> Tuple[bool, str]
-    def restart_service(self) -> bool
+    def start_all_services(self) -> None
+    def stop_all_services(self) -> None
+    def restart_all_services(self) -> None
     def run_health_check(self) -> Tuple[bool, List[str]]
     def monitor_loop(self) -> None
     def status_report(self) -> None
     def send_notification(self, title: str, message: str) -> None
-```
-
-**Health Check Returns**:
-```python
-# Tuple format: (success: bool, status_message: str)
-# Examples:
-(True, "running")
-(False, "not_loaded")
-(True, "found_3_recent_files")
-(False, "low_disk_space_0.8GB")
 ```
 
 **Configuration Schema**:
@@ -154,6 +142,43 @@ MacProAudio/                # Temporary storage
 logs/                       # System logs
 ```
 
+### analytics_engine.py
+
+#### AnalyticsEngine Class
+
+**Purpose**: Performs cross-transcript analysis, entity extraction, and trend calculation.
+
+```python
+class AnalyticsEngine:
+    def __init__(self, db_path="trojan_search.db")
+    def run_full_analysis(self) -> None
+    def calculate_trends(self) -> None
+```
+
+### internal_api.py
+
+#### FastAPI Application
+
+**Purpose**: Provides a lightweight, local API for quick search access.
+
+```python
+# Runs on http://127.0.0.1:5001 by default
+@app.get("/search")
+def search(query: str) -> Dict
+```
+
+### hotkey_client.py
+
+#### HotkeyClient Class
+
+**Purpose**: Listens for a system-wide hotkey to trigger searches via the internal API and display notifications.
+
+```python
+class HotkeyClient:
+    def __init__(self, config_path="config.json")
+    def start_listening(self) -> None
+```
+
 ## Configuration Management
 
 ### Configuration File (config.json)
@@ -195,20 +220,15 @@ logs/                       # System logs
     "max_file_size": "10MB",
     "backup_count": 5,
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "privacy": {
+    "redaction_keywords": []
+  },
+  "workflow_integration": {
+    "hotkey": "<cmd>+<shift>+c",
+    "internal_api_port": 5001
   }
 }
-```
-
-### Configuration Validation
-
-```python
-def validate_config(config: dict) -> Tuple[bool, List[str]]:
-    """
-    Validates configuration file structure and values
-    
-    Returns:
-        Tuple[bool, List[str]]: (is_valid, error_messages)
-    """
 ```
 
 ## File Formats
@@ -319,13 +339,16 @@ class ServiceError(TrojanHorseError):
 ```bash
 python3 health_monitor.py status    # System status report
 python3 health_monitor.py check     # Boolean health check
-python3 health_monitor.py restart   # Restart services
+python3 health_monitor.py start     # Start all core services
+python3 health_monitor.py stop      # Stop all core services
+python3 health_monitor.py restart   # Restart all core services
 python3 health_monitor.py monitor   # Continuous monitoring
+python3 health_monitor.py optimize  # Optimize search database
+python3 health_monitor.py analyze   # Run advanced analytics
 ```
 
 #### audio_capture.py CLI
 ```bash
-python3 audio_capture.py                    # Start capture
 python3 audio_capture.py --list-devices     # Show audio devices
 ```
 
@@ -335,122 +358,74 @@ python3 transcribe.py                       # Process pending files
 python3 transcribe.py /path/to/audio.wav    # Transcribe specific file
 ```
 
-### macOS LaunchAgent Integration
+### Web Interface API Endpoints
 
-**Service Management**:
-```bash
-# Load service
-launchctl load ~/Library/LaunchAgents/com.contextcapture.audio.plist
+#### Search API (`/api/search`)
+- **Method**: `POST`
+- **Description**: Performs keyword, semantic, or hybrid search on transcripts.
+- **Request Body (JSON)**:
+  ```json
+  {
+    "query": "your search query",
+    "type": "hybrid", // "keyword", "semantic", or "hybrid"
+    "limit": 20,
+    "date_from": "YYYY-MM-DD",
+    "date_to": "YYYY-MM-DD",
+    "classification": "meeting"
+  }
+  ```
+- **Response Body (JSON)**:
+  ```json
+  {
+    "query": "your search query",
+    "type": "hybrid",
+    "count": 5,
+    "results": [
+      // Array of search result objects
+    ]
+  }
+  ```
 
-# Unload service  
-launchctl unload ~/Library/LaunchAgents/com.contextcapture.audio.plist
+#### Analytics API (`/api/analytics/top_entities`)
+- **Method**: `GET`
+- **Description**: Retrieves top entities (PERSON, ORG, GPE) from analyzed transcripts.
+- **Query Parameters**:
+  - `start_date`: (Optional) Start date for analysis (YYYY-MM-DD)
+  - `end_date`: (Optional) End date for analysis (YYYY-MM-DD)
+- **Response Body (JSON)**:
+  ```json
+  [
+    {
+      "entity_text": "John Doe",
+      "entity_type": "PERSON",
+      "count": 15
+    }
+  ]
+  ```
 
-# Check service status
-launchctl list com.contextcapture.audio
+#### Analytics API (`/api/analytics/trends`)
+- **Method**: `GET`
+- **Description**: Retrieves trending entities based on recent activity.
+- **Response Body (JSON)**:
+  ```json
+  [
+    {
+      "entity_text": "Project X",
+      "trend_score": 0.75
+    }
+  ]
+  ```
 
-# View service logs
-tail -f ~/Library/Logs/com.contextcapture.audio.out
-```
-
-**Service Configuration Properties**:
-- **Label**: `com.contextcapture.audio`
-- **Auto-start**: `RunAtLoad = true`
-- **Keep alive**: Restart on crashes
-- **Process type**: Background
-- **I/O priority**: Low (system-friendly)
-
-## Future API Extensions
-
-### Planned v0.2.0 APIs
-
-#### Local LLM Integration
-```python
-class LLMProcessor:
-    def __init__(self, ollama_endpoint="http://localhost:11434")
-    def classify_content(self, transcript: str) -> dict
-    def extract_tasks(self, transcript: str) -> List[str]
-    def sanitize_for_api(self, transcript: str) -> str
-    def generate_summary(self, transcripts: List[str]) -> str
-```
-
-#### Search and Indexing
-```python
-class ContentIndex:
-    def __init__(self, db_path="context.db")
-    def index_transcript(self, transcript_file: Path) -> None
-    def search_content(self, query: str) -> List[dict]
-    def get_related_content(self, date: str) -> List[dict]
-    def export_timerange(self, start: str, end: str) -> dict
-```
-
-#### Note Integration
-```python
-class NoteProcessor:
-    def __init__(self, capacities_path: str)
-    def import_capacities_notes(self, date: str) -> None
-    def merge_audio_notes(self, date: str) -> None
-    def export_daily_summary(self, date: str) -> str
-    def create_obsidian_links(self, transcript: str) -> str
-```
-
-### Webhook Support (Planned)
-
-```python
-# POST /api/v1/webhook/transcription_complete
-{
-  "event": "transcription_complete",
-  "data": {
-    "file": "audio_20250730_140532.txt",
-    "duration": 300.5,
-    "word_count": 1247,
-    "confidence": 0.91
-  },
-  "timestamp": "2025-07-30T14:12:45Z"
-}
-```
-
-## Development APIs
-
-### Module Testing
-
-```python
-# Test audio capture
-from audio_capture import AudioCapture
-capture = AudioCapture()
-devices = capture.get_audio_devices()
-
-# Test transcription
-from transcribe import AudioTranscriber
-transcriber = AudioTranscriber()
-result = transcriber.transcribe_file("test.wav")
-
-# Test health monitoring
-from health_monitor import HealthMonitor
-monitor = HealthMonitor()
-status, issues = monitor.run_health_check()
-```
-
-### Custom Module Development
-
-```python
-class CustomModule:
-    """Template for extending TrojanHorse functionality"""
-    
-    def __init__(self, config_path="config.json"):
-        self.config = self.load_config(config_path)
-        self.setup_logging()
-    
-    def load_config(self, config_path: str) -> dict:
-        """Load configuration with defaults"""
-        pass
-    
-    def setup_logging(self) -> None:
-        """Configure logging to daily folder"""
-        pass
-    
-    def process(self, input_data: Any) -> Any:
-        """Main processing function"""
-        pass
-```
-
-This API reference provides the complete interface specification for the current MVP and planned future extensions.
+#### Internal Search API (`/search` - used by hotkey client)
+- **Method**: `GET`
+- **Description**: Lightweight search endpoint for internal use (e.g., by hotkey client).
+- **Query Parameters**:
+  - `query`: The search query string.
+- **Response Body (JSON)**:
+  ```json
+  {
+    "results": [
+      // Array of simplified search result objects (snippet, timestamp)
+    ]
+  }
+  ```

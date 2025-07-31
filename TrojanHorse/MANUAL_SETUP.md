@@ -37,20 +37,34 @@ This section covers getting the code and installing its core dependencies.
     pip install -r requirements.txt
     ```
 
+5.  **Download spaCy Language Model**
+    This is required for Advanced Analytics.
+    ```bash
+    python3 -m spacy download en_core_web_sm
+    ```
+
 ## 3. System Configuration
 
 Now, configure the system for your specific environment.
 
-1.  **Set Cloud API Key**
-    For cloud-based analysis, you must set your OpenRouter API key as an environment variable. This is a secret and should not be saved in any project file.
+1.  **Create `config.json`**
+    Copy the template configuration file:
+    ```bash
+    cp config.template.json config.json
+    ```
+
+2.  **Edit `config.json`**
+    Open `config.json` in a text editor and customize settings like transcription model size, audio quality, storage paths, and API keys. Ensure you update the `openrouter_api_key` if you plan to use cloud analysis. The `privacy` and `workflow_integration` sections are new and provide enhanced control and functionality.
+
+    *Important: Replace placeholder paths like `/Users/YOUR_USERNAME/Documents/Meeting Notes` with your actual paths.*
+
+3.  **Set Cloud API Key (Optional)**
+    For cloud-based analysis, you must set your OpenRouter API key. While it can be placed directly in `config.json`, for better security, you can set it as an environment variable. This is a secret and should not be saved in any project file if you choose this method.
     ```bash
     # Add this line to your shell profile (e.g., ~/.zshrc or ~/.bash_profile)
     # Then, restart your terminal or run `source ~/.zshrc`
     export OPENROUTER_API_KEY="your-key-here"
     ```
-
-2.  **Review `config.json` (Optional)**
-    The system is configured to work out-of-the-box, but you can review `config.json` to customize settings like the transcription model size or audio quality.
 
 ## 4. macOS Service Setup (for Automation)
 
@@ -68,34 +82,21 @@ These steps are required to run the system as an automated, always-on service.
 
     -   **Download from**: [https://existential.audio/blackhole/](https://existential.audio/blackhole/)
 
-3.  **Update and Load the Service File**
-    This is the most critical manual step. The `com.contextcapture.audio.plist` file tells macOS how to run the application. You **must** update it to point to the correct project location on your machine.
+3.  **Install TrojanHorse Service**
+    The `health_monitor.py` script now manages all core services (audio capture, internal API, hotkey client). This step sets up `health_monitor.py` as a `launchd` service.
 
-    -   **A. Edit the file**: Open `com.contextcapture.audio.plist` in a text editor.
-    -   **B. Replace the paths**: Find the `ProgramArguments` and `WorkingDirectory` sections. Replace the placeholder paths with the **absolute path** to your `TrojanHorse` project folder.
+    ```bash
+    python3 src/setup.py install
+    ```
 
-        *Tip: You can get the absolute path by running `pwd` in your terminal from the project directory.*
+4.  **Load and Start the Service**
+    ```bash
+    # Copy the plist file to the macOS LaunchAgents directory
+    cp com.contextcapture.audio.plist ~/Library/LaunchAgents/
 
-        ```xml
-        <!-- Example for a user named 'khamel83' -->
-        <key>ProgramArguments</key>
-        <array>
-            <string>/usr/bin/python3</string>
-            <string>/Users/khamel83/path/to/TrojanHorse/src/main.py</string>
-        </array>
-        <key>WorkingDirectory</key>
-        <string>/Users/khamel83/path/to/TrojanHorse</string>
-        ```
-
-    -   **C. Load the service**: Once the paths are correct, run these commands in your terminal to copy the file and start the service:
-
-        ```bash
-        # Copy the file to the macOS LaunchAgents directory
-        cp com.contextcapture.audio.plist ~/Library/LaunchAgents/
-
-        # Load and start the service
-        launchctl load ~/Library/LaunchAgents/com.contextcapture.audio.plist
-        ```
+    # Load and start the service
+    launchctl load ~/Library/LaunchAgents/com.contextcapture.audio.plist
+    ```
 
 ## 5. Verification
 
@@ -105,4 +106,4 @@ After completing all the steps, verify that the system is running correctly.
 python3 src/health_monitor.py status
 ```
 
-If everything is set up correctly, you should see a status report indicating that the services are running and files are being processed. The service will now run automatically, even after you restart your computer.
+If everything is set up correctly, you should see a status report indicating that all services (`audio_capture`, `internal_api`, `hotkey_client`) are running and files are being processed. The system will now run automatically, even after you restart your computer.

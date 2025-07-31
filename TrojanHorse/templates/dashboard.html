@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Analytics Dashboard</h1>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Top Entities</h5>
+                    <canvas id="topEntitiesChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Trending Entities</h5>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Entity</th>
+                                <th>Trend Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trendingEntitiesTable">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Top Entities Chart
+        fetch('/api/analytics/top_entities')
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById('topEntitiesChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.entity_text),
+                        datasets: [{
+                            label: 'Entity Count',
+                            data: data.map(d => d.count),
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    }
+                });
+            });
+
+        // Trending Entities Table
+        fetch('/api/analytics/trends')
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.getElementById('trendingEntitiesTable');
+                data.forEach(item => {
+                    let row = tableBody.insertRow();
+                    let entityCell = row.insertCell(0);
+                    let scoreCell = row.insertCell(1);
+                    entityCell.innerHTML = item.entity_text;
+                    scoreCell.innerHTML = item.trend_score.toFixed(2);
+                });
+            });
+    });
+</script>
+{% endblock %}

@@ -9,6 +9,7 @@ import json
 import os
 import requests
 from typing import Optional, Dict, Any
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 def load_config() -> Dict[str, Any]:
@@ -24,6 +25,7 @@ def load_config() -> Dict[str, Any]:
         raise ValueError(f"Invalid JSON in configuration file: {e}")
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4))
 def analyze(text: str, prompt: str) -> str:
     """
     Analyze text using cloud AI via OpenRouter API.

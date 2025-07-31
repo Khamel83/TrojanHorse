@@ -51,27 +51,35 @@ pip3 install --user -r requirements.txt
 git clone https://github.com/Khamel83/TrojanHorse.git
 cd TrojanHorse
 
-# Configure audio (see MACHINE_SETUP.md for detailed steps)
-cp config.template.json config.json
-# Edit config.json with your settings
+# Install Python dependencies and spaCy model
+pip3 install --user -r requirements.txt
+python3 -m spacy download en_core_web_sm
 
-# Install system service
+# Copy template configuration and edit config.json with your settings
+cp config.template.json config.json
+# Edit config.json with your settings (e.g., paths, API keys, hotkey)
+
+# Install system service (sets up health_monitor.py as a launchd service)
 python3 src/setup.py install
 
-# Initialize search database
+# Load and start the health_monitor service
+cp com.contextcapture.audio.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.contextcapture.audio.plist
+
+# Initialize search database (only needed once, or after deleting trojan_search.db)
 python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db
 ```
 
 ### Verify Installation
 ```bash
-# Check system status
+# Check overall system status (should show all services running)
 python3 src/health_monitor.py status
 
-# Start web interface
-python3 src/web_interface.py --database trojan_search.db --port 5000
-
-# Open in browser
+# Open web interface in browser
 open "http://127.0.0.1:5000"
+
+# Test hotkey client (copy text to clipboard, then press Cmd+Shift+C)
+# You should see a macOS notification with a search result.
 ```
 
 ## 📂 Project Structure
@@ -90,7 +98,10 @@ TrojanHorse/
 │   ├── batch_indexer.py          # Retroactive transcript indexing
 │   ├── health_monitor.py         # System monitoring & restart
 │   ├── setup.py                  # Installation & management
-│   └── database_schema.sql       # Search database schema
+│   ├── database_schema.sql       # Search database schema
+│   ├── analytics_engine.py       # Advanced analytics engine
+│   ├── internal_api.py           # Internal API server for workflow integration
+│   └── hotkey_client.py          # Hotkey listener for workflow integration
 ├── templates/                     # Web interface templates
 │   ├── base.html                 # Base template with Bootstrap
 │   ├── index.html                # Main search interface
@@ -110,23 +121,25 @@ TrojanHorse/
 
 ## 🎛️ Configuration
 
-The system uses `config.json` for all settings:
+The system uses `config.json` for all settings. Below is an example of the structure, including newly added sections:
 
 ```json
 {
   "audio": {
     "chunk_duration": 300,
     "sample_rate": 44100,
-    "quality": "medium"
+    "quality": "medium",
+    "format": "wav"
+  },
+  "storage": {
+    "temp_path": "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/MacProAudio",
+    "base_path": "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Meeting Notes",
+    "auto_delete_audio": true
   },
   "transcription": {
     "engine": "macwhisper",
-    "language": "auto", 
+    "language": "auto",
     "model_size": "base"
-  },
-  "storage": {
-    "auto_delete_audio": true,
-    "base_path": "/path/to/Meeting Notes"
   },
   "cloud_analysis": {
     "openrouter_api_key": "YOUR_OPENROUTER_API_KEY_HERE",
@@ -134,40 +147,74 @@ The system uses `config.json` for all settings:
     "base_url": "https://openrouter.ai/api/v1"
   },
   "analysis": {
-    "default_type": "prompt"
+    "default_mode": "local",
+    "local_model": "qwen3:8b",
+    "cloud_model": "google/gemini-2.0-flash-001",
+    "cost_limit_daily": 0.20,
+    "enable_pii_detection": true,
+    "hybrid_threshold_words": 1000
+  },
+  "privacy": {
+    "redaction_keywords": []
+  },
+  "workflow_integration": {
+    "hotkey": "<cmd>+<shift>+c",
+    "internal_api_port": 5001
   }
 }
 ```
 
 ## 🔧 Commands
 
+All primary system management and monitoring commands are now consolidated under `health_monitor.py`.
+
 ```bash
-# System Management
-python3 src/setup.py install      # Install service
-python3 src/setup.py uninstall    # Remove service  
-python3 src/setup.py check        # Verify dependencies
+# Start all core services (audio capture, internal API, hotkey client)
+python3 src/health_monitor.py start
 
-# Health Monitoring
-python3 src/health_monitor.py status    # System status
-python3 src/health_monitor.py check     # Health verification
-python3 src/health_monitor.py restart   # Restart services
-python3 src/health_monitor.py monitor   # Continuous monitoring
+# Stop all core services
+python3 src/health_monitor.py stop
 
-# Audio & Transcription
-python3 src/audio_capture.py --list-devices  # Show audio devices
-python3 src/transcribe.py /path/to/audio.wav # Manual transcription
-python3 src/transcribe.py                    # Process pending files
+# Restart all core services
+python3 src/health_monitor.py restart
 
-# Search & Analysis
-python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db  # Index transcripts
-python3 src/web_interface.py --database trojan_search.db --port 5000  # Start web interface
-python3 src/search_engine.py  # Test search functionality
-python3 src/semantic_search.py  # Test semantic search
+# Check overall system status
+python3 src/health_monitor.py status
 
-# Analysis
-python3 src/analysis_router.py --file transcript.txt  # Analyze single file
-python3 src/analyze_local.py --test   # Test local analysis
-python3 src/cloud_analyze.py --test   # Test cloud analysis
+# Run a comprehensive health check and exit with status code
+python3 src/health_monitor.py check
+
+# Start continuous monitoring loop (restarts services if unhealthy)
+python3 src/health_monitor.py monitor
+
+# Optimize the search database (runs VACUUM)
+python3 src/health_monitor.py optimize
+
+# Run advanced analytics (entity extraction, trend calculation)
+python3 src/health_monitor.py analyze
+```
+
+**Other Utility Commands:**
+
+```bash
+# Install/Uninstall system service (uses launchd)
+python3 src/setup.py install
+python3 src/setup.py uninstall
+
+# Verify Python dependencies
+python3 src/setup.py check
+
+# List available audio devices
+python3 src/audio_capture.py --list-devices
+
+# Manually process pending audio files for transcription
+python3 src/transcribe.py
+
+# Manually index new transcripts for search
+python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_search.db
+
+# Start the web interface (for direct access, usually managed by health_monitor)
+python3 src/web_interface.py --database trojan_search.db --port 5000
 ```
 
 ## 📊 Output Structure
@@ -222,13 +269,13 @@ Meeting Notes/
 - ✅ **Export System**: JSON, CSV, and Markdown export formats
 - ✅ **Batch Indexing**: Retroactive processing of existing transcripts
 
-**📋 Phase 4 Future (v1.0.0)** - Advanced Features:
-- 📋 **Workflow Integration**: Real-time context injection for work
-- 📋 **Advanced Analytics**: Cross-day pattern recognition and insights
-- 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing
-- 📋 **API Ecosystem**: Integration with external tools and services
+**✅ Phase 4 Complete (v1.0.0)** - Advanced Features:
+- ✅ **Workflow Integration**: Real-time context injection (Internal API + Hotkey Client)
+- ✅ **Advanced Analytics**: Cross-day pattern recognition and insights (Analytics Engine + Dashboard)
+- 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing (Future)
+- 📋 **API Ecosystem**: Integration with external tools (Future)
 
-**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, and search capabilities. Web interface available for browsing and searching all captured content.
+**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, search, advanced analytics, and workflow integration capabilities. Web interface available for browsing and searching all captured content.
 
 See [Development Roadmap](.agent-os/product/roadmap.md) for detailed implementation phases.
 
@@ -251,26 +298,31 @@ See [Development Roadmap](.agent-os/product/roadmap.md) for detailed implementat
 
 ## 🚀 Agent OS Integration
 
-This project uses **Agent OS** for structured AI-assisted development:
+This project is managed using **Agent OS**, a structured AI-assisted development methodology. For detailed instructions, see the [Agent OS Integration Guide](.agent-os/README.md).
 
-### Development Workflows
-- **Product Planning**: Managed via `.agent-os/product/` documentation
-- **Feature Development**: Specs created in `.agent-os/specs/YYYY-MM-DD-feature-name/`
-- **Task Execution**: Guided by Agent OS task breakdown and execution workflows
+### How to Use Agent OS
 
-### Available Commands
-- `/plan-product` - Initialize or update product documentation
-- `/create-spec` - Plan and specify new features
-- `/execute-tasks` - Implement features following Agent OS workflows
-- `/analyze-product` - Add Agent OS to existing codebases
+**For AI Agents/LLMs:**
 
-### Current Status
-- **Phase 1**: ✅ MVP Complete (audio capture + transcription)
-- **Phase 2**: ✅ Mostly Complete (local + cloud AI analysis)
-- **Phase 3**: 🎯 Current Target (search & memory system)
-- **Phase 4**: 📋 Future (workflow integration + advanced analytics)
+When working on this project, please adhere to the Agent OS workflows:
 
-See `.agent-os/product/roadmap.md` for detailed development phases.
+-   **Product Planning:** When asked to plan or initialize the product, use the instructions at `@.agent-os/instructions/plan-product.md`.
+-   **Feature Specification:** For new features, use `@.agent-os/instructions/create-spec.md`.
+-   **Task Execution:** When implementing tasks, follow the breakdown in the relevant spec file.
+-   **Project Analysis:** To analyze the existing codebase, use `@.agent-os/instructions/analyze-product.md`.
+
+Always check for and load context from `mission-lite.md` and `spec-lite.md` files when available.
+
+**For Humans:**
+
+Use the following commands to interact with Agent OS:
+
+-   `/plan-product`: Initialize or update product documentation.
+-   `/create-spec`: Plan and specify a new feature.
+-   `/execute-tasks`: Implement tasks from a specification.
+-   `/analyze-product`: Add or update the Agent OS structure for the project.
+
+For the current development status, please see the "Development Status" section of this README and the [Development Roadmap](.agent-os/product/roadmap.md).
 
 ## 📖 Documentation
 

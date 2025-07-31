@@ -94,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_transcripts_engine ON transcripts(engine);
 CREATE INDEX IF NOT EXISTS idx_analysis_transcript_id ON analysis(transcript_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_mode ON analysis(mode);
 CREATE INDEX IF NOT EXISTS idx_analysis_classification ON analysis(classification);
+CREATE INDEX IF NOT EXISTS idx_transcripts_timestamp ON transcripts(timestamp);
 
 -- Future: Vector embeddings table for semantic search (Phase 3, Task 4)
 CREATE TABLE IF NOT EXISTS embeddings (
@@ -107,3 +108,20 @@ CREATE TABLE IF NOT EXISTS embeddings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_transcript_id ON embeddings(transcript_id);
+
+-- Phase B: Advanced Analytics
+CREATE TABLE IF NOT EXISTS analytics_entities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transcript_id INTEGER,
+    entity_text TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    timestamp DATETIME NOT NULL,
+    FOREIGN KEY (transcript_id) REFERENCES transcripts (id)
+);
+
+CREATE TABLE IF NOT EXISTS analytics_trends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_text TEXT NOT NULL,
+    trend_score REAL NOT NULL,
+    last_updated DATETIME NOT NULL
+);

@@ -12,28 +12,67 @@ import subprocess
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
+from config_manager import ConfigManager
+from search_engine import SearchEngine
+from analytics_engine import AnalyticsEngine
 
 class HealthMonitor:
     def __init__(self, config_path="config.json"):
-        self.config = self.load_config(config_path)
+        self.config = ConfigManager(config_path=config_path).config
         self.setup_logging()
-        self.service_name = "com.contextcapture.audio"
-    
-    def load_config(self, config_path):
-        """Load configuration"""
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                return json.load(f)
-        else:
-            return {
-                "monitoring": {
-                    "check_interval": 60,  # seconds
-                    "max_restart_attempts": 3,
-                    "restart_delay": 30,
-                    "health_check_window": 300  # 5 minutes
-                }
-            }
-    
+        self.services = {
+            "audio_capture": {"path": "src/audio_capture.py", "process": None, "status": "stopped"},
+            "internal_api": {"path": "src/internal_api.py", "process": None, "status": "stopped"},
+            "hotkey_client": {"path": "src/hotkey_client.py", "process": None, "status": "stopped"}
+        }
+        self.service_pids = {} # To store PIDs for external management if needed
+
+    def check_service_status(self, service_name: str) -> str:
+        service = self.services[service_name]
+        if service["process"] and service["process"].poll() is None:
+            return "running"
+        return "stopped"
+
+    def _start_service(self, service_name: str) -> bool:
+        service = self.services[service_name]
+        if self._check_service_status(service_name) == "running":
+            self.logger.info(f"{service_name} is already running.")
+            return True
+        
+        try:
+            # Use sys.executable to ensure the correct python interpreter is used
+            cmd = [sys.executable, service["path"]]
+            
+            # For internal_api and hotkey_client, they should run in background
+            # For audio_capture, it's typically managed by launchd, but for direct start, it also runs in background
+            service["process"] = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
+            self.logger.info(f"Started {service_name} with PID {service['process'].pid}")
+            service["status"] = "running"
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to start {service_name}: {e}")
+            service["status"] = "failed"
+            return False
+
+    def _stop_service(self, service_name: str) -> bool:
+        service = self.services[service_name]
+        if self._check_service_status(service_name) == "stopped":
+            self.logger.info(f"{service_name} is already stopped.")
+            return True
+        
+        try:
+            if service["process"]:
+                # Terminate the process group to ensure all child processes are killed
+                os.killpg(os.getpgid(service["process"].pid), signal.SIGTERM)
+                service["process"].wait(timeout=5) # Wait for process to terminate
+            self.logger.info(f"Stopped {service_name}")
+            service["status"] = "stopped"
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to stop {service_name}: {e}")
+            service["status"] = "failed"
+            return False
+
     def setup_logging(self):
         """Setup logging"""
         log_dir = Path("logs")
@@ -49,27 +88,7 @@ class HealthMonitor:
         )
         self.logger = logging.getLogger(__name__)
     
-    def check_service_status(self):
-        """Check if the audio capture service is running"""
-        try:
-            result = subprocess.run(
-                ["launchctl", "list", self.service_name],
-                capture_output=True, text=True, check=False
-            )
-            
-            if result.returncode == 0:
-                # Service is loaded, check if it's actually running
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    if 'PID' in line or line.strip().isdigit():
-                        return True, "running"
-                return True, "loaded_not_running"
-            else:
-                return False, "not_loaded"
-                
-        except Exception as e:
-            self.logger.error(f"Failed to check service status: {e}")
-            return False, "error"
+    
     
     def check_audio_files_recent(self):
         """Check if audio files are being created recently"""
@@ -187,30 +206,25 @@ class HealthMonitor:
             self.logger.error(f"Failed to check recent analyses: {e}")
             return False, "error"
     
-    def restart_service(self):
-        """Restart the audio capture service"""
-        try:
-            plist_path = Path.home() / "Library/LaunchAgents/com.contextcapture.audio.plist"
-            
-            # Unload service
-            subprocess.run(["launchctl", "unload", str(plist_path)], check=False)
-            time.sleep(5)
-            
-            # Reload service
-            result = subprocess.run(["launchctl", "load", str(plist_path)], 
-                                  capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                self.logger.info("Service restarted successfully")
-                return True
-            else:
-                self.logger.error(f"Failed to restart service: {result.stderr}")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"Failed to restart service: {e}")
-            return False
-    
+    def start_all_services(self):
+        self.logger.info("Starting all services...")
+        # Start internal_api first as hotkey_client depends on it
+        self._start_service("internal_api")
+        self._start_service("audio_capture")
+        self._start_service("hotkey_client")
+
+    def stop_all_services(self):
+        self.logger.info("Stopping all services...")
+        self._stop_service("hotkey_client")
+        self._stop_service("audio_capture")
+        self._stop_service("internal_api")
+
+    def restart_all_services(self):
+        self.logger.info("Restarting all services...")
+        self.stop_all_services()
+        time.sleep(5) # Give time for processes to fully terminate
+        self.start_all_services()
+
     def send_notification(self, title, message):
         """Send macOS notification"""
         try:
@@ -226,11 +240,12 @@ class HealthMonitor:
         """Run a complete health check"""
         issues = []
         
-        # Check service status
-        service_ok, service_status = self.check_service_status()
-        if not service_ok:
-            issues.append(f"Service issue: {service_status}")
-        
+        # Check status of all managed services
+        for service_name in self.services:
+            status = self._check_service_status(service_name)
+            if status != "running":
+                issues.append(f"Service {service_name} is {status}")
+
         # Check recent audio files
         files_ok, files_status = self.check_audio_files_recent()
         if not files_ok:
@@ -261,10 +276,7 @@ class HealthMonitor:
     
     def monitor_loop(self):
         """Main monitoring loop"""
-        restart_attempts = 0
-        max_attempts = self.config.get("monitoring", {}).get("max_restart_attempts", 3)
         check_interval = self.config.get("monitoring", {}).get("check_interval", 60)
-        restart_delay = self.config.get("monitoring", {}).get("restart_delay", 30)
         
         self.logger.info("Starting health monitor")
         
@@ -273,27 +285,15 @@ class HealthMonitor:
                 healthy, issues = self.run_health_check()
                 
                 if not healthy:
-                    self.logger.warning("System unhealthy, attempting restart")
-                    
-                    if restart_attempts < max_attempts:
-                        if self.restart_service():
-                            restart_attempts = 0  # Reset counter on successful restart
-                            self.send_notification("Context Capture", "Service restarted")
-                            time.sleep(restart_delay)
-                        else:
-                            restart_attempts += 1
-                            self.logger.error(f"Restart attempt {restart_attempts}/{max_attempts} failed")
-                    else:
-                        self.logger.error("Max restart attempts reached, giving up")
-                        self.send_notification("Context Capture", "Service failed - manual intervention required")
-                        break
-                else:
-                    restart_attempts = 0  # Reset counter when healthy
+                    self.logger.warning("System unhealthy, attempting to restart services")
+                    self.restart_all_services()
+                    self.send_notification("Context Capture", "Services restarted due to unhealthiness")
                 
                 time.sleep(check_interval)
                 
             except KeyboardInterrupt:
                 self.logger.info("Health monitor stopped by user")
+                self.stop_all_services()
                 break
             except Exception as e:
                 self.logger.error(f"Health monitor error: {e}")
@@ -304,11 +304,14 @@ class HealthMonitor:
         print("Context Capture System Status Report")
         print("=" * 40)
         
-        # Service status
-        service_ok, service_status = self.check_service_status()
-        print(f"Service Status: {'✓' if service_ok else '✗'} {service_status}")
+        for service_name, service_info in self.services.items():
+            status = self._check_service_status(service_name)
+            print(f"Service '{service_name}': {'✓' if status == 'running' else '✗'} {status}")
+
+        # Original checks (audio files, disk space, analysis capabilities, etc.)
+        # These still apply to the overall system health
         
-        # Recent files
+        # Check recent files
         files_ok, files_status = self.check_audio_files_recent()
         print(f"Recent Audio Files: {'✓' if files_ok else '✗'} {files_status}")
         
@@ -325,14 +328,10 @@ class HealthMonitor:
             analysis_recent_ok, analysis_recent_status = self.check_analysis_recent()
             print(f"Analysis Activity: {'✓' if analysis_recent_ok else '✗'} {analysis_recent_status}")
         
-        # Overall health
-        healthy, issues = self.run_health_check()
-        print(f"Overall Health: {'✓' if healthy else '✗'} {'Healthy' if healthy else 'Issues detected'}")
-        
-        if issues:
-            print("\nIssues:")
-            for issue in issues:
-                print(f"  - {issue}")
+        # Overall health (simplified for now, can be expanded)
+        overall_healthy = all(self._check_service_status(s) == "running" for s in self.services) and \
+                          files_ok and disk_ok and analysis_ok and analysis_recent_ok
+        print(f"Overall Health: {'✓' if overall_healthy else '✗'} {'Healthy' if overall_healthy else 'Issues detected'}")
 
 def main():
     monitor = HealthMonitor()
@@ -351,16 +350,25 @@ def main():
                 for issue in issues:
                     print(f"  - {issue}")
                 sys.exit(1)
+        elif command == "start":
+            monitor.start_all_services()
+        elif command == "stop":
+            monitor.stop_all_services()
         elif command == "restart":
-            if monitor.restart_service():
-                print("✓ Service restarted successfully")
-            else:
-                print("✗ Failed to restart service")
-                sys.exit(1)
+            monitor.restart_all_services()
         elif command == "monitor":
             monitor.monitor_loop()
+        elif command == "optimize":
+            search_engine = SearchEngine(monitor.config.get('db_path', 'trojan_search.db'))
+            search_engine.optimize_database()
+            search_engine.close()
+        elif command == "analyze":
+            analytics_engine = AnalyticsEngine(monitor.config.get('db_path', 'trojan_search.db'))
+            analytics_engine.run_full_analysis()
+            analytics_engine.calculate_trends()
+            analytics_engine.close()
         else:
-            print("Usage: python3 health_monitor.py [status|check|restart|monitor]")
+            print("Usage: python3 health_monitor.py [status|check|start|stop|restart|monitor|optimize|analyze]")
             sys.exit(1)
     else:
         # Default to status report

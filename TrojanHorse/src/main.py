@@ -6,9 +6,17 @@ Main Orchestrator for the TrojanHorse Context Capture System
 import sys
 import subprocess
 from pathlib import Path
+from config_manager import ConfigManager
 
 def main():
     """Main function to orchestrate transcription and analysis."""
+    try:
+        config_manager = ConfigManager()
+        config_manager.validate_config()
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
+
     # 1. Run the transcription process
     transcribe_process = subprocess.run(
         [sys.executable, "src/transcribe.py"],

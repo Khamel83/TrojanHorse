@@ -310,6 +310,17 @@ class SearchEngine:
             self.conn.close()
             self.logger.info("Database connection closed")
 
+    def optimize_database(self):
+        """Optimize the database by running VACUUM"""
+        try:
+            self.logger.info("Optimizing database...")
+            self.conn.execute("VACUUM;")
+            self.conn.commit()
+            self.logger.info("Database optimization complete.")
+        except Exception as e:
+            self.logger.error(f"Failed to optimize database: {e}")
+            raise
+
 def main():
     """Test the search engine"""
     logging.basicConfig(level=logging.INFO)
