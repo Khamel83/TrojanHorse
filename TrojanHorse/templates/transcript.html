@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}{{ transcript.filename }} - TrojanHorse{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Transcript Content -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-text"></i> {{ transcript.filename }}
+                </h5>
+                <small class="text-muted">
+                    {{ transcript.date }} at {{ transcript.timestamp }} 
+                    {% if transcript.engine %}| Engine: {{ transcript.engine }}{% endif %}
+                </small>
+            </div>
+            <div class="card-body">
+                <div class="transcript-content">
+                    {{ transcript.content | replace('\n', '<br>') | safe }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="mt-3">
+            <a href="/" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back to Search
+            </a>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Analysis Summary -->
+        {% if transcript.summary %}
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-file-earmark-text"></i> Analysis Summary
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="card-text">{{ transcript.summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Action Items -->
+        {% if action_items %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-check-square"></i> Action Items
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled">
+                    {% for item in action_items %}
+                    <li class="mb-2">
+                        <i class="bi bi-arrow-right text-primary"></i> {{ item }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tags -->
+        {% if tags %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-tags"></i> Tags
+                </h6>
+            </div>
+            <div class="card-body">
+                {% for tag in tags %}
+                <span class="badge bg-secondary me-1 mb-1">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Metadata -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i> Metadata
+                </h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>ID:</strong></td>
+                        <td>{{ transcript.id }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Date:</strong></td>
+                        <td>{{ transcript.date }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Time:</strong></td>
+                        <td>{{ transcript.timestamp }}</td>
+                    </tr>
+                    {% if transcript.engine %}
+                    <tr>
+                        <td><strong>Engine:</strong></td>
+                        <td>{{ transcript.engine }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if transcript.word_count %}
+                    <tr>
+                        <td><strong>Words:</strong></td>
+                        <td>{{ transcript.word_count }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if transcript.classification %}
+                    <tr>
+                        <td><strong>Classification:</strong></td>
+                        <td>
+                            <span class="badge bg-info">{{ transcript.classification }}</span>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.transcript-content {
+    line-height: 1.8;
+    font-size: 1.05em;
+    max-height: 600px;
+    overflow-y: auto;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+}
+</style>
+{% endblock %}
