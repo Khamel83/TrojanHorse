@@ -36,7 +36,7 @@ class HealthMonitor:
     
     def setup_logging(self):
         """Setup logging"""
-        log_dir = Path("/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/logs")
+        log_dir = Path("logs")
         log_dir.mkdir(parents=True, exist_ok=True)
         
         logging.basicConfig(
@@ -120,6 +120,73 @@ class HealthMonitor:
             self.logger.error(f"Failed to check disk space: {e}")
             return False, "error"
     
+    def check_analysis_capabilities(self):
+        """Check analysis pipeline capabilities"""
+        try:
+            # Try to import and check analysis router
+            from analysis_router import AnalysisRouter
+            
+            router = AnalysisRouter()
+            stats = router.get_analysis_stats()
+            
+            local_available = stats.get("local_available", False)
+            cloud_available = stats.get("cloud_available", False)
+            
+            if not local_available and not cloud_available:
+                return False, "no_analysis_available"
+            elif local_available and cloud_available:
+                return True, "both_local_and_cloud_available"
+            elif local_available:
+                return True, f"local_available_{stats.get('local_model', 'unknown')}"
+            else:
+                return True, f"cloud_available_{stats.get('cloud_model', 'unknown')}"
+                
+        except ImportError as e:
+            self.logger.error(f"Analysis router not available: {e}")
+            return False, "analysis_router_missing"
+        except Exception as e:
+            self.logger.error(f"Failed to check analysis capabilities: {e}")
+            return False, "analysis_check_error"
+    
+    def check_analysis_recent(self):
+        """Check if analysis files are being created recently"""
+        try:
+            base_path = Path(self.config.get("storage", {}).get("base_path", 
+                            "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Meeting Notes"))
+            
+            if not base_path.exists():
+                return False, "base_directory_missing"
+            
+            # Check for analysis files created in the last 60 minutes
+            cutoff_time = datetime.now() - timedelta(minutes=60)
+            recent_analyses = []
+            
+            # Look for .analysis.md files
+            for analysis_file in base_path.rglob("*.analysis.md"):
+                if datetime.fromtimestamp(analysis_file.stat().st_mtime) > cutoff_time:
+                    recent_analyses.append(analysis_file)
+            
+            if recent_analyses:
+                return True, f"found_{len(recent_analyses)}_recent_analyses"
+            else:
+                # Check if there are recent transcripts that should have been analyzed
+                recent_transcripts = []
+                for transcript_file in base_path.rglob("*.txt"):
+                    if datetime.fromtimestamp(transcript_file.stat().st_mtime) > cutoff_time:
+                        # Skip log files and other non-transcript files
+                        if not any(skip in transcript_file.name.lower() for skip in 
+                                 ['log', 'config', 'readme', 'summary']):
+                            recent_transcripts.append(transcript_file)
+                
+                if recent_transcripts:
+                    return False, f"no_recent_analyses_but_{len(recent_transcripts)}_recent_transcripts"
+                else:
+                    return True, "no_recent_transcripts_or_analyses"
+                
+        except Exception as e:
+            self.logger.error(f"Failed to check recent analyses: {e}")
+            return False, "error"
+    
     def restart_service(self):
         """Restart the audio capture service"""
         try:
@@ -173,6 +240,17 @@ class HealthMonitor:
         disk_ok, disk_status = self.check_disk_space()
         if not disk_ok:
             issues.append(f"Disk space issue: {disk_status}")
+        
+        # Check analysis capabilities
+        analysis_ok, analysis_status = self.check_analysis_capabilities()
+        if not analysis_ok:
+            issues.append(f"Analysis capabilities issue: {analysis_status}")
+        
+        # Check recent analysis activity (only if capabilities are OK)
+        if analysis_ok:
+            analysis_recent_ok, analysis_recent_status = self.check_analysis_recent()
+            if not analysis_recent_ok:
+                issues.append(f"Analysis activity issue: {analysis_recent_status}")
         
         if issues:
             self.logger.warning(f"Health check failed: {', '.join(issues)}")
@@ -237,6 +315,15 @@ class HealthMonitor:
         # Disk space
         disk_ok, disk_status = self.check_disk_space()
         print(f"Disk Space: {'✓' if disk_ok else '✗'} {disk_status}")
+        
+        # Analysis capabilities
+        analysis_ok, analysis_status = self.check_analysis_capabilities()
+        print(f"Analysis Capabilities: {'✓' if analysis_ok else '✗'} {analysis_status}")
+        
+        # Analysis activity (only if capabilities are OK)
+        if analysis_ok:
+            analysis_recent_ok, analysis_recent_status = self.check_analysis_recent()
+            print(f"Analysis Activity: {'✓' if analysis_recent_ok else '✗'} {analysis_recent_status}")
         
         # Overall health
         healthy, issues = self.run_health_check()

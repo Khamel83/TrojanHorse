@@ -37,8 +37,8 @@ class AudioCapture:
                 "format": "wav"
             },
             "storage": {
-                "temp_path": "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/MacProAudio",
-                "base_path": "/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Meeting Notes"
+                "temp_path": "~/TrojanHorse/temp",
+                "base_path": "~/TrojanHorse/notes"
             }
         }
         
@@ -49,11 +49,19 @@ class AudioCapture:
                 for key in default_config:
                     if key not in config:
                         config[key] = default_config[key]
+                # Expand paths
+                for key, value in config.get("storage", {}).items():
+                    if isinstance(value, str):
+                        config["storage"][key] = os.path.expanduser(value)
                 return config
         else:
             # Create default config
             with open(config_path, 'w') as f:
                 json.dump(default_config, f, indent=2)
+            # Expand paths
+            for key, value in default_config.get("storage", {}).items():
+                if isinstance(value, str):
+                    default_config["storage"][key] = os.path.expanduser(value)
             return default_config
     
     def setup_logging(self):

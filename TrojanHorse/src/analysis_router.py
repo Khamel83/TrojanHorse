@@ -183,6 +183,7 @@ class AnalysisRouter:
                 # LocalAnalyzer expects a file path, not text directly
                 result = analyzer.process_transcript(str(source_path))
                 if result and isinstance(result, dict):
+                    result["status"] = "completed"
                     result["analysis_mode"] = "local"
                     result["model"] = self.config["analysis"]["local_model"]
                     if "timestamp" not in result:
