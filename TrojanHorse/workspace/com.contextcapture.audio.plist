@@ -8,11 +8,11 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/audio_capture.py</string>
+        <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/TrojanHorse/workspace/audio_capture.py</string>
     </array>
     
     <key>WorkingDirectory</key>
-    <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting</string>
+    <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/TrojanHorse/workspace</string>
     
     <key>RunAtLoad</key>
     <true/>
@@ -26,13 +26,19 @@
     </dict>
     
     <key>StandardOutPath</key>
-    <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/logs/audio_capture.out</string>
+    <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/TrojanHorse/workspace/logs/audio_capture.out</string>
     
     <key>StandardErrorPath</key>
-    <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/logs/audio_capture.err</string>
+    <string>/Users/hr-svp-mac12/Library/Mobile Documents/com~apple~CloudDocs/Work Automation/Scripting/TrojanHorse/workspace/logs/audio_capture.err</string>
     
     <key>ThrottleInterval</key>
-    <integer>10</integer>
+    <integer>30</integer>
+    
+    <key>StartInterval</key>
+    <integer>60</integer>
+    
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
     
     <key>ProcessType</key>
     <string>Background</string>

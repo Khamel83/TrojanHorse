@@ -2,18 +2,18 @@
 
 ## Tasks
 
-- [ ] 1. **Recording Reliability Foundation** 
-  - [ ] 1.1 Fix LaunchAgent service configuration paths to point to workspace/ directory
-  - [ ] 1.2 Test and verify audio recording service starts correctly on boot
-  - [ ] 1.3 Implement automatic restart on service failure with exponential backoff
-  - [ ] 1.4 Add disk space monitoring with automatic cleanup of audio files older than 30 days
-  - [ ] 1.5 Implement permission verification with clear error messages for mic/disk access
-  - [ ] 1.6 Test service reliability under various failure scenarios
-  - [ ] 1.7 Verify all recording reliability tests pass
+- [x] 1. **Recording Reliability Foundation** 
+  - [x] 1.1 Fix LaunchAgent service configuration paths to point to workspace/ directory
+  - [x] 1.2 Test and verify audio recording service starts correctly on boot
+  - [x] 1.3 Implement automatic restart on service failure with exponential backoff
+  - [x] 1.4 Add disk space monitoring with automatic cleanup of audio files older than 30 days
+  - [x] 1.5 Implement permission verification with clear error messages for mic/disk access
+  - [x] 1.6 Test service reliability under various failure scenarios
+  - [x] 1.7 Verify all recording reliability tests pass
 
 - [ ] 2. **Analysis Architecture Unification**
-  - [ ] 2.1 Create analysis_router.py with unified interface for local/cloud/both analysis
-  - [ ] 2.2 Implement backward compatibility with existing analysis file formats
+  - [x] 2.1 Create analysis_router.py with unified interface for local/cloud/both analysis
+  - [x] 2.2 Clean rebuild with markdown output (no backward compatibility per user preference)
   - [ ] 2.3 Update transcribe.py to use analysis_router instead of direct imports
   - [ ] 2.4 Test analysis router with existing transcript files to ensure compatibility
   - [ ] 2.5 Migrate complex features from analyze_local.py and process_gemini.py to router
