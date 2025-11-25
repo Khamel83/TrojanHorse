@@ -10,6 +10,8 @@ This document describes the specific user workflows for using TrojanHorse with y
 | Process New Files | `th process` | On-demand or cron | Either device |
 | Build Search Index | `th embed` | After processing | Either device |
 | Query Notes | `th ask "question"` | As needed | Either device |
+| Start API Server | `th api` | Continuous for integration | Either device |
+| Promote to Atlas | `th promote-to-atlas "ids"` | As needed | Either device |
 
 ## Daily Workflows
 
@@ -257,6 +259,124 @@ th embed
 - Use MacWhisper's auto-transcribe
 - Files process automatically every 5 minutes
 
+## API Integration Workflows
+
+### 1. Start API Server for Integration
+
+```bash
+# Start API server (default localhost:8765)
+th api
+
+# Custom configuration
+th api --host 0.0.0.0 --port 9000
+
+# Development with auto-reload
+th api --reload
+```
+
+**Use Cases:**
+- External applications need to query your notes
+- Automated processing workflows
+- Integration with Atlas or other services
+- Web interfaces and dashboards
+
+### 2. API-Based Processing
+
+```bash
+# Process files via API
+curl -X POST http://localhost:8765/process
+
+# Rebuild search index
+curl -X POST http://localhost:8765/embed
+
+# Check system health
+curl http://localhost:8765/health
+```
+
+### 3. Search and Query via API
+
+```bash
+# List notes with filters
+curl "http://localhost:8765/notes?category=meeting&limit=20"
+
+# Get specific note
+curl http://localhost:8765/notes/{note_id}
+
+# Ask questions (RAG)
+curl -X POST http://localhost:8765/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What decisions were made about the project?", "top_k": 5}'
+```
+
+### 4. Atlas Integration Workflow
+
+```bash
+# Set environment variables
+export ATLAS_API_URL="http://localhost:8787"
+export ATLAS_API_KEY="your-atlas-key"  # Optional
+
+# Promote curated notes to Atlas
+th promote-to-atlas "note1,note2,note3"
+
+# Or use API directly
+curl -X POST http://localhost:8765/promote \
+  -H "Content-Type: application/json" \
+  -d '{"note_ids": ["note1", "note2", "note3"]}'
+```
+
+**Atlas Integration Scenarios:**
+
+**Archive Important Ideas:**
+```bash
+# Find high-value ideas
+curl "http://localhost:8765/notes?category=idea&limit=10"
+
+# Promote to Atlas
+th promote-to-atlas "idea1,idea2,idea3"
+```
+
+**Weekly Knowledge Transfer:**
+```bash
+# Get this week's meeting notes
+notes=$(curl -s "http://localhost:8765/notes?category=meeting&limit=50" | jq -r '.items[].id')
+
+# Transfer to Atlas for long-term storage
+th promote-to-atlas "$notes"
+```
+
+### 5. External Application Integration
+
+**Python Example:**
+```python
+import requests
+
+# Search for project-specific notes
+response = requests.get(
+    "http://localhost:8765/notes",
+    params={"project": "warn_dashboard", "limit": 10}
+)
+notes = response.json()["items"]
+
+# Ask about recent decisions
+response = requests.post(
+    "http://localhost:8765/ask",
+    json={"question": "What decisions were made this week?"}
+)
+answer = response.json()["answer"]
+```
+
+**JavaScript Example:**
+```javascript
+// Fetch recent notes
+const response = await fetch('http://localhost:8765/notes?limit=20');
+const data = await response.json();
+
+// Process or display notes
+data.items.forEach(note => {
+    console.log(`${note.title}: ${note.summary}`);
+});
+```
+
 ## Keyboard Shortcuts Reference
 
 **Drafts:**
@@ -274,7 +394,7 @@ th embed
 - `Cmd+\`: Split pane
 
 **Terminal:**
-- `Ctrl+C`: Stop th workday
+- `Ctrl+C`: Stop th workday or API server
 - `Cmd+T`: New tab
 - `Cmd+W`: Close tab
 

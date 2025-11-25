@@ -279,3 +279,147 @@ The only contract between them is:
 
 > **Drafts writes plain text files into WORKVAULT_ROOT/Inbox/.**
 > **TrojanHorse processes anything it finds there.**
+
+## 7. REST API Integration
+
+TrojanHorse now includes a FastAPI-based REST API that allows other systems to integrate with your knowledge base. The API exposes all core functionality including processing, searching, and promoting notes to Atlas.
+
+### Start the API Server
+
+Start the API server with:
+
+```bash
+th api                    # Default: 127.0.0.1:8765
+th api --host 0.0.0.0     # Bind to all interfaces
+th api --port 9000        # Custom port
+th api --reload           # Auto-reload for development
+```
+
+The API will be available at `http://localhost:8765` with interactive docs at `http://localhost:8765/docs`.
+
+### API Endpoints
+
+#### Health Check
+```bash
+curl http://localhost:8765/health
+```
+
+#### Processing
+```bash
+# Process new files once
+curl -X POST http://localhost:8765/process
+
+# Rebuild search index
+curl -X POST http://localhost:8765/embed
+```
+
+#### Query Notes
+```bash
+# List notes with filters
+curl "http://localhost:8765/notes?limit=10&category=meeting&project=warn_dashboard"
+
+# Get specific note
+curl http://localhost:8765/notes/{note_id}
+
+# Ask questions (RAG)
+curl -X POST http://localhost:8765/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What did we decide about the WARN project?", "top_k": 5}'
+```
+
+#### Promote to Atlas
+```bash
+# Prepare notes for Atlas export
+curl -X POST http://localhost:8765/promote \
+  -H "Content-Type: application/json" \
+  -d '{"note_ids": ["note1", "note2", "note3"]}'
+```
+
+### Atlas Integration
+
+TrojanHorse can promote curated notes to Atlas for long-term storage:
+
+```bash
+# Set environment variables
+export ATLAS_API_URL="http://localhost:8787"
+export ATLAS_API_KEY="your-atlas-api-key"  # Optional
+
+# Promote notes to Atlas
+th promote-to-atlas "note1,note2,note3" --th-url http://localhost:8765
+
+# Check status (includes Atlas integration)
+th status
+```
+
+### Environment Variables
+
+For Atlas integration, configure these environment variables:
+
+```bash
+# Required
+export ATLAS_API_URL="http://localhost:8787"
+
+# Optional (if Atlas requires authentication)
+export ATLAS_API_KEY="your-secret-key"
+```
+
+### Integration Use Cases
+
+#### 1. Automated Processing
+```bash
+# Process new files every hour
+while true; do
+    curl -X POST http://localhost:8765/process
+    sleep 3600
+done
+```
+
+#### 2. External Applications
+```python
+import requests
+
+# Search notes
+response = requests.get(
+    "http://localhost:8765/notes",
+    params={"q": "project update", "category": "meeting"}
+)
+notes = response.json()["items"]
+
+# Ask questions
+response = requests.post(
+    "http://localhost:8765/ask",
+    json={"question": "What are the upcoming deadlines?"}
+)
+answer = response.json()["answer"]
+```
+
+#### 3. Atlas Promotion Workflow
+```bash
+# 1. Find notes to promote
+notes=$(curl -s "http://localhost:8765/notes?category=idea&limit=5" | jq -r '.items[].id')
+
+# 2. Promote to Atlas
+th promote-to-atlas "$notes"
+```
+
+### Security Considerations
+
+- The API binds to `127.0.0.1` by default (localhost only)
+- Use `--host 0.0.0.0` carefully in production
+- Atlas API authentication is handled via `ATLAS_API_KEY`
+- All local processing and data remain private
+
+### Monitoring
+
+Check API health and stats:
+
+```bash
+# Health check
+curl http://localhost:8765/health
+
+# System stats
+curl http://localhost:8765/stats
+
+# CLI status (includes API integration)
+th status
+```

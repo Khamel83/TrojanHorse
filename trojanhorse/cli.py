@@ -6,12 +6,15 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+import uvicorn
 
 from .config import Config
 from .processor import Processor
 from .rag import rebuild_index, query
 from .index_db import IndexDB
 from .llm_client import LLMClient
+from .api_server import app as api_app
+from .atlas_client import promote_notes_from_trojanhorse, get_atlas_client
 
 # Set up logging
 logging.basicConfig(
@@ -193,6 +196,89 @@ def ask(
 
 
 @app.command()
+def api(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind the API server to"),
+    port: int = typer.Option(8765, "--port", "-p", help="Port to bind the API server to"),
+    reload: bool = typer.Option(False, "--reload", "-r", help="Enable auto-reload for development")
+) -> None:
+    """Run TrojanHorse REST API server."""
+    typer.echo(f"🚀 Starting TrojanHorse API server on {host}:{port}")
+    typer.echo("Press Ctrl+C to stop")
+
+    try:
+        # Validate configuration before starting
+        config = load_config()
+        typer.echo(f"📁 Vault: {config.vault_root}")
+        typer.echo(f"🔗 API docs: http://{host}:{port}/docs")
+
+        # Run the FastAPI app
+        uvicorn.run(
+            api_app,
+            host=host,
+            port=port,
+            reload=reload,
+            log_level="info"
+        )
+    except KeyboardInterrupt:
+        typer.echo("\n👋 API server stopped")
+    except Exception as e:
+        typer.echo(f"❌ API server failed: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def promote_to_atlas(
+    ids: str = typer.Argument(..., help="Comma-separated list of note IDs to promote"),
+    trojanhorse_url: str = typer.Option("http://localhost:8765", "--th-url", help="TrojanHorse API URL")
+) -> None:
+    """
+    Promote notes to Atlas long-term library.
+
+    This command fetches notes from TrojanHorse and sends them to Atlas for long-term storage.
+    Requires ATLAS_API_URL and optionally ATLAS_API_KEY environment variables.
+    """
+    try:
+        # Parse note IDs
+        note_ids = [id.strip() for id in ids.split(",") if id.strip()]
+        if not note_ids:
+            typer.echo("❌ No valid note IDs provided", err=True)
+            raise typer.Exit(1)
+
+        typer.echo(f"🚀 Promoting {len(note_ids)} notes to Atlas...")
+        typer.echo(f"📝 Note IDs: {', '.join(note_ids)}")
+        typer.echo(f"🔗 TrojanHorse API: {trojanhorse_url}")
+
+        # Get Atlas client
+        atlas_client = get_atlas_client()
+        if not atlas_client:
+            typer.echo("❌ Atlas API not configured. Please set ATLAS_API_URL environment variable.", err=True)
+            typer.echo("   Optionally set ATLAS_API_KEY for authentication.")
+            raise typer.Exit(1)
+
+        typer.echo(f"🔗 Atlas API: {atlas_client.atlas_url}")
+
+        # Check Atlas health
+        if not atlas_client.health_check():
+            typer.echo("❌ Atlas API is not responding. Please check if Atlas is running.", err=True)
+            raise typer.Exit(1)
+
+        # Promote notes
+        promoted_count = promote_notes_from_trojanhorse(trojanhorse_url, atlas_client, note_ids)
+
+        if promoted_count > 0:
+            typer.echo(f"✅ Successfully promoted {promoted_count} notes to Atlas!")
+        else:
+            typer.echo("❌ Failed to promote any notes to Atlas", err=True)
+            raise typer.Exit(1)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        typer.echo(f"❌ Promotion failed: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
 def status() -> None:
     """Show TrojanHorse system status."""
     try:
@@ -238,6 +324,20 @@ def status() -> None:
             typer.echo("   ✅ Embedding API key configured")
         else:
             typer.echo("   ⚠️  No embedding API key (using fallback)")
+
+        # Atlas integration status
+        typer.echo(f"\n🌍 Atlas Integration:")
+        atlas_client = get_atlas_client()
+        if atlas_client:
+            typer.echo(f"   📡 Atlas URL: {atlas_client.atlas_url}")
+            if atlas_client.api_key:
+                typer.echo("   🔐 Atlas API key configured")
+            if atlas_client.health_check():
+                typer.echo("   ✅ Atlas API responding")
+            else:
+                typer.echo("   ❌ Atlas API not responding")
+        else:
+            typer.echo("   ❌ Atlas API not configured (set ATLAS_API_URL)")
 
     except Exception as e:
         typer.echo(f"❌ Status check failed: {e}", err=True)
