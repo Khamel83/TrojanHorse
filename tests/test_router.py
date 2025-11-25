@@ -30,9 +30,11 @@ def config(temp_vault):
         state_dir=temp_vault / ".trojanhorse",
         openrouter_api_key="test_key",
         openrouter_model="test_model",
+        embedding_provider="openai",
         embedding_model_name="test_model",
         embedding_api_key=None,
-        embedding_api_base="https://api.openai.com/v1"
+        embedding_api_base="https://api.openai.com/v1",
+        openrouter_embedding_model="openai/text-embedding-3-small"
     )
     return config
 
@@ -99,9 +101,11 @@ def test_base_directory_without_processed_root(config):
         state_dir=config.state_dir,
         openrouter_api_key="test_key",
         openrouter_model="test_model",
+        embedding_provider="openai",
         embedding_model_name="test_model",
         embedding_api_key=None,
-        embedding_api_base="https://api.openai.com/v1"
+        embedding_api_base="https://api.openai.com/v1",
+        openrouter_embedding_model="openai/text-embedding-3-small"
     )
     router = Router(config_no_processed)
 
