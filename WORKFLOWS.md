@@ -82,16 +82,55 @@ The `th workday` loop continues running. You can:
 
 ### Drafts Integration
 
+TrojanHorse is designed to work with Drafts as the front door for all text on iPhone, iPad, Apple Watch, and macOS.
+
+Think of it this way:
+**Drafts is where you type.**
+**TrojanHorse is where those thoughts go to live.**
+
 **Setup Drafts:**
-1. Open Drafts → Settings → Sync
-2. Set iCloud Drive location to your vault: `WorkVault/Inbox/`
-3. Enable "Automatically create action" if needed
+1. **Configure Global Shortcuts** (macOS):
+   - Main window: `⌃⌥⌘1` (bring Drafts to front)
+   - Quick capture: `⌃⌥Space` (new draft from anywhere)
+   - Capture clipboard: `⌃⌥⌘V` (draft from clipboard)
+
+2. **Create Export Action**:
+   - Name: **Export to TrojanHorse Inbox**
+   - Content: `[[draft]]` (or `[[body]]`)
+   - File name: `[[created|%Y-%m-%d-%H%M%S]]-[[title]].md`
+   - Folder: `WORKVAULT_ROOT/Inbox/`
+   - Shortcut: `⌘S`
+
+**Daily Capture Flows:**
+
+**Mac - New Idea:**
+1. Press `⌃⌥Space` (Quick capture)
+2. Type your thought
+3. Press `⌘S` (Export to TrojanHorse)
+4. Press Esc (close window)
+
+**Mac - Email/Slack/Web Text:**
+1. Select text → Copy (`⌘C`)
+2. Press `⌃⌥⌘V` (Capture clipboard)
+3. Add context header if needed
+4. Press `⌘S` (Export)
+
+**iPhone/iPad/Watch:**
+1. Open Drafts
+2. Dictate or type your note
+3. Tap "Export to TrojanHorse Inbox" action
 
 **Daily Capture Patterns:**
 - Meeting notes: Start with "Meeting about X"
 - Quick thoughts: Raw text, TrojanHorse categorizes
 - Tasks: Start with "TODO:" or "ACTION:"
 - Email dumps: Paste and add "Email from Y about Z"
+
+**How it works:**
+- Drafts exports plain text files to `WORKVAULT_ROOT/Inbox/`
+- TrojanHorse detects, classifies, and processes them automatically
+- Notes move to `Processed/` with AI-generated summaries and metadata
+- Searchable via `th ask` after `th embed`
 
 ### MacWhisper Pro Integration
 
