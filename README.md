@@ -51,40 +51,51 @@ WORKVAULT_PROCESSED_ROOT=Processed
 # Required: OpenRouter API key (for Gemini Flash 2.5 Lite)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-# Optional: Embedding API key (for better search)
+# Embedding configuration
+EMBEDDING_PROVIDER=openai  # Options: openai, openrouter
 EMBEDDING_API_KEY=your_openai_api_key_here
+# Or use OpenRouter for embeddings:
+# EMBEDDING_PROVIDER=openrouter
+# OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 ```
 
-### 3. Setup
+### 3. Verify Setup
 
-Initialize TrojanHorse:
+Run the verification script to check everything is working:
 
 ```bash
-th setup
+./scripts/verify_setup.sh
 ```
 
 ### 4. Start Processing
 
-**Option A: Manual processing**
+**Option A: One-click workday starter**
 ```bash
-th process  # Process new files once
+./scripts/start_workday.sh  # Automated setup and start
 ```
 
-**Option B: Continuous processing**
+**Option B: Manual setup**
 ```bash
-th workday  # Run in a terminal, processes every 5 minutes
+th setup                    # Initialize directories
+th process                  # Process new files once
+th workday                  # Run continuous loop (5-min intervals)
 ```
 
 **Option C: Automated processing**
 ```bash
-# Add to cron for automatic processing every 10 minutes
-*/10 * * * * /usr/local/bin/th process >> ~/trojanhorse_cron.log 2>&1
+# Use provided cron template
+*/10 * * * * /path/to/TrojanHorse/scripts/cron_template.sh
+
+# Or install macOS launchd service
+cp scripts/com.khamel83.trojanhorse.plist ~/Library/LaunchAgents/
+# Edit the file to update paths, then:
+launchctl load ~/Library/LaunchAgents/com.khamel83.trojanhorse.plist
 ```
 
 ### 5. Build Search Index
 
 ```bash
-th embed  # Build the RAG search index
+th embed  # Build the RAG search index for semantic queries
 ```
 
 ### 6. Query Your Notes
@@ -92,7 +103,33 @@ th embed  # Build the RAG search index
 ```bash
 th ask "What did we decide about the WARN project last week?"
 th ask "Meeting notes about dashboard analytics"
+th ask "What tasks do I have pending?"
 ```
+
+## Daily Workflows
+
+For detailed user workflows with Drafts, MacWhisper, Wispr Flow, and Zed, see [WORKFLOWS.md](WORKFLOWS.md).
+
+### Quick Reference
+
+| Task | Tool | Command | Result |
+|------|------|---------|--------|
+| Start day | Terminal | `./scripts/start_workday.sh` | Continuous processing |
+| Meeting | MacWhisper | Export to TranscriptsRaw/ | Auto-processed meeting notes |
+| Quick capture | Drafts + Wispr | Save to Inbox/ | Auto-categorized notes |
+| Search | Terminal | `th ask "question"` | AI-powered answers from notes |
+
+### Multi-Device Setup
+
+**Mac Mini (24/7 Server):**
+- Run `./scripts/start_workday.sh` and leave running
+- Or use cron/launchd for automated processing
+- Hosts the primary database and vault
+
+**Work MacBook (Client):**
+- Use `th process` for on-demand processing
+- Query with `th ask` as needed
+- Both devices share vault via iCloud Drive
 
 ## Directory Structure
 

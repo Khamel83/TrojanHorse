@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from datetime import datetime
 
 from trojanhorse.classifier import Classifier, ClassificationResult
-from trojanhorse.llm_client import LLMClientError
+from trojanhorse.llm_client import LLMClient, LLMClientError
 
 
 @pytest.fixture
@@ -123,6 +123,7 @@ def test_classifier_email_detection(classifier, mock_llm_client):
     text = "From: boss@company.com\nSubject: Q4 Project Update\nHey team, here are the updates..."
     result = classifier.classify_and_summarize(text)
 
+    # The test data contains "company" and "project" so should be classified as work email
     assert result.category == "email"
     assert result.class_type == "work"  # Contains "company" and "project"
 

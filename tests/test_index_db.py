@@ -52,7 +52,7 @@ def test_index_db_initialization(temp_state_dir):
         assert "processed_files" in tables
 
 
-def test_file_key_generation(index_db, sample_file_path):
+def test_file_key_generation(index_db, sample_file_path, temp_state_dir):
     """Test file key generation."""
     mtime = 1637856000.0  # Fixed timestamp
 

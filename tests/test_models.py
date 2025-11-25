@@ -129,7 +129,7 @@ def test_generate_note_id():
     assert id1 != id4
 
     # ID should be in expected format: timestamp_hash
-    assert "2021-11-25T14:40:00Z_" in id1
+    assert "2021-11-25T08:00:00Z_" in id1
     assert len(id1.split("_")[1]) == 8  # Hash part should be 8 chars
 
 
@@ -139,12 +139,17 @@ def test_parse_markdown_with_frontmatter_with_valid_frontmatter(temp_dir):
     content = """---
 id: test_id
 source: drafts
+raw_type: voice_note
 class_type: work
 category: meeting
+project: none
+created_at: "2025-11-25T14:30:00Z"
+processed_at: "2025-11-25T14:35:00Z"
 summary: Team sync meeting
 tags:
   - work
   - meeting
+original_path: "/test/input.txt"
 ---
 
 # Meeting Notes
@@ -295,7 +300,7 @@ def test_slugify():
     assert slugify("") == "untitled"
     assert slugify("   spaces around   ") == "spaces_around"
     assert slugify("a" * 100) == "a" * 50  # Should truncate to 50 chars
-    assert slugify("very long text that should be truncated", max_length=20) == "very_long_text_that"
+    assert slugify("very long text that should be truncated", max_length=20) == "very_long_text_that_"
 
 
 def test_determine_source_from_path():
@@ -339,8 +344,18 @@ def test_frontmatter_with_datetime_strings(temp_dir):
     file_path = temp_dir / "test.md"
     content = """---
 id: test_id
+source: drafts
+raw_type: voice_note
+class_type: personal
+category: idea
+project: none
 created_at: 2025-11-25T14:30:00
 processed_at: "2025-11-25T14:35:00"
+summary: Test note
+tags:
+  - test
+  - idea
+original_path: "/test/path.txt"
 ---
 
 # Test

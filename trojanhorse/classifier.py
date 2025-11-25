@@ -52,19 +52,20 @@ Return ONLY valid JSON, no extra text."""
         """Provide a fallback classification when LLM fails."""
         text_lower = text.lower()
 
-        # Simple heuristic-based fallback
-        if any(keyword in text_lower for keyword in ["meeting", "sync", "standup", "review"]):
-            category = "meeting"
-            class_type = "work"
-        elif any(keyword in text_lower for keyword in ["email", "sent", "received"]):
+        # Simple heuristic-based fallback - check more specific patterns first
+        if any(keyword in text_lower for keyword in ["todo", "task", "action"]):
+            category = "task"
+            class_type = "personal"  # Tasks are often personal unless clearly work
+        elif (any(keyword in text_lower for keyword in ["email", "sent", "received"]) or
+              "from:" in text_lower and "subject:" in text_lower):
             category = "email"
             class_type = "work" if any(keyword in text_lower for keyword in ["work", "project", "team"]) else "personal"
         elif any(keyword in text_lower for keyword in ["slack", "channel", "message"]):
             category = "slack"
             class_type = "work"
-        elif any(keyword in text_lower for keyword in ["todo", "task", "action"]):
-            category = "task"
-            class_type = "personal"  # Tasks are often personal unless clearly work
+        elif any(keyword in text_lower for keyword in ["meeting", "sync", "standup"]):
+            category = "meeting"
+            class_type = "work"
         else:
             category = "other"
             class_type = "personal"  # Default to personal for unknown content

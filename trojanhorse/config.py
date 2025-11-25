@@ -24,9 +24,11 @@ class Config:
     openrouter_model: str
 
     # Embedding configuration
+    embedding_provider: str
     embedding_model_name: str
     embedding_api_key: Optional[str]
     embedding_api_base: str
+    openrouter_embedding_model: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -74,11 +76,16 @@ class Config:
         )
 
         # Embedding configuration
+        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai")
         embedding_model_name = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-3-small")
         embedding_api_key = os.getenv("EMBEDDING_API_KEY")
         embedding_api_base = os.getenv(
             "EMBEDDING_API_BASE",
             "https://api.openai.com/v1"
+        )
+        openrouter_embedding_model = os.getenv(
+            "OPENROUTER_EMBEDDING_MODEL",
+            "openai/text-embedding-3-small"
         )
 
         logger.info(f"Configuration loaded - Vault: {vault_root}")
@@ -92,9 +99,11 @@ class Config:
             state_dir=state_dir,
             openrouter_api_key=openrouter_api_key,
             openrouter_model=openrouter_model,
+            embedding_provider=embedding_provider,
             embedding_model_name=embedding_model_name,
             embedding_api_key=embedding_api_key,
             embedding_api_base=embedding_api_base,
+            openrouter_embedding_model=openrouter_embedding_model,
         )
 
     def ensure_directories(self) -> None:

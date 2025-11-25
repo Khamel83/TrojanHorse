@@ -71,6 +71,24 @@ class RAGIndex:
 
     def _generate_embedding_api(self, text: str) -> List[float]:
         """
+        Generate embedding using API (OpenAI or OpenRouter).
+
+        Args:
+            text: Text to embed
+
+        Returns:
+            List of embedding values
+
+        Raises:
+            EmbeddingError: If embedding generation fails
+        """
+        if self.config.embedding_provider == "openrouter":
+            return self._generate_openrouter_embedding(text)
+        else:
+            return self._generate_openai_embedding(text)
+
+    def _generate_openai_embedding(self, text: str) -> List[float]:
+        """
         Generate embedding using OpenAI API.
 
         Args:
@@ -114,6 +132,54 @@ class RAGIndex:
             raise EmbeddingError(f"Embedding API request failed: {e}")
         except KeyError as e:
             raise EmbeddingError(f"Invalid embedding response: {e}")
+
+    def _generate_openrouter_embedding(self, text: str) -> List[float]:
+        """
+        Generate embedding using OpenRouter API.
+
+        Args:
+            text: Text to embed
+
+        Returns:
+            List of embedding values
+
+        Raises:
+            EmbeddingError: If embedding generation fails
+        """
+        if not self.config.openrouter_api_key:
+            raise EmbeddingError("No OpenRouter API key configured for embeddings")
+
+        headers = {
+            "Authorization": f"Bearer {self.config.openrouter_api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/Khamel83/TrojanHorse",
+            "X-Title": "TrojanHorse Note Processor",
+        }
+
+        data = {
+            "model": self.config.openrouter_embedding_model,
+            "input": text,
+        }
+
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/embeddings",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+            response.raise_for_status()
+
+            result = response.json()
+            if "data" not in result or not result["data"]:
+                raise EmbeddingError("Invalid OpenRouter embedding response format")
+
+            return result["data"][0]["embedding"]
+
+        except requests.RequestException as e:
+            raise EmbeddingError(f"OpenRouter embedding API request failed: {e}")
+        except KeyError as e:
+            raise EmbeddingError(f"Invalid OpenRouter embedding response: {e}")
 
     def _generate_embedding_simple(self, text: str) -> List[float]:
         """

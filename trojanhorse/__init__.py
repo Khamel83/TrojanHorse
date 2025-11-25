@@ -8,14 +8,13 @@ __version__ = "0.1.0"
 
 from .config import Config
 from .models import NoteMeta
-from .processor import process_once, workday_loop
+from .processor import Processor
 from .rag import rebuild_index, query
 
 __all__ = [
     "Config",
     "NoteMeta",
-    "process_once",
-    "workday_loop",
+    "Processor",
     "rebuild_index",
     "query",
 ]
