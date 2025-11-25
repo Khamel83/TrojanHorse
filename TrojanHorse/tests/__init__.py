@@ -1,1 +1,1 @@
-# Test suite for TrojanHorse Context Capture System
+"""Test package for TrojanHorse API."""

@@ -239,6 +239,49 @@ python3 src/batch_indexer.py --base-path "Meeting Notes" --database trojan_searc
 python3 src/web_interface.py --database trojan_search.db --port 5000
 ```
 
+## 🌐 REST API Integration
+
+TrojanHorse provides a comprehensive REST API for external system integration, including seamless Atlas promotion workflow.
+
+### Start API Server
+```bash
+# Start REST API server (default localhost:8765)
+th api
+
+# Custom configuration
+th api --host 0.0.0.0 --port 9000
+
+# Development with auto-reload
+th api --reload
+```
+
+### Key API Features
+- **Processing & Search**: `POST /process`, `GET /notes`, `POST /ask`
+- **Atlas Integration**: `POST /promote` for seamless note promotion
+- **Health Monitoring**: `GET /health`, `GET /stats`
+- **Interactive Docs**: http://localhost:8765/docs
+
+### Atlas Integration Workflow
+```bash
+# 1. Configure Atlas connection
+export ATLAS_API_URL="http://localhost:8787"
+export ATLAS_API_KEY="your-atlas-api-key"
+
+# 2. Start both APIs
+th api --port 8765 &           # TrojanHorse API
+atlas api --port 8787 &        # Atlas API
+
+# 3. Promote notes via CLI
+th promote-to-atlas "note1,note2"
+
+# 4. Or use REST API directly
+curl -X POST http://localhost:8765/promote \
+  -H "Content-Type: application/json" \
+  -d '{"note_ids": ["note1", "note2"]}'
+```
+
+**Full API Documentation**: See [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+
 ## 📊 Output Structure
 
 Daily organized folders with automatic cleanup:
@@ -294,10 +337,10 @@ Meeting Notes/
 **✅ Phase 4 Complete (v1.0.0)** - Advanced Features:
 - ✅ **Workflow Integration**: Real-time context injection (Internal API + Hotkey Client)
 - ✅ **Advanced Analytics**: Cross-day pattern recognition and insights (Analytics Engine + Dashboard)
+- ✅ **REST API Ecosystem**: FastAPI-based REST API with Atlas integration
 - 📋 **Multi-device Sync**: Mac Mini + Raspberry Pi distributed processing (Future)
-- 📋 **API Ecosystem**: Integration with external tools (Future)
 
-**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, search, advanced analytics, and workflow integration capabilities. Includes comprehensive unit tests and validation tools. Web interface available for browsing and searching all captured content.
+**🎯 Current Status**: Production-ready system with complete audio capture, transcription, analysis, search, advanced analytics, workflow integration, and REST API capabilities. Includes comprehensive unit tests and validation tools. Web interface available for browsing and searching all captured content. REST API enables seamless integration with Atlas and external systems.
 
 See [Development Roadmap](.agent-os/product/roadmap.md) for detailed implementation phases.
 
