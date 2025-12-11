@@ -4,12 +4,13 @@ A minimal, local-first system that watches folders, processes new text/markdown 
 classifies them using LLMs, writes structured notes, and provides RAG-based Q&A.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .config import Config
 from .models import NoteMeta
 from .processor import Processor
 from .rag import rebuild_index, query
+from .meeting_synthesizer import MeetingSynthesizer
 
 __all__ = [
     "Config",
@@ -17,4 +18,5 @@ __all__ = [
     "Processor",
     "rebuild_index",
     "query",
+    "MeetingSynthesizer",
 ]

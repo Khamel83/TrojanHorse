@@ -15,6 +15,7 @@ from .index_db import IndexDB
 from .llm_client import LLMClient
 from .api_server import app as api_app
 from .atlas_client import promote_notes_from_trojanhorse, get_atlas_client
+from .meeting_synthesizer import MeetingSynthesizer
 
 # Set up logging
 logging.basicConfig(
@@ -341,6 +342,147 @@ def status() -> None:
 
     except Exception as e:
         typer.echo(f"❌ Status check failed: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command("meeting-process")
+def meeting_process(
+    path: Optional[str] = typer.Argument(None, help="Path to specific meeting file to process"),
+    all_new: bool = typer.Option(False, "--all", "-a", help="Process all new meeting files"),
+    template: Optional[str] = typer.Option(None, "--template", "-t", help="Override meeting template"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be processed without executing"),
+) -> None:
+    """
+    Process meeting notes and transcripts into synthesized summaries.
+
+    This command processes Hyprnote exports and MacWhisper transcripts,
+    synthesizing them into structured meeting summaries with action items.
+
+    Examples:
+        th meeting-process                              # Process all new meetings
+        th meeting-process --all                        # Same as above
+        th meeting-process /path/to/meeting.md          # Process specific file
+        th meeting-process --template committee         # Override template
+        th meeting-process --dry-run                    # Preview what would be processed
+    """
+    try:
+        config = load_config()
+        synthesizer = MeetingSynthesizer(config)
+
+        if dry_run:
+            typer.echo("🔍 Dry run mode - showing what would be processed")
+
+        if path:
+            # Process specific file
+            file_path = Path(path)
+            if not file_path.exists():
+                typer.echo(f"❌ File not found: {file_path}", err=True)
+                raise typer.Exit(1)
+
+            typer.echo(f"📝 Processing meeting file: {file_path.name}")
+
+            if dry_run:
+                # Show detection info
+                content = file_path.read_text()
+                detected = synthesizer.detect_meeting_type(content, file_path.name)
+                typer.echo(f"   Detected type: {detected.type_name} (confidence: {detected.confidence:.2f})")
+                typer.echo(f"   Signals: {', '.join(detected.signals[:3])}")
+                if template:
+                    typer.echo(f"   Would use template: {template}")
+                else:
+                    typer.echo(f"   Would use template: {detected.type_name}")
+            else:
+                output_path = synthesizer.process_hyprnote_export(
+                    file_path,
+                    output_dir=config.meetings_synthesized_dir
+                )
+                typer.echo(f"✅ Synthesized meeting saved to: {output_path.name}")
+
+        else:
+            # Process all new files in HyprnoteExport directory
+            hyprnote_dir = config.hyprnote_export_dir
+
+            if not hyprnote_dir.exists():
+                typer.echo(f"📁 Creating Hyprnote export directory: {hyprnote_dir}")
+                hyprnote_dir.mkdir(parents=True, exist_ok=True)
+                typer.echo("   No meeting files to process yet.")
+                typer.echo("   Export meetings from Hyprnote to this directory.")
+                return
+
+            meeting_files = list(hyprnote_dir.glob("*.md"))
+
+            if not meeting_files:
+                typer.echo(f"📁 No meeting files found in: {hyprnote_dir.name}")
+                typer.echo("   Export meetings from Hyprnote or drop .md files here.")
+                return
+
+            typer.echo(f"📝 Found {len(meeting_files)} meeting file(s) to process")
+
+            processed_count = 0
+            for file_path in meeting_files:
+                typer.echo(f"\n   Processing: {file_path.name}")
+
+                if dry_run:
+                    content = file_path.read_text()
+                    detected = synthesizer.detect_meeting_type(content, file_path.name)
+                    typer.echo(f"      Type: {detected.type_name}")
+                else:
+                    try:
+                        output_path = synthesizer.process_hyprnote_export(
+                            file_path,
+                            output_dir=config.meetings_synthesized_dir
+                        )
+                        typer.echo(f"      -> {output_path.name}")
+                        processed_count += 1
+                    except Exception as e:
+                        typer.echo(f"      ❌ Error: {e}", err=True)
+
+            if not dry_run:
+                typer.echo(f"\n✅ Processed {processed_count} meeting(s)")
+                typer.echo(f"📁 Output directory: {config.meetings_synthesized_dir}")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        typer.echo(f"❌ Meeting processing failed: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command("meetings")
+def meetings_list(
+    limit: int = typer.Option(10, "--limit", "-l", help="Number of meetings to show"),
+) -> None:
+    """List recent synthesized meetings."""
+    try:
+        config = load_config()
+
+        meetings_dir = config.meetings_synthesized_dir
+        if not meetings_dir.exists():
+            typer.echo("📁 No synthesized meetings yet.")
+            typer.echo(f"   Run 'th meeting-process' to synthesize meetings.")
+            return
+
+        meeting_files = sorted(
+            meetings_dir.glob("*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )[:limit]
+
+        if not meeting_files:
+            typer.echo("📁 No synthesized meetings found.")
+            return
+
+        typer.echo(f"📝 Recent Meetings ({len(meeting_files)} shown)")
+        typer.echo("=" * 50)
+
+        for i, file_path in enumerate(meeting_files, 1):
+            from datetime import datetime
+            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+            typer.echo(f"{i}. {file_path.stem}")
+            typer.echo(f"   {mtime.strftime('%Y-%m-%d %H:%M')}")
+
+    except Exception as e:
+        typer.echo(f"❌ Failed to list meetings: {e}", err=True)
         raise typer.Exit(1)
 
 

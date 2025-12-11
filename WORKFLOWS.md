@@ -12,6 +12,8 @@ This document describes the specific user workflows for using TrojanHorse with y
 | Query Notes | `th ask "question"` | As needed | Either device |
 | Start API Server | `th api` | Continuous for integration | Either device |
 | Promote to Atlas | `th promote-to-atlas "ids"` | As needed | Either device |
+| Synthesize Meetings | `th meeting-process` | After meetings | Work Mac |
+| List Meetings | `th meetings` | As needed | Either device |
 
 ## Daily Workflows
 
@@ -136,17 +138,139 @@ Think of it this way:
 
 ### MacWhisper Pro Integration
 
-**Setup MacWhisper:**
-1. Open MacWhisper Pro
-2. Go to Preferences → Export
-3. Set export location: `WorkVault/TranscriptsRaw/`
-4. Choose format: Plain text (.txt)
+**Initial Setup (One-Time):**
 
-**Meeting Process:**
-1. Start recording at meeting start
-2. Stop recording at meeting end
-3. Review and edit if needed
-4. Export (auto-processes via TrojanHorse)
+1. Open MacWhisper Pro → Settings (Cmd+,)
+2. **Model Selection**: Choose `WhisperKit large-v3` (with green Speaker Recognition badge)
+   - This enables automatic speaker diarization ("Speaker 1:", "Speaker 2:", etc.)
+   - Alternative: `large-v3-turbo` for faster processing with minor accuracy loss
+3. **Export Configuration**:
+   - Default Export Location: `WorkVault/TranscriptsRaw/`
+   - Export Format: **Markdown (.md)**
+   - Include Timestamps: ON
+   - Include Speaker Labels: ON
+4. **Optional Watch Folder**:
+   - Add a folder for auto-transcription of audio files
+   - MacWhisper will process any audio dropped there
+
+**Meeting Recording Process:**
+
+1. **Start Recording**: Click Record (verify red indicator is active and timer moving)
+2. **During Meeting**: Let it run (periodically check timer is counting)
+3. **End Recording**: Stop and wait for transcription to complete
+4. **Review Speakers**: Click speaker names in sidebar to rename them
+   - Use number keys (1,2,3) to reassign segments
+   - Right-click → "Merge Speaker To..." if wrongly split
+5. **Export**: Auto-exports to `TranscriptsRaw/` (or manual Cmd+E)
+
+### Meeting Synthesis Workflow (NEW)
+
+TrojanHorse can synthesize your typed notes with meeting transcripts into structured summaries with action items, decisions, and follow-ups.
+
+**Directory Setup:**
+```
+WorkVault/
+├── HyprnoteExport/       # Hyprnote exports (notes + transcript)
+├── TranscriptsRaw/       # MacWhisper backup transcripts
+├── MeetingsSynthesized/  # Output: synthesized summaries
+└── MeetingNotes/         # Your typed notes (if using Drafts)
+```
+
+**Option A: MacWhisper + Drafts (Simplest)**
+
+During meeting:
+1. Start MacWhisper Pro recording
+2. Open Drafts (Ctrl+Opt+Space for quick capture)
+3. Type key notes, decisions, action items
+4. Use markers: `ACTION:`, `DECISION:`, `FOLLOWUP:`
+
+After meeting:
+1. Stop MacWhisper → exports to `TranscriptsRaw/`
+2. Save Drafts note to `MeetingNotes/` or `Inbox/`
+3. Run: `th meeting-process`
+
+**Option B: Hyprnote (Granola-like)**
+
+```bash
+# Install Hyprnote (optional)
+brew tap fastrepl/hyprnote && brew install hyprnote --cask
+```
+
+During meeting:
+1. Open Hyprnote → New Meeting
+2. VERIFY: Recording pulse indicator is active
+3. Type notes while seeing recording status
+4. (Optional) Start MacWhisper as backup
+
+After meeting:
+1. Click "End Meeting" in Hyprnote
+2. Export to `WorkVault/HyprnoteExport/`
+3. Stop MacWhisper backup
+4. Run: `th meeting-process`
+
+**Meeting Synthesis Commands:**
+
+```bash
+# Process all new meetings
+th meeting-process
+
+# Process specific file
+th meeting-process /path/to/meeting.md
+
+# Preview without processing
+th meeting-process --dry-run
+
+# Override template
+th meeting-process --template committee
+
+# List recent synthesized meetings
+th meetings
+
+# Limit results
+th meetings --limit 5
+```
+
+**HR Meeting Templates:**
+
+TrojanHorse auto-detects meeting type and applies appropriate template:
+
+| Template | Detected When | Key Outputs |
+|----------|---------------|-------------|
+| `one_on_one` | 2 participants, "1:1", "check-in", career topics | Development notes, follow-ups |
+| `committee` | 4+ participants, "committee", "policy", agenda | Decisions, deferred items, minutes |
+| `vendor` | "vendor", "contract", "proposal", external names | Commitments, budget implications |
+| `default` | No specific signals | Standard summary + action items |
+
+**Template Override:**
+```bash
+# Force committee template for policy meeting
+th meeting-process meeting.md --template committee
+```
+
+**Output Example:**
+```markdown
+# HR Policy Review Committee
+**Date:** 2025-12-11 | **Duration:** 65 minutes
+**Attendees:** Sarah (Chair), John, Maria, Omar, External: Lisa (Legal)
+
+## Summary
+Quarterly policy review covering updated benefits and remote work guidelines...
+
+## Decisions Made
+- Approved new PTO accrual rates effective Q1
+- Deferred hybrid work policy to next meeting
+
+## Action Items
+| Item | Owner | Due |
+|------|-------|-----|
+| Draft benefits memo | Sarah | Dec 15 |
+| Legal review of remote policy | Lisa | Dec 18 |
+
+---
+*Synthesized by TrojanHorse*
+```
+
+**Workflow Tip:** Run `th meeting-process` at end of workday to batch-process all meetings, then use `th ask "What action items do I have from today's meetings?"` to get a summary.
 
 ### Wispr Flow Integration
 
@@ -176,27 +300,34 @@ Think of it this way:
 ### Input Structure
 ```
 WorkVault/
-├── Inbox/                  # Drafts exports
-├── TranscriptsRaw/         # MacWhisper exports
+├── Inbox/                  # Drafts exports (quick captures)
+├── TranscriptsRaw/         # MacWhisper transcript exports
+├── MeetingNotes/           # Your typed meeting notes (if using Drafts)
+├── HyprnoteExport/         # Hyprnote combined exports (notes + transcript)
 └── (other capture dirs)    # As configured in .env
 ```
 
 ### Output Structure
 ```
-WorkVault/Processed/
-├── work/
-│   ├── meetings/
-│   │   └── 2025/
-│   │       ├── 2025-01-15_project_sync.md
-│   │       └── 2025-01-16_client_call.md
-│   ├── emails/
-│   ├── slack/
-│   ├── ideas/
-│   └── tasks/
-└── personal/
-    ├── ideas/
-    ├── logs/
-    └── tasks/
+WorkVault/
+├── MeetingsSynthesized/    # Synthesized meeting summaries
+│   ├── 2025-12-11_one_on_one_sarah_career.md
+│   ├── 2025-12-11_committee_hr_policy_review.md
+│   └── 2025-12-10_vendor_workday_demo.md
+└── Processed/              # All other processed notes
+    ├── work/
+    │   ├── meetings/
+    │   │   └── 2025/
+    │   │       ├── 2025-01-15_project_sync.md
+    │   │       └── 2025-01-16_client_call.md
+    │   ├── emails/
+    │   ├── slack/
+    │   ├── ideas/
+    │   └── tasks/
+    └── personal/
+        ├── ideas/
+        ├── logs/
+        └── tasks/
 ```
 
 ## Troubleshooting Workflows

@@ -30,6 +30,13 @@ class Config:
     embedding_api_base: str
     openrouter_embedding_model: str
 
+    # Meeting synthesis configuration
+    hyprnote_export_dir: Path
+    transcripts_raw_dir: Path
+    meetings_synthesized_dir: Path
+    meeting_templates_dir: Optional[Path]
+    meeting_default_template: str
+
     @classmethod
     def from_env(cls) -> "Config":
         """Load configuration from environment variables."""
@@ -88,6 +95,23 @@ class Config:
             "openai/text-embedding-3-small"
         )
 
+        # Meeting synthesis configuration
+        hyprnote_export_dir_str = os.getenv("HYPRNOTE_EXPORT_DIR", "HyprnoteExport")
+        hyprnote_export_dir = vault_root / hyprnote_export_dir_str.strip()
+
+        transcripts_raw_dir_str = os.getenv("TRANSCRIPTS_RAW_DIR", "TranscriptsRaw")
+        transcripts_raw_dir = vault_root / transcripts_raw_dir_str.strip()
+
+        meetings_synthesized_dir_str = os.getenv("MEETINGS_SYNTHESIZED_DIR", "MeetingsSynthesized")
+        meetings_synthesized_dir = vault_root / meetings_synthesized_dir_str.strip()
+
+        meeting_templates_dir_str = os.getenv("MEETING_TEMPLATES_DIR")
+        meeting_templates_dir = None
+        if meeting_templates_dir_str:
+            meeting_templates_dir = Path(meeting_templates_dir_str).resolve()
+
+        meeting_default_template = os.getenv("MEETING_DEFAULT_TEMPLATE", "default")
+
         logger.info(f"Configuration loaded - Vault: {vault_root}")
         logger.info(f"Capture dirs: {[d.name for d in capture_dirs]}")
         logger.info(f"State dir: {state_dir}")
@@ -104,6 +128,11 @@ class Config:
             embedding_api_key=embedding_api_key,
             embedding_api_base=embedding_api_base,
             openrouter_embedding_model=openrouter_embedding_model,
+            hyprnote_export_dir=hyprnote_export_dir,
+            transcripts_raw_dir=transcripts_raw_dir,
+            meetings_synthesized_dir=meetings_synthesized_dir,
+            meeting_templates_dir=meeting_templates_dir,
+            meeting_default_template=meeting_default_template,
         )
 
     def ensure_directories(self) -> None:
@@ -121,6 +150,16 @@ class Config:
         # Ensure state directory exists
         self.state_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Ensured state directory exists: {self.state_dir}")
+
+        # Ensure meeting-related directories exist
+        self.hyprnote_export_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Ensured Hyprnote export directory exists: {self.hyprnote_export_dir}")
+
+        self.transcripts_raw_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Ensured transcripts raw directory exists: {self.transcripts_raw_dir}")
+
+        self.meetings_synthesized_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Ensured meetings synthesized directory exists: {self.meetings_synthesized_dir}")
 
     def validate(self) -> None:
         """Validate configuration and raise errors for issues."""
