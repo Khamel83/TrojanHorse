@@ -1,8 +1,0 @@
-  "privacy": {
-    "redaction_keywords": []
-  },
-  "workflow_integration": {
-    "hotkey": "<cmd>+<shift>+c",
-    "internal_api_port": 5001
-  }
-}

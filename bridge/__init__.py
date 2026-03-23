@@ -1,0 +1,3 @@
+"""The Bridge - Hyprnote to Atlas sync service."""
+
+__version__ = "1.0.0"

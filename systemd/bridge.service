@@ -1,0 +1,21 @@
+[Unit]
+Description=The Bridge - Hyprnote to Atlas Sync
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/github/trojanhorse
+Environment="PATH=/home/ubuntu/github/trojanhorse/.venv/bin:/usr/bin"
+EnvironmentFile=/home/ubuntu/github/trojanhorse/.env
+ExecStart=/home/ubuntu/github/trojanhorse/.venv/bin/python bridge/bridge_service.py run
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bridge
+
+[Install]
+WantedBy=multi-user.target

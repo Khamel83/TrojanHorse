@@ -1,12 +1,11 @@
-"""Data models for TrojanHorse notes and metadata."""
+"""Data models for markdown frontmatter parsing."""
 
 import hashlib
-import json
+import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Any, Dict, List
-import logging
 
 import yaml
 
@@ -17,11 +16,11 @@ logger = logging.getLogger(__name__)
 class NoteMeta:
     """Metadata for a processed note."""
     id: str
-    source: str            # "drafts" | "macwhisper" | "clipboard" | "unknown"
+    source: str            # "hyprnote" | "legacy" | "unknown"
     raw_type: str          # "email_dump" | "slack_dump" | "voice_note" | "meeting_transcript" | "other"
     class_type: str        # "work" | "personal"
     category: str          # "email" | "slack" | "meeting" | "idea" | "task" | "log" | "other"
-    project: str           # "warn_dashboard" | "hub_ops" | "none" | etc.
+    project: str           # Project name or "none"
     created_at: datetime
     processed_at: datetime
     summary: str
@@ -131,8 +130,6 @@ def write_markdown(path: Path, meta: NoteMeta, body: str) -> None:
 
 def slugify(text: str, max_length: int = 50) -> str:
     """Convert text to a URL-friendly slug."""
-    # Basic slugification - convert to lowercase, replace spaces with underscores
-    # and remove special characters
     import re
     text = text.lower()
     text = re.sub(r'[^\w\s-]', '', text)
@@ -140,29 +137,17 @@ def slugify(text: str, max_length: int = 50) -> str:
     return text.strip('_')[:max_length] or 'untitled'
 
 
-def determine_source_from_path(path: Path) -> str:
-    """Heuristically determine the source type from file path."""
-    path_str = str(path).lower()
+def extract_title_from_content(content: str, path: Path) -> str:
+    """
+    Extract a title from markdown content or use filename.
 
-    if "draft" in path_str:
-        return "drafts"
-    elif "transcript" in path_str or "whisper" in path_str:
-        return "macwhisper"
-    elif "clipboard" in path_str:
-        return "clipboard"
-    else:
-        return "unknown"
+    First looks for a first-level heading (# Title), then uses filename.
+    """
+    lines = content.split('\n')
+    for line in lines:
+        line = line.strip()
+        if line.startswith('# '):
+            return line[2:].strip()
 
-
-def determine_raw_type_from_path(path: Path) -> str:
-    """Heuristically determine the raw content type from file path."""
-    path_str = str(path).lower()
-
-    if "transcript" in path_str:
-        return "meeting_transcript"
-    elif "email" in path_str:
-        return "email_dump"
-    elif "slack" in path_str:
-        return "slack_dump"
-    else:
-        return "voice_note"  # Default assumption
+    # Use filename without extension
+    return path.stem
