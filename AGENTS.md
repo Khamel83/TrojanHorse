@@ -70,6 +70,14 @@
 
 ---
 
+## DEPLOYABLE TEMPLATES
+
+| Use Case | Template | Stack |
+|----------|----------|-------|
+| Membership/community sites | `templates/community-starter/` | Vercel + Supabase + Python + Resend |
+
+---
+
 ## DECISION DEFAULTS
 
 When ambiguous, apply without asking:
