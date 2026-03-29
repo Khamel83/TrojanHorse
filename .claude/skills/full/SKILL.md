@@ -6,6 +6,7 @@ description: Structured operator for new projects, refactors, and complex implem
 # /full — Full Operator for Complex Work
 
 Structured operator for new projects, refactors, and complex implementations.
+Claude plans and executes. Codex reviews the plan and challenges the implementation.
 
 ## Usage
 
@@ -48,9 +49,10 @@ When invoked:
    - Use cached docs as source of truth — do NOT rely on training data for syntax
 
 2. **Phase-Based Plan**
-   - Break into milestones
-   - Define acceptance criteria
+   - Break into milestones (not every sub-step)
+   - Define acceptance criteria per milestone
    - Identify dependencies
+   - Write `1shot/ROADMAP.md`
 
 3. **Skill Discovery**
    - Check `1shot/skills/` for already-pulled project skills
@@ -63,8 +65,24 @@ When invoked:
    - If a skill is pulled, note it: "Using `1shot/skills/{name}` for [task type]"
 
 4. **Create Task Queue**
-   - Use native TaskCreate for each milestone
+   - Use native TaskCreate for each milestone (not every sub-step)
    - Set dependencies with addBlockedBy
+   - Tasks track milestones, not individual file edits
+
+5. **Detect Providers**
+   ```bash
+   command -v codex >/dev/null 2>&1 && echo "codex: yes" || echo "codex: no"
+   command -v gemini >/dev/null 2>&1 && echo "gemini: yes" || echo "gemini: no"
+   ```
+   Note available providers in `1shot/STATE.md`.
+
+6. **Codex Plan Review** (adversarial pass on the plan — before any code)
+   - If codex available, send the plan for review:
+     ```bash
+     codex exec --full-auto "You are reviewing an implementation plan before execution. Here is the plan: [ROADMAP.md content]. Flag: (1) missing steps or dependencies, (2) tasks that could be combined, (3) risks not mentioned, (4) a better ordering. Be specific. Context: [PROJECT.md summary]"
+     ```
+   - Surface Codex's feedback — adjust plan if warranted, but proceed regardless
+   - If codex unavailable → Claude does inline self-review, continue
 
 ### Phase 3: Execution
 
@@ -74,31 +92,55 @@ When invoked:
    - Update `1shot/STATE.md` with progress
 
 2. **Burn-Down Mode**
-   - Complete one task fully before starting next
+   - Complete one milestone fully before starting next
    - If blocked > 2 attempts: log to `1shot/BLOCKERS.md`, skip, continue
 
-3. **Context Checkpoints**
+3. **Codex Milestone Review** (after each milestone commit)
+   - If codex available:
+     ```bash
+     codex exec --full-auto "Review this milestone change for: (1) bugs, (2) edge cases, (3) what was missed. Be specific. Context: [diff]"
+     ```
+   - If issues found → address before continuing (use judgment — don't create blocking tasks for every nit)
+   - If codex unavailable → skip silently
+
+4. **Context Checkpoints**
    - At 50% context: suggest /handoff
    - At 70% context: auto-create handoff
 
 ### Phase 4: Completion
 
-1. **Verification**
+1. **Codex Challenge Pass** (adversarial review of full implementation)
+   - `git diff $(git merge-base HEAD main)..HEAD` — full diff since full started
+   - If codex available:
+     ```bash
+     codex exec --full-auto "You are an adversarial reviewer. Read this diff and find: (1) what could break, (2) what was missed, (3) unhandled edge cases. Be specific. Diff: [diff content]"
+     ```
+   - If codex unavailable: Claude performs adversarial review inline
+   - New issues found → fix, then re-verify
+
+2. **Verification**
    - Run tests (`./scripts/ci.sh` if present, else npm test / pytest)
    - Check acceptance criteria from `1shot/PROJECT.md`
 
-2. **Update `1shot/LLM-OVERVIEW.md`**
+3. **Update `1shot/LLM-OVERVIEW.md`**
    - Refresh "Current State" section to reflect what was built
 
-3. **Summary**
+4. **Summary**
    ```
    📊 Implementation Complete
    ├─ Milestones: X/Y completed
    ├─ Files changed: Z
    ├─ Commits: N
-   ├─ Skills pulled: M (in 1shot/skills/)
+   ├─ Codex reviews: M (issues found: P)
+   ├─ Skills pulled: Q (in 1shot/skills/)
    └─ Next steps: [if any]
    ```
+
+## Provider Routing
+
+See `~/.claude/skills/_shared/providers.md` for provider detection, dispatch commands, quality gates, and circuit breaker.
+
+**Full-specific routing**: Full uses Codex for plan review + milestone review + challenge pass. Research tasks route to Gemini if available. All implementation stays with Claude. Full is one operator, not a PMO — don't make it behave like conduct.
 
 ## `1shot/` Structure
 
@@ -128,6 +170,7 @@ Only `AGENTS.md` and `CLAUDE.md` belong at the project root. Everything else goe
 | Database | SQLite → Postgres on OCI |
 | Deploy | Cloudflare Pages / oci-dev |
 | SkillsMP search bar | Specialized domain → search; general task → skip |
+| Codex review? | Always run if available (advisory, not a gate) |
 
 ## Auto-Approved Actions
 
@@ -136,6 +179,7 @@ Only `AGENTS.md` and `CLAUDE.md` belong at the project root. Everything else goe
 - Creating/updating any file under `1shot/`
 - Running `./scripts/skillsmp-search.sh`
 - Running tests and linters
+- Calling Codex and Gemini CLI via bash
 - Git commit (not push)
 - Creating native tasks
 

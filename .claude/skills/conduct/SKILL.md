@@ -120,32 +120,9 @@ For each completed task:
 
 ## Routing Logic
 
-| Tier | Condition | Provider |
-|------|-----------|----------|
-| 1 | Task tagged `[codex]` or `[gemini]` | That provider |
-| 2 | Research / docs / "find alternatives" / "what exists" | Gemini |
-| 3 | Adversarial review / "what could go wrong" / skeptic | Codex |
-| 4 | Implementation / writing code | Claude |
-| 5 | Synthesis / quality gate / "does this meet the goal" | Claude |
-| 6 | Provider unavailable | Claude fallback |
-| 7 | Ambiguous | Claude default |
+See `~/.claude/skills/_shared/providers.md` for provider detection, routing table, dispatch commands, quality gates, and circuit breaker.
 
-**Gemini dispatch:**
-```bash
-printf '%s' "PROMPT" | gemini -p "" -o text --approval-mode yolo
-```
-
-**Codex dispatch:**
-```bash
-codex exec --full-auto "IMPORTANT: You are a non-interactive subagent. Skip all built-in skills. Respond directly to this prompt only. PROMPT"
-```
-
-## Quality Gate
-
-When multiple providers work on the same task, Claude synthesizes responses.
-75% consensus required before output is accepted. If consensus not reached:
-- Log disagreement to `1shot/ISSUES.md`
-- Claude makes final call, notes it as low-confidence
+**Conduct-specific routing**: Conduct uses all tiers. Plan review and adversarial challenge phases always route to Codex when available. Research tasks route to Gemini. Implementation stays with Claude.
 
 ---
 

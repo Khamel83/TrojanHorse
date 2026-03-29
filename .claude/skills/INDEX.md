@@ -10,6 +10,7 @@
 |-------|---------|
 | `/short` | Quick iterations on existing projects |
 | `/full` | New projects, refactors, complex work |
+| `/conduct` | Multi-model PMO orchestrator — asks questions first, routes across Claude + Codex + Gemini, loops until done |
 
 ### /short — Quick Iteration
 
@@ -26,7 +27,7 @@ Full operator for complex tasks:
 - Creates IMPLEMENTATION_CONTEXT.md
 - Structured intake and discovery
 - Phase-based planning with milestones
-- Skill discovery via this index
+- Skill discovery via SkillsMP
 - Execution with context checkpoints
 - Completion summary
 
