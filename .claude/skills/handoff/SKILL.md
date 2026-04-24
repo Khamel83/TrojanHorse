@@ -58,6 +58,27 @@ Write to: `thoughts/shared/handoffs/YYYY-MM-DD-{slug}-handoff.md`
 ## Beads State
 [If .beads/ exists: run bd sync, capture in-progress and ready tasks]
 
+## Learnings & Suggested Updates
+
+Analyze the session for patterns that should be captured for future sessions:
+
+### Commands & Workflows That Worked
+- [Any CLI commands, tools, or workflows that were effective]
+
+### Pitfalls Encountered
+- [Errors, gotchas, or mistakes that future sessions should avoid]
+
+### Assumptions That Were Wrong
+- [Any initial assumptions that turned out to be incorrect]
+
+### Suggested CLAUDE.md / Rule Updates
+- [Specific lines or sections that would have helped — be precise]
+
+### Suggested Instruction Updates
+- [Changes to docs/instructions/ that would improve future sessions]
+
+> For each suggestion, be specific. BAD: "Update docs". GOOD: "Add to .claude/rules/community.md: 'Email handler imports db lazily — patch api._supabase.db in tests, not api.handlers.email.db'"
+
 ## Next Steps (Prioritized)
 1. **Immediate**: [First thing when resuming]
 2. **Then**: [Second priority]
@@ -73,8 +94,34 @@ Write to: `thoughts/shared/handoffs/YYYY-MM-DD-{slug}-handoff.md`
 3. Document key decisions and discoveries
 4. Note blockers
 5. Write prioritized next steps
-6. If beads: `bd sync`
-7. Commit handoff: `docs: create handoff for [feature]`
+6. Analyze session for learnings (see "Learnings & Suggested Updates" section)
+7. If beads: `bd sync`
+8. Commit handoff: `docs: create handoff for [feature]`
+9. Review learnings and propose lesson saves (see Feedback Loop below)
+
+## Feedback Loop: Propose Lesson Saves
+
+After writing and committing the handoff document, review the "Learnings & Suggested Updates" section:
+
+1. Scan for learnings that were encountered or noted **2+ times** during the session
+   (e.g., a pitfall hit repeatedly, a workaround used more than once, a wrong assumption corrected and then referenced again)
+2. Mark each repeated learning as a **lesson candidate**
+3. Present proposals to the user:
+
+```
+I noticed these patterns during our session. Want me to save any as lessons?
+
+1. [Pattern summary] — encountered N times
+   Target: docs/instructions/learned/{date}-{topic}.md
+
+2. [Pattern summary] — encountered N times
+   Target: docs/instructions/learned/{date}-{topic}.md
+```
+
+4. If the user approves, write the lesson to `docs/instructions/learned/{date}-{topic}.md` and commit
+5. If no learnings had 2+ occurrences, skip this step silently — do not propose one-off observations
+
+**Important**: Do NOT automatically edit CLAUDE.md or instruction files. Only write to `docs/instructions/learned/` when the user explicitly approves.
 
 ## Best Practices
 

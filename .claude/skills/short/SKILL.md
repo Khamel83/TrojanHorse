@@ -30,14 +30,10 @@ When invoked:
    "What are you working on?"
    ```
 
-3. **Pre-Flight Codex Review** (if the user describes a non-trivial change)
-   - Check: `command -v codex >/dev/null 2>&1`
-   - If available, send a quick adversarial take before starting:
-     ```bash
-     codex exec --full-auto "You are a quick adversarial reviewer. The user wants to: [description]. Before they start, flag: (1) anything that could break, (2) a simpler approach if one exists, (3) dependencies they might miss. Be brief — 5 bullet points max."
-     ```
-   - Surface Codex's feedback to the user, then proceed regardless
-   - If codex unavailable → skip silently
+3. **Pre-Flight Review** (if the user describes a non-trivial change)
+   - Check providers: `command -v codex >/dev/null 2>&1 && echo "codex: yes"`
+   - If codex available, dispatch a quick adversarial take before starting
+   - Follow dispatch protocol (see `~/.claude/skills/_shared/dispatch.md`)
    - This is advisory, not a gate. Don't stall on it.
 
 4. **Docs Check** (if the task uses any external library, API, or tool)
@@ -55,19 +51,26 @@ When invoked:
    - General tasks (write tests, fix bug, refactor): skip search, proceed
    - Specialized domains (security, blockchain, ML, infra, specific parsers): search
 
-6. **Execute in Burn-Down Mode**
+6. **Methodology Selection** (automatic)
+   Inspect the task description. Apply the right protocol automatically:
+   - **Bug fix** (fix, bug, broken, error, crash, failing, wrong, unexpected, regression,
+     investigate, troubleshoot, not working, incorrect) → follow the `/debug` protocol:
+     investigate → analyze → hypothesize → fix. Phases 1-3 are read-only.
+   - **New feature / implementation** (implement, add, create, build, new endpoint, new function,
+     new behavior) → follow the `/tdd` protocol: RED-GREEN-REFACTOR. No production code
+     without a failing test shown first.
+   - **Doc edit, config change, refactor**: no special methodology needed, execute directly.
+
+7. **Execute in Burn-Down Mode**
    - Complete one task fully before starting next
    - If blocked > 2 attempts: log to `1shot/BLOCKERS.md`, skip, continue
    - No "pending review" — either done or blocked
    - **Do NOT create TaskList items for every little thing** — just do the work
-   - After each significant change, run Codex adversarial review:
-     ```bash
-     codex exec --full-auto "Review this change for: (1) bugs, (2) edge cases, (3) what was missed. Be specific and brief. Context: [diff + task description]"
-     ```
-   - If codex finds real issues → fix before moving on
-   - If codex unavailable → skip silently
+   - After each significant change, dispatch a review via the dispatch protocol
+     (see `~/.claude/skills/_shared/dispatch.md`)
+   - If codex unavailable → Claude handles review inline
 
-7. **Show Summary on Completion**
+8. **Show Summary on Completion**
    ```
    📊 Session Summary
    ├─ Tasks completed: X
@@ -79,9 +82,12 @@ When invoked:
 
 ## Provider Routing
 
-See `~/.claude/skills/_shared/providers.md` for provider detection and dispatch commands.
+See `~/.claude/skills/_shared/dispatch.md` for the dispatch protocol.
+See `~/.claude/skills/_shared/providers.md` for provider detection and commands.
 
-**Short-specific routing**: Short only uses Codex for advisory reviews (pre-flight + post-completion). No Gemini, no research routing. If Codex is unavailable, everything runs through Claude with zero degradation.
+**Short-specific routing**: Short dispatches workers for advisory reviews (pre-flight + post-completion).
+Uses category-based worker selection — the resolver returns workers ordered by category preference.
+Claude handles everything else. If workers are unavailable, zero degradation.
 
 ## Scope
 

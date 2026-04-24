@@ -1,11 +1,11 @@
 ---
 name: freesearch
-description: Zero-token research using Exa API directly via curl. Saves Claude tokens.
+description: Zero-token research using Argus search broker. Saves Claude tokens.
 ---
 
-# /freesearch — Zero-Token Research via Exa API
+# /freesearch — Zero-Token Research via Argus
 
-Uses 0 Claude Code tokens. Calls Exa API directly via curl.
+Uses 0 Claude Code tokens. Calls Argus in cheap mode (SearXNG).
 
 ## Usage
 
@@ -16,36 +16,24 @@ Uses 0 Claude Code tokens. Calls Exa API directly via curl.
 1. **Check global docs-cache FIRST**:
    ```bash
    cat ~/github/docs-cache/docs/cache/.index.md | grep -i "[KEYWORD]"
-   ls ~/github/docs-cache/docs/cache/*/
    ```
    If found → Return cached doc path immediately
 
 2. If NOT in cache → Ask 2-3 clarifying questions (goal, depth, audience)
 
-3. Search Exa API via curl:
+3. **Search via Argus** (cheap mode = SearXNG only):
+   ```bash
+   curl -s -X POST http://100.126.13.70:8005/api/search \
+     -H "Content-Type: application/json" \
+     -d '{"query": "[TOPIC]", "mode": "cheap"}'
+   ```
 
-```bash
-# Decrypt Exa key (uses --config so it works from ANY directory)
-EXA_KEY=$(sops --config ~/github/oneshot/secrets/.sops.yaml --decrypt --output-type json ~/github/oneshot/secrets/research_keys.json.encrypted | jq -r '.EXA_API_KEY')
-
-# Search
-curl -s -X POST 'https://api.exa.ai/search' \
-  -H "x-api-key: $EXA_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "[TOPIC]",
-    "type": "auto",
-    "numResults": 10,
-    "contents": { "text": { "maxCharacters": 20000 } }
-  }'
-```
-
-4. **If Exa finds official docs** → Add to global cache:
+4. **If results include official docs** → Add to global cache:
    ```bash
    cd ~/github/docs-cache
    mkdir -p docs/cache/{category}/{name}
-   # Write README.md
-   # Update .index.md with: Name | Category | Related | URL | YYYY-MM-DD
+   # Write README.md with content
+   # Update .index.md
    git add docs/cache/
    git commit -m "Add cache: {name}"
    git push
@@ -62,7 +50,7 @@ curl -s -X POST 'https://api.exa.ai/search' \
 OR
 
 ```
-[Searched Exa] Key findings:
+[Searched Argus: cheap mode] Key findings:
 - [finding 1]
 - [finding 2]
 
@@ -70,9 +58,17 @@ OR
 Full research: docs/research/YYYY-MM-DD_{topic}_final.md
 ```
 
+## Fallback
+
+If Argus is unreachable:
+```bash
+curl -s http://100.126.13.70:8005/api/health >/dev/null 2>&1
+```
+...then check `config/search.yaml` for cheap mode providers and call directly.
+
 ## Notes
 
-- Research takes 10-30 seconds
-- Check cache BEFORE searching - this is the whole point
+- Research takes 5-15 seconds
+- Check cache BEFORE searching
 - Only add official docs to cache (not random blog posts)
 - Cache location: `~/github/docs-cache/` (global, not per-project)

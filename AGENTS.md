@@ -1,60 +1,78 @@
-<!-- FOR CLAUDE - NOT FOR HUMANS -->
+# ONE_SHOT v14 — Orchestration Control Plane
 
-# ONE_SHOT v13 — Operator Framework
-
-> **Context is the scarce resource.** Three operators, seven utilities. Discover skills on demand.
-
----
+> Category-based routing. Claude plans, workers execute. Argus searches. Janitor runs in the background.
 
 ## OPERATORS
 
 ### `/short` — Quick Iteration
-
-```
-/short [scope]
-```
-
-**Behavior:**
 1. Load context: git log -5, TaskList, DECISIONS.md, BLOCKERS.md
 2. Ask: "What are you working on?"
-3. Discover skills on demand (~/.claude/skills/ index)
-4. Execute in burn-down mode
-5. Show delegation summary on completion
-
-**Decision defaults:** Simplest implementation, match existing patterns, skip refactors unless blocking.
+3. Execute via dispatch protocol (non-premium tasks → best worker for category)
+4. Show delegation summary
 
 ### `/full` — Structured Work
-
-```
-/full [project-description]
-```
-
-**Behavior:**
 1. Create/load IMPLEMENTATION_CONTEXT.md
 2. Structured intake: goals, scope, architecture, constraints
 3. Phase-based planning with milestones
-4. Skill discovery via ~/.claude/skills/ index
-5. Execute with context checkpoints (50% → suggest handoff, 70% → auto-handoff)
+4. Execute via dispatch protocol (parallel workers, category-ordered)
+5. Context checkpoints (50% → suggest handoff, 70% → auto-handoff)
 6. Verify and show completion summary
 
-**For:** New projects, refactors, complex features.
+### `/conduct` — Multi-Model Orchestration
+1. Detect available providers (read `config/workers.yaml`)
+2. Ask clarifying questions — BLOCKING
+3. Classify tasks by task class + category (see `docs/instructions/task-classes.md`)
+4. Route: task class → lane → category preference → worker pool → reviewer
+5. Dispatch non-premium tasks in parallel via dispatch protocol
+6. Loop until goal is fully met
 
-### `/conduct` — Multi-Model PMO Orchestrator
+## DISPATCH PROTOCOL
+
+All non-premium tasks use the dispatch protocol (`_shared/dispatch.md`):
+- Classify task by class and category
+- Resolve lane + worker ordering via `python3 -m core.router.resolve --class <class> --category <category>`
+- Workers are ordered by category preference — first available wins
+- Structured output captured and validated
+- Manifests written to `1shot/dispatch/{id}.md`
 
 ```
-/conduct [idea or goal]
+classify → resolve (category-ordered workers) → build prompt → dispatch → capture → validate → commit
 ```
 
-**Behavior:**
-1. Detect available providers (codex, gemini)
-2. Ask clarifying questions — BLOCKING, nothing runs until answered
-3. Create structured plan with task breakdown
-4. Route work across Claude + Codex + Gemini based on task type
-5. Loop until goal is fully met (not just started)
+## TASK CLASSES & CATEGORY ROUTING
 
-**For:** Non-trivial tasks where you want autonomous execution across models until done.
+Tasks are classified by task class AND category. Category determines worker preference within a lane.
 
----
+| Task Class | Lane | Category | Preferred Workers |
+|-----------|------|----------|-------------------|
+| plan | premium | general | claude_code |
+| research | research | research | gemini_cli, codex |
+| implement_small | cheap | coding | codex, gemini_cli, glm_claude |
+| implement_medium | balanced | coding | codex, gemini_cli |
+| test_write | cheap | coding | codex, gemini_cli, glm_claude |
+| review_diff | premium | review | claude_code, codex |
+| doc_draft | cheap | writing | gemini_cli, codex, glm_claude |
+| search_sweep | research | research | gemini_cli, codex + argus |
+| summarize_findings | cheap | writing | gemini_cli, codex, glm_claude |
+| janitor_summarize | janitor | general | free (openrouter/free) |
+| janitor_extract | janitor | general | free (openrouter/free) |
+| janitor_hygiene | janitor | general | free (openrouter/free) |
+| janitor_analyze | janitor | general | free (openrouter/free) |
+
+Resolve routing: `python3 -m core.router.resolve --class <task_class> --category <category>`
+Parallel dispatch: `python3 -m core.dispatch.run --class <class> --category <category> --prompt "..."`
+
+## INTELLIGENCE TIERS
+
+| Worker | Backend | Cost | Notes |
+|--------|---------|------|-------|
+| glm_claude | ZAI/GLM-5-turbo | Free until 2026-05-02 | Full Claude Code session, all tools |
+| codex | ChatGPT Plus | $20/mo sub | Strong coding, structured output |
+| gemini_cli | Google API | Free (sign-in) | Research, documentation |
+| free | openrouter/free | $0 (always) | Background intelligence, janitor lane only |
+| claw_code | OpenRouter | Pay per token | Manual opt-in via `--worker claw_code` |
+
+Auto-expiry: `glm_claude` worker checks `plan_expires` from `config/workers.yaml` and disables itself when expired. `shot` terminal command auto-falls back to OpenRouter.
 
 ## UTILITY COMMANDS
 
@@ -62,83 +80,78 @@
 |---------|---------|
 | `/handoff` | Save context before /clear |
 | `/restore` | Resume from handoff |
-| `/research` | Background research |
-| `/freesearch` | Zero-token web search (Exa) |
-| `/doc` | Cache external docs |
+| `/research` | Background research via Argus |
+| `/freesearch` | Zero-token search via Argus (cheap mode) |
+| `/doc` | Cache external documentation |
 | `/vision` | Image/website analysis |
-| `/secrets` | SOPS/Age secrets |
+| `/secrets` | SOPS/Age secrets management |
+| `/debug` | Systematic debugging (4-phase: investigate → analyze → hypothesize → fix) |
+| `/tdd` | Test-driven development (RED-GREEN-REFACTOR cycle) |
 
----
+## TERMINAL ENTRY POINTS
 
-## DEPLOYABLE TEMPLATES
+| Command | Purpose |
+|---------|---------|
+| `shot "task"` | Auto-route to best model (GLM free → OpenRouter fallback) |
+| `zai` | Force GLM-5-turbo via ZAI (free) |
+| `or` | Force OpenRouter model (paid) |
+| `or --code` | Force Qwen3-Coder (free on OpenRouter) |
 
-| Use Case | Template | Stack |
-|----------|----------|-------|
-| Membership/community sites | `templates/community-starter/` | Vercel + Supabase + Python + Resend |
+## PLANNER/WORKER SPLIT
 
----
+**Planner (Claude)**: planning, decomposition, repo synthesis, review, sensitive edits
+**Workers (Codex, Gemini, GLM)**: bounded implementation, tests, docs, search summarization
+**Dispatch**: category-ordered parallel execution with structured output and manifest tracking
 
 ## DECISION DEFAULTS
 
-When ambiguous, apply without asking:
-
 | Ambiguity | Default |
 |-----------|---------|
-| Multiple implementations | **Simplest** |
+| Multiple implementations | Simplest |
 | Naming | Follow existing pattern |
-| Refactor opportunity | **Skip** unless blocking |
-| Stack | Follow CLAUDE.md |
-| Error handling | Match surrounding code |
-| Test framework | Use existing tests |
+| Refactor opportunity | Skip unless blocking |
+| Lane selection | Use task class routing |
 
-**Key rule:** When truly ambiguous, pick option A, note in DECISIONS.md.
+## AUTO-APPROVED
 
----
-
-## AUTO-APPROVED ACTIONS
-
-- Reading any file
-- Writing to scope-matched files
-- Running tests and linters
-- Creating DECISIONS.md, BLOCKERS.md, CHANGES.md
-- Git commit (not push)
-- Creating native tasks
+Reading files, writing to scope-matched files, running tests, git commit (not push), creating tasks.
 
 ## REQUIRES CONFIRMATION
 
-- Destructive operations (rm -rf, DROP TABLE)
-- Git push to shared branches
-- External API calls that cost money
-- Deploying to production
+Destructive ops, git push, external API calls that cost money, production deploy.
 
----
+## V2 FEATURES
 
-## DELEGATION
+- Risk-based autonomy gating: `RiskLevel` (low/medium/high) controls what requires confirmation
+- Structured exploration artifact: `explore.json` from intake phase
+- Machine-readable plan schema: `plan.json` via `core/plan_schema.py`
+- TASK_SPEC template: `templates/TASK_SPEC.md` for formal task specification
+- Mandatory verification gate after each build step
+- Scope creep detection in the build loop
+- Session-end feedback loop: handoff proposes CLAUDE.md/rule updates when patterns repeat
 
-Before delegating: assess (complexity, criticality, uncertainty)
-After delegating: verify the result
-On failure: escalate (original → inline → human)
+## JANITOR SYSTEM
 
-**Delegation summary on completion:**
-```
-📊 Delegation Summary
-├─ N delegations, avg reward: X.XX
-├─ Best: [agent] (reward) - [description]
-└─ Tip: [optimization]
-```
+Background intelligence layer that runs automatically — no manual action needed.
 
----
+**How it works:**
+1. **PostToolUse hook** records every file read/write/edit to `.oneshot/events.jsonl` (transparent, zero overhead)
+2. **System cron** (every 15min) finds unprocessed events across all projects, runs free model summarizer
+3. **SessionEnd hook** marks session as ended; cron picks up remaining data
 
-## PHILOSOPHY
+**What it produces:** structured decisions, blockers, discoveries, file change summaries — all queryable across sessions via grep, SQLite, or future sessions.
 
-> "It's harder to read code than to write it." — Joel Spolsky
+**Cost:** $0. openrouter/free model router. ~60-150 calls/day. Storage: ~30MB/year.
 
-**NEVER rewrite from scratch.** Extend, refactor, use existing solutions.
+**Files:** `core/janitor/` — worker.py (OpenRouter caller), recorder.py (event log), jobs.py (job implementations), jobs_catalog.md (planned jobs)
 
-**USER TIME IS PRECIOUS.** Agents should make reasonable decisions autonomously.
+**Cron install (all machines):** Already installed on oci-dev, homelab, macmini.
 
----
+## SHARED MEMORY
+
+Read `.claude/memory/memory.md` at session start for cross-agent learnings.
+When you discover something useful for other agents, append a dated entry to the relevant file.
 
 ## VERSION
 
-v13 | 10 skills | Operators discover skills on demand
+v14.3 | Janitor lane | Background intelligence | openrouter/free worker | Session recording

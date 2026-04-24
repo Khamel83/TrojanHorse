@@ -1,6 +1,6 @@
 # ONE_SHOT v13 — Operator Framework
 
-**10 skills.** Three operators. Seven utilities.
+**13 skills + 1 external (humanizer).** Three operators. Nine utilities.
 
 ---
 
@@ -44,6 +44,8 @@ Full operator for complex tasks:
 | `/freesearch` | Zero-token web search (Exa) |
 | `/vision` | Image/website visual analysis |
 | `/secrets` | SOPS/Age secrets management |
+| `/debug` | Systematic debugging (4-phase: investigate → analyze → hypothesize → fix) |
+| `/tdd` | Test-driven development (RED-GREEN-REFACTOR cycle) |
 
 ---
 
