@@ -1,15 +1,20 @@
-# Agents Index
+# ONE_SHOT Agents
 
-ONE_SHOT v12.2 uses native Tasks + intelligent delegation. See `.claude/skills/INDEX.md` for available skills.
+Custom agents for the ONE_SHOT framework. Each agent is a Claude Code agent
+definition file (frontmatter + instructions).
 
----
+## Creating an Agent
 
-## Migration Notes
+1. Copy `TEMPLATE.md` to a new `.md` file
+2. Fill in the frontmatter fields
+3. Write the agent instructions
+4. Validate with `./scripts/validate-agents.py`
 
-v9 used a directory-based agent system. v10+ simplified to:
-- **Native Tasks** - TaskCreate, TaskGet, TaskUpdate, TaskList (primary)
-- **Slash commands** - Invoke via `/skill-name`
-- **Intelligent Delegation** - Assess, verify, trace with Agent Lightning spans
-- **Routing** - Defined in `AGENTS.md`
+## Directory
 
-No standalone agent files are needed in v10+.
+```
+.claude/agents/
+  INDEX.md        — This file
+  TEMPLATE.md     — Agent template
+  *.md            — Agent definitions
+```

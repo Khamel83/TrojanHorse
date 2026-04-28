@@ -1,141 +1,134 @@
 ---
 name: doc
-description: Cache external documentation locally. Use when user says '/doc', 'cache docs', 'download docs', 'save documentation', 'fetch docs', or asks to reference external documentation.
+description: Build or refresh documentation and research packs through Argus. Use when user says '/doc', 'cache docs', 'download docs', 'save documentation', 'fetch docs', or asks to reference external documentation.
 ---
 
-# /doc — Local Documentation Caching
+# /doc — Argus Documentation Workflows
 
-Cache **any external documentation** locally for your project:
-- Libraries (npm packages, Python packages)
-- Frameworks (Next.js, Convex, FastAPI)
-- Services (Tailscale, OCI, Docker)
-- CLIs and tools
-- Anything with online docs
+Argus is now the canonical docs and research corpus owner. Do not treat `~/github/docs-cache` as the primary store anymore.
 
-## Why Cache Docs Locally?
+## What `/doc` should do
 
-1. **Validate against actual docs** — not stale training data
-2. **Avoid repeated web fetches** during development
-3. **Version docs with your project** — docs travel with code
-4. **Reference with `@filename`** — simple markdown inclusion
+Use Argus on homelab to:
+- recover dead articles
+- capture the important parts of a site and produce a cited summary
+- build a docs + research pack that combines official docs and external research
 
-**No MCP required** — just fetch once, save to markdown, reference with `@`.
+The canonical corpus lives on homelab under:
+- `/mnt/main-drive/appdata/argus/docs/cache`
+- `/mnt/main-drive/appdata/argus/docs/research`
+- `/mnt/main-drive/appdata/argus/imports/docs-cache`
 
----
+## Preferred Path
 
-## Usage
+Call the Python client in `core/search/argus_client.py`, not ad hoc scraping first.
 
 ```bash
-# Cache documentation
-/doc convex https://docs.convex.dev
-/doc nextjs https://nextjs.org/docs
-/doc tailscale https://tailscale.com/kb/api
-/doc poetry https://python-poetry.org/docs
-
-# List cached docs
-/doc --list
-
-# Show path to docs
-/doc --show convex
+python - <<'PY'
+from core.search import argus_client
+import json
+print(json.dumps(argus_client.build_research_pack("topic", official_url="https://docs.example.com"), indent=2))
+PY
 ```
 
----
+The client resolves:
+- `config/search.yaml` for the Argus base URL
+- `ARGUS_API_KEY` from env
+- or `secrets get ARGUS_API_KEY argus` from the oneshot vault
 
-## Directory Structure
+## Usage Patterns
 
-Docs are saved to `$PROJECT/docs/external/`:
+### 1. Docs + Research Pack
 
-```
-$PROJECT/docs/external/
-├── convex/
-│   └── README.md           # Full documentation
-├── nextjs/
-│   └── README.md
-├── tailscale/
-│   └── README.md
-├── poetry/
-│   └── README.md
-└── .index.md               # List of all cached docs with source URLs
-```
+Use when the user wants:
+- official docs plus external research in one place
+- a reusable corpus for later tasks
+- deeper tool/framework grounding
 
----
-
-## How It Works
-
-1. Uses **Jina.ai reader** (`https://r.jina.ai/<url>`) to fetch docs as markdown
-2. Saves to `$PROJECT/docs/external/<name>/README.md`
-3. Updates `$PROJECT/docs/external/.index.md` with all cached docs
-4. Reference later with `@docs/external/<name>/README.md`
-
----
-
-## Session Start: Check Local Docs First
-
-Before using WebSearch for docs:
+Run:
 
 ```bash
-# Check what's cached locally
-ls docs/external/
-
-# Read the index
-cat docs/external/.index.md
-
-# Reference a doc
-@docs/external/convex/README.md
+python - <<'PY'
+from core.search import argus_client
+import json
+print(json.dumps(
+    argus_client.build_research_pack(
+        "example sdk",
+        official_url="https://docs.example.com",
+    ),
+    indent=2,
+))
+PY
 ```
 
-If no local docs exist:
-1. Suggest running `/doc <name> <url>` to cache them
-2. Auto-detect: When you see external imports/dependencies, prompt to cache docs
+### 2. Site Capture Summary
 
----
+Use when the user wants:
+- “copy the important parts of this site”
+- a detailed summary with references
+- not just a sitemap
 
-## Examples
-
-### Cache Convex Docs
-```bash
-/doc convex https://docs.convex.dev
-```
-
-### Cache Next.js Docs
-```bash
-/doc nextjs https://nextjs.org/docs
-```
-
-### Cache Poetry Docs
-```bash
-/doc poetry https://python-poetry.org/docs
-```
-
----
-
-## Integration with docs-first.md
-
-The `docs-first.md` rule now checks `$PROJECT/docs/external/` before using WebSearch:
-
-1. **Check local docs first** — `ls docs/external/`
-2. **Use WebSearch only if** — no local docs exist
-3. **Suggest caching** — `/doc <name> <url>` if docs would be useful
-
----
-
-## Verification
-
-After caching docs:
+Run:
 
 ```bash
-# Verify file was created
-ls -la docs/external/convex/
-
-# Check index was updated
-cat docs/external/.index.md
-
-# Reference in conversation
-@docs/external/convex/README.md
+python - <<'PY'
+from core.search import argus_client
+import json
+print(json.dumps(
+    argus_client.capture_site("https://docs.example.com"),
+    indent=2,
+))
+PY
 ```
 
----
+### 3. Dead Article Recovery
 
-## Keywords
+Use when the user wants:
+- a dead URL recovered
+- a moved article found
+- archive recovery with a final report
 
-documentation, docs, cache, fetch, download, reference, external, api docs, library docs
+Run:
+
+```bash
+python - <<'PY'
+from core.search import argus_client
+import json
+print(json.dumps(
+    argus_client.recover_article(
+        "https://example.com/dead-post",
+        title="Example Post",
+    ),
+    indent=2,
+))
+PY
+```
+
+### 4. Poll Workflow Status
+
+If the user wants the finished result immediately, poll:
+
+```bash
+python - <<'PY'
+from core.search import argus_client
+import json
+print(json.dumps(argus_client.workflow_status("run_id_here"), indent=2))
+PY
+```
+
+## Local Project Copies
+
+Default behavior:
+- keep the canonical corpus in Argus on homelab
+- only copy selected outputs into the current project if the user explicitly wants project-local artifacts
+
+Do not recreate the old `docs/external/<name>/README.md` pattern by default.
+
+## If Local Cache Scripts Are Used
+
+Legacy helpers such as `docs-link` and `docs-check.sh` should treat Argus paths as the default cache root.
+
+Default local mirror path:
+- `${DOCS_CACHE:-$HOME/.local/share/argus/argus/docs/cache}`
+
+If that path is empty on the current machine, say so plainly and use Argus remotely instead of pretending the corpus is local.

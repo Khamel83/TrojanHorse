@@ -1,6 +1,6 @@
 # ONE_SHOT v13 — Operator Framework
 
-**13 skills + 1 external (humanizer).** Three operators. Nine utilities.
+**15 skills.** Three operators. Twelve utilities.
 
 ---
 
@@ -46,6 +46,8 @@ Full operator for complex tasks:
 | `/secrets` | SOPS/Age secrets management |
 | `/debug` | Systematic debugging (4-phase: investigate → analyze → hypothesize → fix) |
 | `/tdd` | Test-driven development (RED-GREEN-REFACTOR cycle) |
+| `/janitor` | Background intelligence — test gaps, doc staleness, config drift |
+| `/update` | Update project configuration via settings.json |
 
 ---
 

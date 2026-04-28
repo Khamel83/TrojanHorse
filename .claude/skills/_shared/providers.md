@@ -55,7 +55,54 @@ Returns JSON: `{task_class, lane, workers[], review_with, search_backend, fallba
 
 **glm_claude**: `claude` CLI running on ZAI/GLM-5-turbo via `ANTHROPIC_BASE_URL`. Full native toolchain (bash, read, edit, glob, grep, git). Free on GLM Coding Plan (expires **2026-05-02**). Same dispatch pattern as codex/gemini — `claude --print --dangerously-skip-permissions "prompt"`.
 
-**claw_code**: Available but **manual opt-in only** (not in lane pools). Re-enable by adding `claw_code` back to `worker_pool` in `config/lanes.yaml`. Use `--worker claw_code` flag on dispatch.
+**OpenCode Go**: Model gateway ($5/$10mo sub). Three invocation paths — not limited to OpenCode CLI. See [OpenCode Go Protocol Routing](#opencode-go-protocol-routing) below.
+
+---
+
+## Provider Capability Table
+
+| Provider | Endpoint | Context | Cost | Best Lane | Harness Options |
+|----------|----------|---------|------|-----------|-----------------|
+| anthropic | api.anthropic.com | 200k | $$$$ | planner, reviewer | Claude CLI (native) |
+| openai | api.openai.com | 128k | $$$ | balanced | Codex CLI (native) |
+| zai | api.z.ai | 128k | free* | cheap | Claude CLI, Direct API |
+| opencode_go | opencode.ai/zen/go | varies | $ (sub) | cheap, routine | Claude CLI (MiniMax only), OpenCode CLI, Direct API |
+| openrouter | openrouter.ai/api/v1 | varies | $$-free | cheap, janitor | Direct API, Claw Code |
+| gemini | generativelanguage.googleapis.com | 1M+ | $ | research | Gemini CLI |
+
+* ZAI free plan expires 2026-05-02
+
+### Harness vs Provider
+
+```
+dispatch target = harness + provider + model
+
+harness  = HOW you invoke (claude CLI, opencode CLI, codex CLI, direct API)
+provider = WHERE the model runs (anthropic, openai, zai, opencode_go, openrouter, gemini)
+```
+
+A single provider can be invoked through multiple harnesses. For example, OpenCode Go via Claude CLI (MiniMax) or via OpenCode CLI (all models) or via direct API (all models).
+
+---
+
+## OpenCode Go Protocol Routing
+
+Endpoints are **per-model, not universal**:
+
+| Protocol | Endpoint | Models | Usable By |
+|----------|----------|--------|-----------|
+| OpenAI-compatible | `/v1/chat/completions` | GLM, Kimi, DeepSeek, MiMo, Qwen | OpenCode CLI, Direct API |
+| Anthropic-compatible | `/v1/messages` | MiniMax M2.5, M2.7 | Claude CLI, OpenCode CLI |
+
+**Invocation paths:**
+1. **OpenCode CLI** — `opencode run --model opencode-go/<id>` (universal, all models)
+2. **Claude CLI** — `claude -p` + `ANTHROPIC_BASE_URL=https://opencode.ai/zen/go/v1/messages` (MiniMax only)
+3. **Direct API** — HTTP POST to OpenAI-compatible endpoint (all models, no shell for model)
+
+Path 2 gives full Claude Code toolchain (bash, edit, grep, git) with OpenCode Go pricing.
+Path 3 is lightweight — good for summaries, extraction, classification.
+
+See `.oneshot/config/models.yaml` for runner templates (`opencode_go`, `opencode_go_claude`, `opencode_go_api`).
 
 ---
 
@@ -170,7 +217,10 @@ curl -s -X POST http://100.126.13.70:8005/api/search \
 From `config/workers.yaml`:
 - `local` (localhost) — planner, claude_code
 - `oci` (oci-dev) — planner, claude_code
-- `claw` (localhost) — worker, claw_code (OpenRouter models)
+- `claw` (localhost) — worker, claw_code, provider: zai
+- `glm` (localhost) — worker, claude_code, provider: zai
+- `ocg_minimax` (localhost) — worker, claude_code, provider: opencode_go (MiniMax via Anthropic endpoint)
+- `ocg_api` (localhost) — worker, direct_api, provider: opencode_go (all models via OpenAI endpoint)
 - `macmini` — worker, opencode (future)
 - `homelab` — worker, opencode (future)
 

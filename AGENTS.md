@@ -1,11 +1,13 @@
-# ONE_SHOT v14 — Orchestration Control Plane
+# ONE_SHOT v14 — Orchestration Operating Contract
 
-> Category-based routing. Claude plans, workers execute. Argus searches. Janitor runs in the background.
+> Works in any project on any machine. Claude plans, workers execute, Argus searches, Janitor runs in the background.
+
+---
 
 ## OPERATORS
 
 ### `/short` — Quick Iteration
-1. Load context: git log -5, TaskList, DECISIONS.md, BLOCKERS.md
+1. Load context: `git log -5`, TaskList, DECISIONS.md, BLOCKERS.md
 2. Ask: "What are you working on?"
 3. Execute via dispatch protocol (non-premium tasks → best worker for category)
 4. Show delegation summary
@@ -19,139 +21,219 @@
 6. Verify and show completion summary
 
 ### `/conduct` — Multi-Model Orchestration
-1. Detect available providers (read `config/workers.yaml`)
-2. Ask clarifying questions — BLOCKING
-3. Classify tasks by task class + category (see `docs/instructions/task-classes.md`)
-4. Route: task class → lane → category preference → worker pool → reviewer
-5. Dispatch non-premium tasks in parallel via dispatch protocol
+1. Check available workers (see INTELLIGENCE TIERS below)
+2. Ask clarifying questions — BLOCKING, nothing runs until answered
+3. Classify each task by task class + category
+4. Route via the ROUTING TABLE below — first available worker in preferred order wins
+5. Dispatch non-premium tasks in parallel
 6. Loop until goal is fully met
+
+---
+
+## ROUTING TABLE
+
+Classify tasks by class AND category. Category determines worker order within a lane.
+
+| Task Class | Lane | Category | Worker Order |
+|---|---|---|---|
+| `plan` | premium | general | claude_code |
+| `research` | research | research | gemini_cli → codex |
+| `implement_small` | cheap | coding | codex → gemini_cli → glm_claude |
+| `implement_medium` | balanced | coding | codex → gemini_cli |
+| `test_write` | cheap | coding | codex → gemini_cli → glm_claude |
+| `review_diff` | premium | review | claude_code → codex |
+| `doc_draft` | cheap | writing | gemini_cli → codex → glm_claude |
+| `search_sweep` | research | research | gemini_cli → codex (+ Argus) |
+| `summarize_findings` | cheap | writing | gemini_cli → codex → glm_claude |
+| `janitor_*` | janitor | general | openrouter/free only |
+
+**In the oneshot project**, use the Python resolver:
+```bash
+python3 -m core.router.resolve --class implement_small --category coding
+```
+
+**In any other project**, read the table directly and pick the first available worker.
+
+---
 
 ## DISPATCH PROTOCOL
 
-All non-premium tasks use the dispatch protocol (`_shared/dispatch.md`):
-- Classify task by class and category
-- Resolve lane + worker ordering via `python3 -m core.router.resolve --class <class> --category <category>`
-- Workers are ordered by category preference — first available wins
-- Structured output captured and validated
-- Manifests written to `1shot/dispatch/{id}.md`
-
 ```
-classify → resolve (category-ordered workers) → build prompt → dispatch → capture → validate → commit
+classify task → pick worker from routing table → build self-contained prompt → dispatch → capture output → validate → commit
 ```
 
-## TASK CLASSES & CATEGORY ROUTING
+1. Classify: pick `task_class` + `category` from the table above
+2. Pick worker: first available in the preferred order for that class
+3. Build prompt: self-contained — include all context the worker needs, no shared state
+4. Dispatch using the worker command below
+5. Capture structured output, validate it meets the task goal
+6. Manifests written to `1shot/dispatch/{id}.md` if the dir exists
 
-Tasks are classified by task class AND category. Category determines worker preference within a lane.
+---
 
-| Task Class | Lane | Category | Preferred Workers |
-|-----------|------|----------|-------------------|
-| plan | premium | general | claude_code |
-| research | research | research | gemini_cli, codex |
-| implement_small | cheap | coding | codex, gemini_cli, glm_claude |
-| implement_medium | balanced | coding | codex, gemini_cli |
-| test_write | cheap | coding | codex, gemini_cli, glm_claude |
-| review_diff | premium | review | claude_code, codex |
-| doc_draft | cheap | writing | gemini_cli, codex, glm_claude |
-| search_sweep | research | research | gemini_cli, codex + argus |
-| summarize_findings | cheap | writing | gemini_cli, codex, glm_claude |
-| janitor_summarize | janitor | general | free (openrouter/free) |
-| janitor_extract | janitor | general | free (openrouter/free) |
-| janitor_hygiene | janitor | general | free (openrouter/free) |
-| janitor_analyze | janitor | general | free (openrouter/free) |
+## INTELLIGENCE TIERS & WORKER COMMANDS
 
-Resolve routing: `python3 -m core.router.resolve --class <task_class> --category <category>`
-Parallel dispatch: `python3 -m core.dispatch.run --class <class> --category <category> --prompt "..."`
+| Worker | Cost | How to invoke |
+|---|---|---|
+| `glm_claude` | Free (ZAI plan, check expiry) | `zai` — full Claude Code session via GLM-5-turbo |
+| `codex` | $20/mo (ChatGPT Plus sub) | `unset OPENAI_API_KEY && codex exec --sandbox danger-full-access "prompt"` |
+| `gemini_cli` | Free (Google sign-in) | `gemini "prompt"` or `gemini -p "prompt"` |
+| `free` | $0 always | OpenRouter free pool — janitor lane only, not for user tasks |
+| `claw_code` | Pay per token | Manual opt-in only — `--worker claw_code` |
 
-## INTELLIGENCE TIERS
+**glm_claude expiry:** Check `config/workers.yaml → plan_expires` in the oneshot project. After expiry, `zai` falls back to OpenRouter via the `shot` command.
 
-| Worker | Backend | Cost | Notes |
-|--------|---------|------|-------|
-| glm_claude | ZAI/GLM-5-turbo | Free until 2026-05-02 | Full Claude Code session, all tools |
-| codex | ChatGPT Plus | $20/mo sub | Strong coding, structured output |
-| gemini_cli | Google API | Free (sign-in) | Research, documentation |
-| free | openrouter/free | $0 (always) | Background intelligence, janitor lane only |
-| claw_code | OpenRouter | Pay per token | Manual opt-in via `--worker claw_code` |
+**SSH dispatch** (run worker on a specific machine):
+```bash
+ssh oci-ts "cd ~/github/PROJECT && unset OPENAI_API_KEY && codex exec --sandbox danger-full-access 'prompt'"
+ssh macmini-ts "cd ~/github/PROJECT && gemini 'prompt'"
+```
 
-Auto-expiry: `glm_claude` worker checks `plan_expires` from `config/workers.yaml` and disables itself when expired. `shot` terminal command auto-falls back to OpenRouter.
+---
 
-## UTILITY COMMANDS
+## SEARCH (ARGUS)
 
-| Command | Purpose |
-|---------|---------|
-| `/handoff` | Save context before /clear |
-| `/restore` | Resume from handoff |
-| `/research` | Background research via Argus |
-| `/freesearch` | Zero-token search via Argus (cheap mode) |
-| `/doc` | Cache external documentation |
-| `/vision` | Image/website analysis |
-| `/secrets` | SOPS/Age secrets management |
-| `/debug` | Systematic debugging (4-phase: investigate → analyze → hypothesize → fix) |
-| `/tdd` | Test-driven development (RED-GREEN-REFACTOR cycle) |
+All web search routes through Argus on homelab.
 
-## TERMINAL ENTRY POINTS
+- **HTTP API**: `http://100.112.130.100:8270/api/search`
+- **MCP tool** (Claude Code): `mcp__argus__search_web` — registered in `~/.claude/settings.json`
 
-| Command | Purpose |
-|---------|---------|
-| `shot "task"` | Auto-route to best model (GLM free → OpenRouter fallback) |
-| `zai` | Force GLM-5-turbo via ZAI (free) |
-| `or` | Force OpenRouter model (paid) |
-| `or --code` | Force Qwen3-Coder (free on OpenRouter) |
+```bash
+# From code
+curl -s -X POST http://100.112.130.100:8270/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "...", "mode": "discovery"}'
 
-## PLANNER/WORKER SPLIT
+# From Python (oneshot project)
+from core.search.argus_client import search
+results = search("query", mode="precision")
+```
 
-**Planner (Claude)**: planning, decomposition, repo synthesis, review, sensitive edits
-**Workers (Codex, Gemini, GLM)**: bounded implementation, tests, docs, search summarization
-**Dispatch**: category-ordered parallel execution with structured output and manifest tracking
+| Mode | Providers | Use for |
+|---|---|---|
+| `discovery` | SearXNG, Brave, Exa | Broad exploration |
+| `precision` | Serper, Tavily | Targeted, high-relevance |
+| `cheap` | SearXNG only | Quick lookups |
+| `research` | All providers | Deep, comprehensive |
+
+**In Claude Code**: just ask — Claude calls `mcp__argus__search_web` automatically. Use `/research` for background deep search, `/freesearch` for zero-token quick lookups.
+
+**Fallback**: if Argus is unreachable (homelab down), use `gemini` CLI for research tasks.
+
+---
+
+## SECRETS
+
+Vault: `~/github/oneshot/secrets/` — single source of truth, synced to all machines.
+CLI: `secrets` — available everywhere after `bash ~/github/oneshot/install.sh`.
+
+```bash
+secrets get KEY                     # fetch one value
+secrets set FILE KEY=value          # add/update a key
+secrets set FILE KEY=value --commit # add, commit, and push
+secrets init FILE                   # write FILE.env → .env in current dir
+secrets list                        # show all vault files and key names
+```
+
+Full vault file index: `~/github/oneshot/docs/instructions/secrets.md`
+
+---
+
+## STACK DEFAULTS
+
+Pick the right stack without asking. Detect from project files:
+
+| Detection | Type | Stack |
+|---|---|---|
+| `vercel.json` or `supabase/` | Web app | Vercel + Supabase (Auth + Postgres) + Python + HTML/JS |
+| `setup.py` or `pyproject.toml` | CLI | Python + Click + SQLite |
+| `*.service` systemd file | Service | Python + systemd → oci-dev |
+| Docker Compose | Service | Deploy to homelab via `hl remote-recreate-SERVICE` |
+
+**Never use**: nginx/traefik (use Tailscale Funnel), self-hosted Postgres (use Supabase), Express/FastAPI for web (use Python serverless on Vercel), AWS/GCP/Azure (use OCI free tier or homelab).
+
+---
+
+## PLANNER / WORKER SPLIT
+
+**Planner (Claude)**: planning, decomposition, repo synthesis, final review, sensitive edits (auth, data mutation, production deploys)
+
+**Workers (Codex, Gemini, GLM)**: bounded implementation, test generation, doc drafting, search summarization
+
+**Rule**: never delegate planning or review. Never let a worker touch auth, secrets, or production without planner review.
+
+---
 
 ## DECISION DEFAULTS
 
 | Ambiguity | Default |
-|-----------|---------|
+|---|---|
 | Multiple implementations | Simplest |
-| Naming | Follow existing pattern |
+| Naming | Follow existing pattern in repo |
 | Refactor opportunity | Skip unless blocking |
-| Lane selection | Use task class routing |
+| Error handling | Match surrounding code |
+| Stack choice | Follow detection table above |
+| Lane selection | Use routing table above |
+
+---
 
 ## AUTO-APPROVED
 
-Reading files, writing to scope-matched files, running tests, git commit (not push), creating tasks.
+Reading files, writing to scope-matched files, running tests, `git commit` (not push), creating tasks, calling Argus search.
 
 ## REQUIRES CONFIRMATION
 
-Destructive ops, git push, external API calls that cost money, production deploy.
+Destructive ops (`rm -rf`, DROP TABLE), `git push`, external API calls that cost money, production deploy, force push.
 
-## V2 FEATURES
+---
 
-- Risk-based autonomy gating: `RiskLevel` (low/medium/high) controls what requires confirmation
-- Structured exploration artifact: `explore.json` from intake phase
-- Machine-readable plan schema: `plan.json` via `core/plan_schema.py`
-- TASK_SPEC template: `templates/TASK_SPEC.md` for formal task specification
-- Mandatory verification gate after each build step
-- Scope creep detection in the build loop
-- Session-end feedback loop: handoff proposes CLAUDE.md/rule updates when patterns repeat
+## UTILITY SKILLS (Claude Code)
 
-## JANITOR SYSTEM
+| Skill | Purpose |
+|---|---|
+| `/handoff` | Save context before `/clear` |
+| `/restore` | Resume from handoff |
+| `/research` | Background research via Argus |
+| `/freesearch` | Zero-token search via Argus cheap mode |
+| `/doc` | Cache external documentation locally |
+| `/vision` | Analyze images or websites |
+| `/secrets` | Manage vault interactively |
+| `/debug` | 4-phase systematic debugging |
+| `/tdd` | RED-GREEN-REFACTOR cycle |
+| `/adversarial-review` | Gemini second-opinion on design decisions |
 
-Background intelligence layer that runs automatically — no manual action needed.
+---
 
-**How it works:**
-1. **PostToolUse hook** records every file read/write/edit to `.oneshot/events.jsonl` (transparent, zero overhead)
-2. **System cron** (every 15min) finds unprocessed events across all projects, runs free model summarizer
-3. **SessionEnd hook** marks session as ended; cron picks up remaining data
+## TERMINAL ENTRY POINTS
 
-**What it produces:** structured decisions, blockers, discoveries, file change summaries — all queryable across sessions via grep, SQLite, or future sessions.
+| Command | Purpose |
+|---|---|
+| `shot "task"` | Auto-route: GLM free → OpenRouter fallback |
+| `zai` | Force GLM-5-turbo via ZAI |
+| `or` | Force OpenRouter model |
+| `or --code` | Force Qwen3-Coder (free) |
 
-**Cost:** $0. openrouter/free model router. ~60-150 calls/day. Storage: ~30MB/year.
+---
 
-**Files:** `core/janitor/` — worker.py (OpenRouter caller), recorder.py (event log), jobs.py (job implementations), jobs_catalog.md (planned jobs)
+## JANITOR (BACKGROUND INTELLIGENCE)
 
-**Cron install (all machines):** Already installed on oci-dev, homelab, macmini.
+Runs automatically on all machines — no action needed. Cost: $0.
+
+1. PostToolUse hook records file reads/writes/edits → `.janitor/events.jsonl`
+2. Cron (every 15 min) processes events, runs free model summarizer
+3. Produces: test gap analysis, code smells, dep map, staleness, onboarding summary
+
+Signal files in `.janitor/` — read on demand, never block on them.
+
+---
 
 ## SHARED MEMORY
 
 Read `.claude/memory/memory.md` at session start for cross-agent learnings.
-When you discover something useful for other agents, append a dated entry to the relevant file.
+When you discover something useful for other agents, append a dated entry.
+
+---
 
 ## VERSION
 
-v14.3 | Janitor lane | Background intelligence | openrouter/free worker | Session recording
+v14.4 | Self-contained cross-project contract | Search, secrets, stack defaults, worker commands
