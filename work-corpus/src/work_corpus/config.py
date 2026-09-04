@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import posixpath
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-
 
 NOTION_EXPORT_DIRECTORY = (
     "40b7a161-92e3-450d-8dab-c2bb4a080adf_"
@@ -116,11 +116,41 @@ LOCAL_TRANSCRIPTION_ENGINES = {
 REMOTE_TRANSCRIPTION_OPTIONS = {
     "api_key",
     "api_token",
+    "authorization",
     "base_url",
+    "cloud",
+    "cloud_provider",
     "endpoint",
+    "headers",
     "organization",
     "project",
     "provider",
+    "remote",
+    "remote_upload",
+    "upload",
+    "upload_url",
+}
+REMOTE_TRANSCRIPTION_TERMS = {
+    "assemblyai",
+    "aws",
+    "azure",
+    "cloud",
+    "deepgram",
+    "gcloud",
+    "google",
+    "remote",
+    "transcribe-api",
+    "upload",
+}
+REMOTE_COMMAND_FLAGS = {
+    "--api-key",
+    "--api-token",
+    "--authorization",
+    "--base-url",
+    "--endpoint",
+    "--remote",
+    "--upload",
+    "--upload-url",
 }
 
 
@@ -390,17 +420,65 @@ class Config:
     def _validate_local_transcription(self) -> None:
         zoom = self.section("zoom")
         engine = zoom.get("engine", "auto")
-        if engine not in LOCAL_TRANSCRIPTION_ENGINES:
+        if not isinstance(engine, str) or engine.casefold() not in LOCAL_TRANSCRIPTION_ENGINES:
             raise ConfigurationError(
                 f"local transcription engine required; got {engine!r}"
             )
 
-        remote_options = REMOTE_TRANSCRIPTION_OPTIONS.intersection(zoom)
+        if zoom.get("local_models_only", True) is not True:
+            raise ConfigurationError(
+                "local transcription requires local_models_only=true"
+            )
+
+        remote_options = {
+            str(key).casefold()
+            for key in REMOTE_TRANSCRIPTION_OPTIONS.intersection(zoom)
+        }
         if remote_options:
             names = ", ".join(sorted(remote_options))
             raise ConfigurationError(
                 f"local transcription configuration cannot include remote options: {names}"
             )
+
+        custom_command = zoom.get("custom_command", [])
+        if isinstance(custom_command, str):
+            try:
+                command_parts = shlex.split(custom_command)
+            except ValueError as exc:
+                raise ConfigurationError(
+                    f"local transcription command is invalid: {exc}"
+                ) from exc
+        elif isinstance(custom_command, (list, tuple)):
+            command_parts = [str(part) for part in custom_command]
+        elif custom_command:
+            raise ConfigurationError(
+                "local transcription custom_command must be a string or list"
+            )
+        else:
+            command_parts = []
+
+        if engine.casefold() == "custom" and not command_parts:
+            raise ConfigurationError(
+                "local transcription custom_command is required for engine=custom"
+            )
+
+        for value in command_parts:
+            low = value.casefold()
+            if "http://" in low or "https://" in low:
+                raise ConfigurationError(
+                    "local transcription command cannot contain a remote URL"
+                )
+            if low in REMOTE_TRANSCRIPTION_TERMS:
+                raise ConfigurationError(
+                    f"local transcription command contains a remote provider: {value}"
+                )
+            if low in REMOTE_COMMAND_FLAGS or re.search(
+                r"(?:api[-_]?key|api[-_]?token|authorization|upload[-_]?url)",
+                low,
+            ):
+                raise ConfigurationError(
+                    "local transcription command cannot contain remote credentials or upload options"
+                )
 
 
 def _is_within(path: Path, parent: Path) -> bool:
