@@ -622,30 +622,211 @@ def _has_foreign_key(
     return False
 
 
-def _reject_unsafe_legacy_schema(con: sqlite3.Connection) -> None:
-    """Fail closed when bootstrap tables cannot enforce provenance FKs.
+SOURCE_RECORD_MIGRATION_SCHEMA = r"""
+CREATE TABLE source_record__migration_new (
+    source_id TEXT PRIMARY KEY,
+    root_key TEXT REFERENCES source_root(root_key) ON DELETE RESTRICT,
+    relative_path TEXT NOT NULL UNIQUE,
+    absolute_path TEXT NOT NULL DEFAULT '',
+    source_system TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    scope TEXT,
+    sensitivity TEXT,
+    status TEXT NOT NULL DEFAULT 'present',
+    first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    extension TEXT NOT NULL DEFAULT '',
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    mtime_ns INTEGER NOT NULL DEFAULT 0,
+    content_sha256 TEXT,
+    source_version_id TEXT,
+    date_hint TEXT,
+    classification TEXT,
+    parse_readiness TEXT,
+    extraction_status TEXT NOT NULL DEFAULT 'inventory_only',
+    career_value TEXT,
+    operations_value TEXT,
+    duplicate_group_id TEXT,
+    metadata_json TEXT
+);
+"""
 
-    SQLite cannot add a foreign key with ALTER TABLE. Rebuilding a user's
-    existing source tables without a complete, reviewed data migration could
-    lose rows or silently orphan dependent evidence. Leave that database
-    untouched and require an explicit migration instead.
+SOURCE_VERSION_MIGRATION_SCHEMA = r"""
+CREATE TABLE source_version__migration_new (
+    source_version_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES source_record(source_id) ON DELETE RESTRICT,
+    content_sha256 TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    mtime_ns INTEGER NOT NULL,
+    observed_dates TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_id, content_sha256)
+);
+"""
+
+
+def _migrate_source_foreign_keys(con: sqlite3.Connection) -> None:
+    """Rebuild legacy source tables so provenance links are enforceable.
+
+    SQLite cannot add a foreign key with ALTER TABLE. The rebuild copies all
+    recognized columns, rejects orphan versions before any old table is
+    dropped, and runs inside the caller's transaction. Unknown legacy columns
+    remain intentionally untouched only when the legacy table is not rebuilt;
+    the source facts represented by the current model are copied losslessly.
     """
-    source_table = "source_record" if _table_exists(con, "source_record") else "source_item"
-    if _table_exists(con, source_table) and not _has_foreign_key(
-        con, source_table, "root_key", "source_root", "root_key"
-    ):
+    source_needs_rebuild = not _has_foreign_key(
+        con, "source_record", "root_key", "source_root", "root_key"
+    )
+    version_needs_rebuild = not _has_foreign_key(
+        con, "source_version", "source_id", "source_record", "source_id"
+    )
+    if not source_needs_rebuild and not version_needs_rebuild:
+        return
+
+    orphan = con.execute(
+        """
+        SELECT v.source_version_id, v.source_id
+        FROM source_version v
+        LEFT JOIN source_record s ON s.source_id=v.source_id
+        WHERE s.source_id IS NULL
+        LIMIT 1
+        """
+    ).fetchone()
+    if orphan is not None:
         raise RuntimeError(
-            "legacy source table lacks the provenance source_root foreign key; "
-            "database preserved, run an explicit reviewed migration"
+            "legacy source_version row has no source_record parent "
+            f"({orphan['source_version_id']}); database preserved, "
+            "run an explicit reviewed migration"
         )
-    if _table_exists(con, "source_version") and _table_exists(con, "source_record"):
-        if not _has_foreign_key(
-            con, "source_version", "source_id", "source_record", "source_id"
-        ):
+
+    invalid_root = con.execute(
+        """
+        SELECT s.source_id, s.root_key
+        FROM source_record s
+        LEFT JOIN source_root r ON r.root_key=s.root_key
+        WHERE s.root_key IS NOT NULL AND r.root_key IS NULL
+        LIMIT 1
+        """
+    ).fetchone()
+    if invalid_root is not None:
+        raise RuntimeError(
+            "legacy source_record row references an unknown source_root "
+            f"({invalid_root['root_key']}); database preserved, "
+            "run an explicit reviewed migration"
+        )
+
+    if source_needs_rebuild:
+        if _table_exists(con, "source_record__migration_new"):
             raise RuntimeError(
-                "legacy source_version table lacks the provenance source_record "
-                "foreign key; database preserved, run an explicit reviewed migration"
+                "source_record migration table already exists; database preserved, "
+                "run an explicit reviewed migration"
             )
+        con.executescript(SOURCE_RECORD_MIGRATION_SCHEMA)
+        columns = {
+            row[1] for row in con.execute("PRAGMA table_info(source_record)")
+        }
+        source_fields = (
+            "source_id", "root_key", "relative_path", "absolute_path",
+            "source_system", "kind", "scope", "sensitivity", "status",
+            "first_seen", "last_seen", "extension", "size_bytes", "mtime_ns",
+            "content_sha256", "source_version_id", "date_hint", "classification",
+            "parse_readiness", "extraction_status", "career_value",
+            "operations_value", "duplicate_group_id", "metadata_json",
+        )
+        destination = ", ".join(source_fields)
+        placeholders = ", ".join("?" for _ in source_fields)
+        rows = con.execute("SELECT * FROM source_record").fetchall()
+        for row in rows:
+            values = [row[field] if field in columns else None for field in source_fields]
+            if values[6] is None and values[17] is not None:
+                values[6] = values[17]
+            con.execute(
+                f"INSERT INTO source_record__migration_new ({destination}) "
+                f"VALUES ({placeholders})",
+                values,
+            )
+        con.execute("DROP TABLE source_record")
+        con.execute(
+            "ALTER TABLE source_record__migration_new RENAME TO source_record"
+        )
+        con.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_source_record_source_system
+            ON source_record(source_system);
+            CREATE INDEX IF NOT EXISTS idx_source_record_scope
+            ON source_record(scope);
+            CREATE INDEX IF NOT EXISTS idx_source_record_status
+            ON source_record(status);
+            CREATE INDEX IF NOT EXISTS idx_source_record_kind
+            ON source_record(kind);
+            """
+        )
+
+    if version_needs_rebuild:
+        if _table_exists(con, "source_version__migration_new"):
+            raise RuntimeError(
+                "source_version migration table already exists; database preserved, "
+                "run an explicit reviewed migration"
+            )
+        con.executescript(SOURCE_VERSION_MIGRATION_SCHEMA)
+        columns = {
+            row[1] for row in con.execute("PRAGMA table_info(source_version)")
+        }
+        version_fields = (
+            "source_version_id", "source_id", "content_sha256", "size_bytes",
+            "mtime_ns", "observed_dates", "created_at", "first_seen", "last_seen",
+        )
+        destination = ", ".join(version_fields)
+        placeholders = ", ".join("?" for _ in version_fields)
+        rows = con.execute("SELECT * FROM source_version").fetchall()
+        for row in rows:
+            values = [row[field] if field in columns else None for field in version_fields]
+            if values[6] is None:
+                values[6] = values[7] or now_iso()
+            con.execute(
+                f"INSERT INTO source_version__migration_new ({destination}) "
+                f"VALUES ({placeholders})",
+                values,
+            )
+        con.execute("DROP TABLE source_version")
+        con.execute(
+            "ALTER TABLE source_version__migration_new RENAME TO source_version"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_source_version_source_id "
+            "ON source_version(source_id)"
+        )
+
+
+def _reject_orphaned_legacy_versions(con: sqlite3.Connection) -> None:
+    """Reject orphan source versions before any legacy table rename occurs."""
+    if not _table_exists(con, "source_version"):
+        return
+    source_table = (
+        "source_record" if _table_exists(con, "source_record") else "source_item"
+    )
+    if not _table_exists(con, source_table):
+        raise RuntimeError(
+            "legacy source_version table has no source parent; database preserved, "
+            "run an explicit reviewed migration"
+        )
+    orphan = con.execute(
+        f"""
+        SELECT v.source_version_id
+        FROM source_version v
+        LEFT JOIN "{source_table}" s ON s.source_id=v.source_id
+        WHERE s.source_id IS NULL
+        LIMIT 1
+        """
+    ).fetchone()
+    if orphan is not None:
+        raise RuntimeError(
+            "legacy source_version row has no source parent "
+            f"({orphan['source_version_id']}); database preserved, "
+            "run an explicit reviewed migration"
+        )
 
 
 def _rename_bootstrap_tables(con: sqlite3.Connection) -> None:
@@ -783,13 +964,18 @@ def connect(
         con.execute("PRAGMA foreign_keys=OFF")
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA synchronous=NORMAL")
-        _reject_unsafe_legacy_schema(con)
+        _reject_orphaned_legacy_versions(con)
         _rename_bootstrap_tables(con)
         # Add columns used by CREATE INDEX statements before applying the full
         # schema to a bootstrap database whose tables already exist.
         _migrate_columns(con)
         con.executescript(SCHEMA)
         _migrate_columns(con)
+        # SCHEMA enables foreign keys for normal operation. SQLite requires
+        # them to be disabled while a legacy table is rebuilt, so switch them
+        # off explicitly for that bounded migration step.
+        con.execute("PRAGMA foreign_keys=OFF")
+        _migrate_source_foreign_keys(con)
         _backfill_source_versions(con)
         _migrate_normalized_documents(con)
         mark_noncurrent_normalized_documents_retained(

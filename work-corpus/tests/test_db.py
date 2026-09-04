@@ -180,6 +180,36 @@ def test_unsafe_legacy_schema_fails_closed_without_accepting_orphans(tmp_path):
         check.close()
 
 
+def test_version_only_legacy_state_fails_closed(tmp_path):
+    database = tmp_path / "version-only.sqlite"
+    legacy = sqlite3.connect(database)
+    try:
+        legacy.execute(
+            "CREATE TABLE source_version ("
+            "source_version_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, "
+            "content_sha256 TEXT NOT NULL, size_bytes INTEGER NOT NULL, "
+            "mtime_ns INTEGER NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL)"
+        )
+        legacy.execute(
+            "INSERT INTO source_version VALUES "
+            "('orphan', 'missing-source', 'hash', 1, 1, 'a', 'a')"
+        )
+        legacy.commit()
+    finally:
+        legacy.close()
+
+    with pytest.raises(RuntimeError, match="database preserved"):
+        connect(database)
+
+    check = sqlite3.connect(database)
+    try:
+        assert check.execute(
+            "SELECT COUNT(*) FROM source_version WHERE source_version_id='orphan'"
+        ).fetchone()[0] == 1
+    finally:
+        check.close()
+
+
 def test_deterministic_ids_retain_versions_and_make_reruns_idempotent(tmp_path):
     database = tmp_path / "state.sqlite"
     con = connect(database)
