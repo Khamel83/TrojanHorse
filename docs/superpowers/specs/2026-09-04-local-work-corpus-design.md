@@ -1,6 +1,6 @@
 # Local Work Corpus Design
 
-Status: Draft for adversarial review
+Status: Revised after adversarial review; pending user approval
 
 ## Goal
 
@@ -45,6 +45,10 @@ The system does not read, import, send, modify, archive, label, or delete email.
 
 The system does not modify raw files or write back to Wispr Flow or Granola.
 
+The existing Bridge and Atlas synchronizer is not an implementation dependency.
+It must remain disabled or quarantined before corpus processing begins. It must
+not watch, move, rename, or synchronize files in the corpus.
+
 ## Architecture
 
 The system has four layers.
@@ -56,6 +60,11 @@ The existing `data/` tree is the raw evidence layer.
 The system records every physical file in a source manifest. The manifest stores a stable source ID, relative path, source system, file type, size, hash when safe, dates, scope, sensitivity, and processing status.
 
 The system keeps raw files in place. Derived output uses separate paths.
+
+The source manifest includes discovery evidence such as
+`data/note-inventory-20260903-142816/` so that the physical-file accounting is
+complete. Discovery reports are not note or document evidence. They are
+excluded from source extraction, task extraction, and embedding indexes.
 
 ### 2. Extraction layer
 
@@ -69,7 +78,7 @@ The first source adapters are:
 
 | Source | Current evidence | Extraction behavior |
 |---|---|---|
-| Zoom | 276 dated meeting folders; MP4, M4A, VTT, TXT, `.zoom`, and `.tmp` files | Treat the dated folder as the meeting. Link existing captions first. Transcribe approved final media locally when no usable transcript exists. Hold `.tmp` and unvalidated `.zoom` parts. |
+| Zoom | 276 dated meeting folders; MP4, M4A, VTT, TXT, `.zoom`, and `.tmp` files | Treat the dated folder as the meeting. Link existing captions first. Transcribe approved final media locally when no usable transcript exists. Hold `.tmp` and unvalidated `.zoom` parts. Treat XML/plist-shaped `client_config` files as non-failing metadata, not transcript evidence. |
 | Capacities | 421 Markdown records, 3 category CSV files, and a matching ZIP | Parse Markdown and CSV records. Preserve pointer-only attachment records. Do not fetch signed URLs. |
 | Notion | `LifeOS` ExportBlock with HTML, database CSV files, transcripts, and attachments | Parse HTML and CSV database exports. Link local attachments. Preserve page and database identity. |
 | OneNote | 29 `.one` section files | Use the tested local parser route. Write Markdown or HTML as derived output. Keep the `.one` files as source evidence. |
@@ -93,7 +102,6 @@ Core records are:
 - `organization`
 - `decision`
 - `task`
-- `career_claim`
 - `evidence_record`
 - `review_item`
 - `relationship`
@@ -118,6 +126,10 @@ The query layer uses three local retrieval methods:
 3. Relationship traversal for projects, people, organizations, meetings, decisions, and tasks.
 
 The canonical evidence layer is the source of truth. Search indexes and embeddings are rebuildable outputs.
+
+Career evidence is a derived query view over source-backed documents,
+projects, decisions, outcomes, and tasks. The initial implementation does not
+need a separate `career_claim` entity.
 
 The first implementation should use the existing Python and SQLite direction. A separate graph database is not required. Relationships can be stored in SQLite and exposed as a graph view.
 
@@ -162,7 +174,11 @@ Possible date bases include:
 - Export date.
 - Transcription date.
 
-The current task view uses a 14-day lookback from the source event date.
+The current task view evaluates eligibility against the current run date. A
+source event or meeting date must be within the previous 14 calendar days or
+in the future. Export dates, file modification dates, and transcription dates
+do not make an old source current. A record without a reliable event date does
+not automatically create a current task.
 
 The system creates or updates a task only when the source contains an explicit assignment, promise, deliverable, or follow-up.
 
@@ -210,6 +226,11 @@ Unknown and mixed records stay outside the default work query until classificati
 
 Private signed URLs are treated as sensitive metadata. The system does not fetch or copy them into derived records.
 
+Raw or unreviewed fallback search is allowed only for source records already
+classified as `Work`. It excludes `Personal`, `Mixed`, and `Unknown` records.
+Signed-URL-like strings and other secret-like values are redacted before a
+fallback snippet is returned.
+
 ## Review queues
 
 The system uses review items for unresolved interpretation.
@@ -249,12 +270,15 @@ The answer process is:
 1. Interpret the question.
 2. Apply work scope and date filters.
 3. Search canonical evidence.
-4. Search extracted or raw records when the canonical layer has no answer.
+4. Search extracted or raw records when the canonical layer has no answer, but
+   only within work-classified source records.
 5. Label raw or unreviewed evidence clearly.
 6. Separate facts, inferences, conflicts, and missing evidence.
 7. Return source paths and locations.
 
-The query layer may use raw or unreviewed records for discovery. It must not silently use them to change canonical names, current tasks, or career claims.
+The query layer may use work-classified raw or unreviewed records for
+discovery. It must not silently use them to change canonical names or current
+tasks. It must label the result as raw or unreviewed evidence.
 
 ## Wispr Flow and Granola
 
@@ -305,7 +329,8 @@ The design is complete when the system can demonstrate:
 - Former project names remain linked to one project.
 - Dates retain their source basis.
 - Historical records do not create current tasks.
-- Future and 14-day explicit commitments can create current task records.
+- Future and current-date-minus-14-day explicit commitments can create current
+  task records.
 - Personal and mixed records stay outside the default work query.
 - Duplicate and conflict relationships remain visible.
 - Exact search, local embeddings, and relationship search return source-backed candidates.
@@ -324,4 +349,5 @@ The design is complete when the system can demonstrate:
 - Automatic backfill of historical tasks.
 - Automatic deletion or movement of raw evidence.
 - A separate graph database before the SQLite relationship view proves insufficient.
-- A polished career document generator before the evidence layer is stable.
+- A first-class `career_claim` table or polished career document generator
+  before the evidence layer is stable.
