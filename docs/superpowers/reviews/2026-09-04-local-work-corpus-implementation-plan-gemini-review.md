@@ -23,4 +23,11 @@ REVISE — The plan must include an explicit step to copy the required starting 
 Accepted. The plan now begins with a scaffold-promotion task that copies only
 the package, configuration, and utility starting files required by the local
 runtime. It excludes email modules, email schemas, Outlook scripts, and raw
-data. No other scope was added.
+ data. No other scope was added.
+
+## Follow-up review
+
+The plan was revised again so Task 0 creates a minimal local CLI instead of
+copying the bootstrap CLI, which would import the excluded email module. The
+plan also states that all test commands use `PYTHONPATH=work-corpus/src`.
+Gemini 3.1 Pro should perform one final confirmation after this revision.

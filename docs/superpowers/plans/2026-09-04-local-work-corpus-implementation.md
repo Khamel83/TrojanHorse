@@ -8,6 +8,10 @@
 
 **Tech Stack:** Python 3.9+, the existing `work-corpus/` setuptools package, SQLite with FTS5 and WAL, local filesystem adapters, local PDF/Office/OneNote tools where available, `pytest`, and an optional local transcription engine. No cloud service, network call, Redis, RabbitMQ, read replica, public API, or external model call with raw evidence.
 
+All test commands in this plan run with `PYTHONPATH=work-corpus/src` from the
+repository root. The implementation may later use `python3 -m pip install -e
+work-corpus`, but an editable install is not required for the test gates.
+
 ## Global Constraints
 
 - TrojanHorse is independent from Atlas. The Atlas bridge is not a dependency and must be disabled or quarantined before corpus processing.
@@ -96,7 +100,7 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 - Create: `work-corpus/config.json`
 - Create: `work-corpus/src/work_corpus/__init__.py`
 - Create: `work-corpus/src/work_corpus/__main__.py`
-- Create: `work-corpus/src/work_corpus/cli.py`
+- Create: `work-corpus/src/work_corpus/cli.py` as a minimal safe local CLI entry point
 - Create: `work-corpus/src/work_corpus/config.py`
 - Create: `work-corpus/src/work_corpus/db.py`
 - Create: `work-corpus/src/work_corpus/doctor.py`
@@ -109,20 +113,25 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 - Create: `work-corpus/src/work_corpus/zoom.py`
 - Create: `work-corpus/tests/README.md`
 
-Promote only these files from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/`.
-Do not copy `email_ingest.py`, email schemas, Outlook scripts, email
-requirements, email runbooks, `.pyc` files, or any data. Do not use a wildcard
-copy. The copied `cli.py`, `config.py`, and `db.py` are untrusted candidates
-until Tasks 1 and 3 remove their email and career-claim surfaces.
+Promote only the listed non-CLI files from
+`Omar_Work_Corpus_Bootstrap_v1/work-corpus/`. Create `cli.py` as a minimal
+importable local entry point instead of copying the bootstrap CLI, because the
+bootstrap CLI imports the excluded email module. Do not copy `email_ingest.py`,
+email schemas, Outlook scripts, email requirements, email runbooks, `.pyc`
+files, or any data. Do not use a wildcard copy. The copied `config.py` and
+`db.py` are untrusted candidates until Tasks 1 and 3 remove their email and
+career-claim surfaces.
 
 **Interfaces:**
 
 - The promoted package has the existing `work_corpus` setuptools entry point.
-- `python -m work_corpus --help` is not an acceptance command until Task 1 removes the out-of-scope commands.
+- `PYTHONPATH=work-corpus/src python -m work_corpus --help` imports without an email module and lists only local corpus command names.
 
 - [ ] Create the listed directories with `mkdir -p`.
-- [ ] Copy the listed files one by one from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` into the root `work-corpus/` package. Use the exact paths listed above.
+- [ ] Copy the listed non-CLI files one by one from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` into the root `work-corpus/` package. Use the exact paths listed above.
+- [ ] Create the minimal `cli.py` entry point with `main(argv: Optional[list[str]]) -> int`, an argparse parser, and the local command names `inventory`, `normalize`, `zoom-scan`, `transcribe`, `report`, `query`, and `mcp-import`. It must not import Atlas or email modules.
 - [ ] Confirm that `work-corpus/src/work_corpus/email_ingest.py` and `work-corpus/tests/fixtures/sample.eml` do not exist.
+- [ ] Run `PYTHONPATH=work-corpus/src python -m work_corpus --help` and confirm that it exits 0 without importing email or Atlas.
 - [ ] Confirm that no path under `data/` was read or written by the scaffold operation.
 - [ ] Commit the untrusted scaffold with `git commit -m "chore: promote work corpus package scaffold"`.
 
