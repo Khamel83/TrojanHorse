@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import posixpath
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -243,6 +244,10 @@ class Config:
             precedence = definition.get("precedence")
             if not isinstance(source_system, str) or not source_system:
                 raise ConfigurationError(f"source root {key!r} must define a source system")
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", source_system):
+                raise ConfigurationError(
+                    f"source root {key!r} has an unsafe source system"
+                )
             if not isinstance(precedence, int):
                 raise ConfigurationError(f"source root {key!r} must define precedence")
             enabled = definition.get("enabled", True)
@@ -286,6 +291,10 @@ class Config:
             enabled = value.get("enabled", True)
             if not isinstance(source_system, str) or not source_system:
                 raise ConfigurationError(f"source root {key!r} must define a source system")
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", source_system):
+                raise ConfigurationError(
+                    f"source root {key!r} has an unsafe source system"
+                )
             if not isinstance(precedence, int):
                 raise ConfigurationError(f"source root {key!r} must define precedence")
             if not isinstance(enabled, bool):

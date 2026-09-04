@@ -258,7 +258,9 @@ def _largest(con: sqlite3.Connection, limit: int = 30) -> List[Dict[str, Any]]:
 
 
 def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
-    reports = ensure_dir(config.corpus_dir / "reports")
+    reports = config.corpus_dir / "reports"
+    config.assert_derived_path(reports)
+    reports = ensure_dir(reports)
     coverage = _coverage(con)
     unsupported = _unsupported(con)
     largest = _largest(con)

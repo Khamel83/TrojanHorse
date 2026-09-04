@@ -11,6 +11,8 @@ from work_corpus import cli
 from work_corpus.config import ConfigurationError, load_config
 import work_corpus.inventory as inventory_module
 from work_corpus.db import connect
+from work_corpus.normalize import _output_path
+from work_corpus.report import build_report
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -86,6 +88,30 @@ def test_derived_path_rejects_external_symlink(tmp_path: Path):
 
     with pytest.raises(ConfigurationError, match="derived path"):
         load_config(repository)
+
+
+def test_report_rejects_external_reports_symlink(tmp_path: Path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    config = load_config(repository)
+    config.corpus_dir.mkdir(parents=True)
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    os.symlink(outside_dir, config.corpus_dir / "reports")
+    con = connect(config.state_dir / "report-boundary.sqlite")
+    try:
+        with pytest.raises(ConfigurationError, match="derived path"):
+            build_report(config, con)
+    finally:
+        con.close()
+
+
+def test_normalized_output_slugifies_untrusted_source_system(tmp_path: Path):
+    config = load_config(tmp_path)
+
+    output = _output_path(config, "../../outside", "version")
+
+    assert output == config.corpus_dir / "normalized" / "outside" / "version.md"
 
 
 def test_cli_command_set_has_no_email_or_atlas_command():

@@ -20,12 +20,20 @@ from .util import (
     provenance_header,
     read_text_guess,
     sha256_text,
+    slugify,
     vtt_or_srt_to_markdown,
 )
 
 
 def _output_path(config: Config, source_system: str, source_version_id: str) -> Path:
-    return config.corpus_dir / "normalized" / source_system / f"{source_version_id}.md"
+    output = (
+        config.corpus_dir
+        / "normalized"
+        / slugify(str(source_system))
+        / f"{source_version_id}.md"
+    )
+    config.assert_derived_path(output)
+    return output
 
 
 def _has_explicit_source_root(row: sqlite3.Row) -> bool:
