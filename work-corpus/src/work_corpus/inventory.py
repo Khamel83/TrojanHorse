@@ -144,7 +144,6 @@ def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
 
 
 def inventory(config: Config, con: sqlite3.Connection, full_hash: bool = False) -> Dict[str, object]:
-    ensure_dir(config.data_dir)
     ensure_dir(config.corpus_dir)
     ensure_dir(config.state_dir)
 

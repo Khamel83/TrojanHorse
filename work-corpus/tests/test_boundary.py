@@ -76,6 +76,20 @@ def test_bootstrap_creates_only_derived_directories(tmp_path: Path):
     assert all((config.state_dir / rel).is_dir() for rel in cli.STATE_SUBDIRS)
 
 
+def test_inventory_cli_does_not_create_raw_data_directory(tmp_path: Path):
+    exit_code = cli.main(["--root", str(tmp_path), "inventory"])
+
+    assert exit_code == 0
+    assert not (tmp_path / "data").exists()
+
+
+def test_source_root_rejects_unknown_name_from_synthetic_root(tmp_path: Path):
+    config = load_config(tmp_path)
+
+    with pytest.raises(ConfigurationError, match="unknown source root: missing"):
+        config.source_root("missing")
+
+
 @pytest.mark.parametrize(
     "zoom_config",
     [
