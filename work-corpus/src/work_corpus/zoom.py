@@ -13,6 +13,7 @@ from .util import (
     provenance_header,
     read_text_guess,
     run_command,
+    parse_date_hint,
     stable_id,
     vtt_or_srt_to_markdown,
     write_csv,
@@ -22,6 +23,17 @@ from .util import (
 AUDIO_EXTENSIONS = {".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".opus", ".caf"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
 TRANSCRIPT_EXTENSIONS = {".vtt", ".srt"}
+
+
+def zoom_meeting_folder(relative_path: str) -> Optional[str]:
+    """Return the dated Zoom meeting root for a source path."""
+    parts = Path(relative_path).parts
+    if len(parts) < 3 or parts[0] != "data" or parts[1] != "Zoom":
+        return None
+    folder = parts[2]
+    if not parse_date_hint(folder):
+        return None
+    return f"data/Zoom/{folder}"
 
 
 def _is_transcript_candidate(row: sqlite3.Row) -> bool:
@@ -55,7 +67,12 @@ def zoom_source_is_eligible(
     }
     if (row["classification"] or "Unknown").casefold() in skip_classifications:
         return False
-    if row["status"] != "present" or row["extraction_status"] != "ready":
+    source_status = (
+        row["source_status"]
+        if "source_status" in row.keys()
+        else row["status"]
+    )
+    if source_status != "present" or row["extraction_status"] != "ready":
         return False
     if not row["content_sha256"] or not row["source_version_id"]:
         return False
@@ -74,6 +91,38 @@ def zoom_source_is_eligible(
                 row["content_sha256"],
             ),
         ).fetchone()
+    )
+
+
+def zoom_group_is_eligible(
+    config: Config,
+    con: sqlite3.Connection,
+    folder_relative_path: str,
+) -> bool:
+    """Require every current Zoom content candidate in a meeting to be eligible."""
+    folder = zoom_meeting_folder(folder_relative_path)
+    if folder is None:
+        return False
+    rows = con.execute(
+        """
+        SELECT *
+        FROM source_item
+        WHERE status='present'
+          AND source_system='zoom'
+          AND kind IN ('media','transcript','transcript_candidate',
+                       'meeting_chat','document','structured_text')
+        ORDER BY relative_path
+        """
+    ).fetchall()
+    prefix = folder.rstrip("/") + "/"
+    meeting_rows = [
+        row
+        for row in rows
+        if row["relative_path"] == folder
+        or row["relative_path"].startswith(prefix)
+    ]
+    return bool(meeting_rows) and all(
+        zoom_source_is_eligible(config, con, row) for row in meeting_rows
     )
 
 
@@ -190,7 +239,9 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
 
     groups: Dict[str, List[sqlite3.Row]] = {}
     for row in candidate_rows:
-        folder = str(Path(row["relative_path"]).parent)
+        folder = zoom_meeting_folder(row["relative_path"])
+        if folder is None:
+            continue
         groups.setdefault(folder, []).append(row)
 
     result = {
@@ -218,9 +269,7 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
 
         result["meeting_folders"] += 1
         group_id = stable_id("zoom", folder)
-        blocked = any(
-            not zoom_source_is_eligible(config, con, row) for row in items
-        )
+        blocked = not zoom_group_is_eligible(config, con, folder)
         if blocked:
             chosen_media = max(all_media, key=_media_score) if all_media else None
             chosen_transcript = (

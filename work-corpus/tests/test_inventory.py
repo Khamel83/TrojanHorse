@@ -12,6 +12,7 @@ import zipfile
 import pytest
 
 import work_corpus.inventory as inventory_module
+import work_corpus.transcription as transcription_module
 from work_corpus.config import load_config
 from work_corpus.db import connect
 from work_corpus.normalize import normalize_all
@@ -516,6 +517,94 @@ def test_zoom_scope_gate_blocks_sibling_media_and_pending_job(tmp_path: Path):
     assert tx_result == {"attempted": 0, "complete": 0, "errors": 0}
     assert job["status"] == "needs_review"
     assert job["error"]
+
+
+def test_zoom_meeting_boundary_blocks_nested_personal_sibling(tmp_path: Path):
+    meeting = "data/Zoom/2026-09-03 10.00.00 Team Sync"
+    media_path = tmp_path / meeting / "audio" / "meeting.m4a"
+    transcript_path = tmp_path / meeting / "notes" / "therapy-transcript.vtt"
+    media_path.parent.mkdir(parents=True)
+    transcript_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"synthetic nested media bytes")
+    transcript_path.write_text(
+        "WEBVTT\n\n00:00.000 --> 00:01.000\nPrivate nested session.\n",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "zoom-nested-scope.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        result = scan_zoom(config, con)
+        groups = con.execute(
+            "SELECT folder_relative_path, status FROM zoom_group"
+        ).fetchall()
+        jobs = con.execute(
+            "SELECT status FROM transcription_job"
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert result["meeting_folders"] == 1
+    assert result["queued_for_transcription"] == 0
+    assert len(groups) == 1
+    assert groups[0]["folder_relative_path"] == meeting
+    assert groups[0]["status"] == "needs_review"
+    assert jobs == []
+
+
+def test_transcribe_jobs_processes_eligible_media(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    meeting = "data/Zoom/2026-09-04 11.00.00 Team Sync"
+    media_path = tmp_path / meeting / "meeting.m4a"
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"synthetic eligible media bytes")
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "zoom-positive.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        scan_result = scan_zoom(config, con)
+
+        def fake_engine(_config, _requested):
+            return "custom", ""
+
+        def fake_custom(_config, _media_path, output_stem):
+            vtt_path = Path(str(output_stem) + ".vtt")
+            txt_path = Path(str(output_stem) + ".txt")
+            vtt_path.parent.mkdir(parents=True, exist_ok=True)
+            vtt_path.write_text(
+                "WEBVTT\n\n00:00.000 --> 00:01.000\nSynthetic work meeting.\n",
+                encoding="utf-8",
+            )
+            txt_path.write_text("Synthetic work meeting.\n", encoding="utf-8")
+            return vtt_path, txt_path
+
+        monkeypatch.setattr(
+            transcription_module,
+            "_engine_available",
+            fake_engine,
+        )
+        monkeypatch.setattr(
+            transcription_module,
+            "_transcribe_custom",
+            fake_custom,
+        )
+        tx_result = transcribe_jobs(config, con, requested_engine="custom")
+        job = con.execute(
+            "SELECT status FROM transcription_job"
+        ).fetchone()
+        group = con.execute(
+            "SELECT status, transcript_path FROM zoom_group"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert scan_result["queued_for_transcription"] == 1
+    assert tx_result == {"attempted": 1, "complete": 1, "errors": 0}
+    assert job["status"] == "complete"
+    assert group["status"] == "generated_transcript"
+    assert group["transcript_path"]
 
 
 def test_explicit_scope_override_remains_active(tmp_path: Path):
@@ -1063,6 +1152,119 @@ def test_connect_retains_nonempty_intermediate_legacy_table(tmp_path: Path):
 
     assert legacy["normalized_path"] == str(normalized_path)
     assert legacy["status"] == "normalized"
+
+
+def test_connect_preserves_conflicting_intermediate_legacy_row(tmp_path: Path):
+    database = tmp_path / "intermediate-conflict.sqlite"
+    source_id = "intermediate-conflict-source"
+    content_hash = hashlib.sha256(b"source bytes").hexdigest()
+    version_id = stable_source_version_id(source_id, content_hash)
+    current_path = tmp_path / "current-normalized.md"
+    legacy_path = tmp_path / "legacy-normalized.md"
+    current_path.write_text("current output\n", encoding="utf-8")
+    legacy_path.write_text("legacy output\n", encoding="utf-8")
+
+    con = connect(database)
+    try:
+        con.execute(
+            """
+            INSERT INTO source_item (
+                source_id, relative_path, absolute_path, source_system, kind,
+                extension, size_bytes, mtime_ns, content_sha256,
+                source_version_id, classification, extraction_status,
+                status, first_seen, last_seen, metadata_json
+            ) VALUES (
+                ?, 'data/notes/Notes/conflict.md', '', 'capacities', 'document',
+                '.md', 12, 123, ?, ?, 'Work', 'ready', 'present',
+                '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z', '{}'
+            )
+            """,
+            (source_id, content_hash, version_id),
+        )
+        con.execute(
+            """
+            INSERT INTO source_version (
+                source_version_id, source_id, content_sha256, size_bytes,
+                mtime_ns, first_seen, last_seen
+            ) VALUES (?, ?, ?, 12, 123, '2026-09-04T00:00:00Z',
+                      '2026-09-04T00:00:00Z')
+            """,
+            (version_id, source_id, content_hash),
+        )
+        con.execute(
+            """
+            INSERT INTO normalized_document (
+                source_version_id, source_id, normalized_path, parser,
+                source_mtime_ns, char_count, line_count, content_sha256,
+                status, error, updated_at
+            ) VALUES (?, ?, ?, 'plain_text', 123, 14, 2, ?, 'normalized',
+                      NULL, '2026-09-04T00:00:00Z')
+            """,
+            (
+                version_id,
+                source_id,
+                str(current_path),
+                hashlib.sha256(b"current output\n").hexdigest(),
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    raw = sqlite3.connect(database)
+    try:
+        raw.execute("PRAGMA foreign_keys=ON")
+        raw.execute(
+            """
+            CREATE TABLE normalized_document_legacy (
+                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                normalized_path TEXT,
+                parser TEXT,
+                source_mtime_ns INTEGER,
+                char_count INTEGER,
+                line_count INTEGER,
+                content_sha256 TEXT,
+                status TEXT NOT NULL,
+                error TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO normalized_document_legacy (
+                source_id, normalized_path, parser, source_mtime_ns,
+                char_count, line_count, content_sha256, status, updated_at
+            ) VALUES (?, ?, 'plain_text', 123, 13, 2, ?, 'normalized',
+                      '2026-09-04T00:00:00Z')
+            """,
+            (
+                source_id,
+                str(legacy_path),
+                hashlib.sha256(b"legacy output\n").hexdigest(),
+            ),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    con = connect(database)
+    try:
+        current = con.execute(
+            "SELECT normalized_path FROM normalized_document "
+            "WHERE source_version_id=?",
+            (version_id,),
+        ).fetchone()
+        legacy = con.execute(
+            "SELECT normalized_path FROM normalized_document_legacy "
+            "WHERE source_id=?",
+            (source_id,),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert current["normalized_path"] == str(current_path)
+    assert legacy["normalized_path"] == str(legacy_path)
 
 
 def test_evidence_identity_requires_version_and_locator():

@@ -22,7 +22,7 @@ from .util import (
     run_command,
     vtt_or_srt_to_markdown,
 )
-from .zoom import zoom_source_is_eligible
+from .zoom import zoom_group_is_eligible, zoom_source_is_eligible
 
 
 def _format_vtt_time(seconds: float) -> str:
@@ -324,6 +324,7 @@ def transcribe_jobs(
     for job in candidate_jobs:
         source_eligible = (
             job["group_status"] != "needs_review"
+            and zoom_group_is_eligible(config, con, job["folder_relative_path"])
             and zoom_source_is_eligible(config, con, job)
         )
         if source_eligible:
@@ -358,6 +359,19 @@ def transcribe_jobs(
     model = str(section.get("model", "small.en"))
 
     for job in jobs:
+        if not zoom_group_is_eligible(config, con, job["folder_relative_path"]):
+            con.execute(
+                """
+                UPDATE transcription_job
+                SET status='needs_review',
+                    error='Zoom meeting is no longer currently eligible',
+                    completed_at=?
+                WHERE job_id=?
+                """,
+                (now_iso(), job["job_id"]),
+            )
+            con.commit()
+            continue
         result["attempted"] += 1
         con.execute(
             """

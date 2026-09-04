@@ -379,9 +379,9 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
             + ", ".join(missing_note_sources)
             + "."
         )
-    if not any(row["source_system"] == "inventory" for row in coverage):
+    if not any(row["source_system"] == "inventory_discovery" for row in coverage):
         next_steps.append(
-            "When the separate note-inventory finishes, place its unpacked report folder under `data/inventory/` and rerun."
+            "When the separate note-inventory finishes, place its unpacked report folder under `data/note-inventory-20260903-142816/` and rerun."
         )
     if tx_pending:
         next_steps.append(

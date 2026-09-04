@@ -354,7 +354,7 @@ def _backfill_source_versions(con: sqlite3.Connection) -> None:
 
 
 def _migrate_legacy_normalized_rows(con: sqlite3.Connection) -> None:
-    """Copy hashable legacy rows and retain unhashable rows for review."""
+    """Migrate only provably identical legacy rows and retain conflicts."""
     table = con.execute(
         """
         SELECT name
@@ -382,32 +382,60 @@ def _migrate_legacy_normalized_rows(con: sqlite3.Connection) -> None:
         "updated_at",
     }
     if required <= columns:
-        con.execute(
-            """
-            INSERT INTO normalized_document (
-                source_version_id, source_id, normalized_path, parser,
-                source_mtime_ns, char_count, line_count, content_sha256,
-                status, error, updated_at
-            )
-            SELECT s.source_version_id, n.source_id, n.normalized_path, n.parser,
-                   n.source_mtime_ns, n.char_count, n.line_count,
-                   n.content_sha256, n.status, n.error, n.updated_at
-            FROM normalized_document_legacy n
-            JOIN source_item s ON s.source_id=n.source_id
-            WHERE s.source_version_id IS NOT NULL
-            ON CONFLICT(source_version_id) DO NOTHING
-            """
+        comparison_fields = (
+            "source_id",
+            "normalized_path",
+            "parser",
+            "source_mtime_ns",
+            "char_count",
+            "line_count",
+            "content_sha256",
+            "status",
+            "error",
+            "updated_at",
         )
-        con.execute(
-            """
-            DELETE FROM normalized_document_legacy
-            WHERE source_id IN (
-                SELECT source_id
-                FROM source_item
-                WHERE source_version_id IS NOT NULL
-            )
-            """
-        )
+        for legacy in con.execute(
+            "SELECT * FROM normalized_document_legacy"
+        ).fetchall():
+            source = con.execute(
+                "SELECT source_version_id FROM source_item WHERE source_id=?",
+                (legacy["source_id"],),
+            ).fetchone()
+            if source is None or not source["source_version_id"]:
+                # Without a source version there is no safe current-document key.
+                continue
+
+            source_version_id = source["source_version_id"]
+            current = con.execute(
+                "SELECT * FROM normalized_document WHERE source_version_id=?",
+                (source_version_id,),
+            ).fetchone()
+            if current is None:
+                con.execute(
+                    """
+                    INSERT INTO normalized_document (
+                        source_version_id, source_id, normalized_path, parser,
+                        source_mtime_ns, char_count, line_count, content_sha256,
+                        status, error, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        source_version_id,
+                        *(legacy[field] for field in comparison_fields),
+                    ),
+                )
+                con.execute(
+                    "DELETE FROM normalized_document_legacy WHERE source_id=?",
+                    (legacy["source_id"],),
+                )
+                continue
+
+            if all(current[field] == legacy[field] for field in comparison_fields):
+                con.execute(
+                    "DELETE FROM normalized_document_legacy WHERE source_id=?",
+                    (legacy["source_id"],),
+                )
+            # A differing row is intentionally retained for manual reconciliation.
 
     remaining = con.execute(
         "SELECT 1 FROM normalized_document_legacy LIMIT 1"
