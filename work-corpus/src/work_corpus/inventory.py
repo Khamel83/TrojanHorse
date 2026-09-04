@@ -174,8 +174,6 @@ def classify_scope(relative_path: str, source_system: str) -> ScopeProposal:
     """Return a conservative scope proposal for review and later promotion."""
     if source_system == "inventory_discovery":
         return ScopeProposal("Unknown", "Machine-discovery evidence is accounting-only.")
-    if source_system in TRUSTED_WORK_SYSTEMS:
-        return ScopeProposal("Work", f"The approved {source_system} source is work-scoped.")
 
     low = relative_path.lower().replace("_", " ").replace("-", " ")
     personal_hits = sorted(term for term in PERSONAL_PATH_TERMS if term in low)
@@ -196,6 +194,8 @@ def classify_scope(relative_path: str, source_system: str) -> ScopeProposal:
             "Work",
             "Path contains work indicators: " + ", ".join(work_hits),
         )
+    if source_system in TRUSTED_WORK_SYSTEMS:
+        return ScopeProposal("Work", f"The approved {source_system} source is work-scoped.")
     return ScopeProposal("Unknown", "No approved scope indicator was found in the path.")
 
 
@@ -347,6 +347,126 @@ def _is_finder_metadata(path: Path) -> bool:
     return path.name in FINDER_METADATA_NAMES or path.name.startswith("._")
 
 
+def _rekey_legacy_source(
+    con: sqlite3.Connection,
+    old_source_id: str,
+    new_source_id: str,
+) -> None:
+    """Move bootstrap-era history to the canonical source identity."""
+    if old_source_id == new_source_id:
+        return
+
+    versions = con.execute(
+        """
+        SELECT *
+        FROM source_version
+        WHERE source_id=?
+        ORDER BY first_seen, source_version_id
+        """,
+        (old_source_id,),
+    ).fetchall()
+    for version in versions:
+        canonical_version_id = stable_source_version_id(
+            new_source_id,
+            version["content_sha256"],
+        )
+        if canonical_version_id is None:
+            continue
+        con.execute(
+            """
+            INSERT INTO source_version (
+                source_version_id, source_id, content_sha256, size_bytes,
+                mtime_ns, first_seen, last_seen
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_version_id) DO UPDATE SET
+                size_bytes=excluded.size_bytes,
+                mtime_ns=excluded.mtime_ns,
+                last_seen=excluded.last_seen
+            """,
+            (
+                canonical_version_id,
+                new_source_id,
+                version["content_sha256"],
+                version["size_bytes"],
+                version["mtime_ns"],
+                version["first_seen"],
+                version["last_seen"],
+            ),
+        )
+
+        normalized = con.execute(
+            "SELECT * FROM normalized_document WHERE source_version_id=?",
+            (version["source_version_id"],),
+        ).fetchone()
+        if normalized:
+            target = con.execute(
+                "SELECT 1 FROM normalized_document WHERE source_version_id=?",
+                (canonical_version_id,),
+            ).fetchone()
+            if target is None:
+                con.execute(
+                    """
+                    INSERT INTO normalized_document (
+                        source_version_id, source_id, normalized_path, parser,
+                        source_mtime_ns, char_count, line_count, content_sha256,
+                        status, error, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        canonical_version_id,
+                        new_source_id,
+                        normalized["normalized_path"],
+                        normalized["parser"],
+                        normalized["source_mtime_ns"],
+                        normalized["char_count"],
+                        normalized["line_count"],
+                        normalized["content_sha256"],
+                        normalized["status"],
+                        normalized["error"],
+                        normalized["updated_at"],
+                    ),
+                )
+            con.execute(
+                "DELETE FROM normalized_document WHERE source_version_id=?",
+                (version["source_version_id"],),
+            )
+        con.execute(
+            "DELETE FROM source_version WHERE source_version_id=?",
+            (version["source_version_id"],),
+        )
+
+    # Keep existing relationship rows valid if a bootstrap database contained
+    # Zoom state when the source identity changes.
+    con.execute(
+        "UPDATE zoom_group SET media_source_id=? WHERE media_source_id=?",
+        (new_source_id, old_source_id),
+    )
+    con.execute(
+        "UPDATE zoom_group SET transcript_source_id=? WHERE transcript_source_id=?",
+        (new_source_id, old_source_id),
+    )
+    con.execute(
+        "UPDATE transcription_job SET media_source_id=? WHERE media_source_id=?",
+        (new_source_id, old_source_id),
+    )
+    con.execute(
+        "UPDATE normalized_document SET source_id=? WHERE source_id=?",
+        (new_source_id, old_source_id),
+    )
+
+    canonical_source = con.execute(
+        "SELECT 1 FROM source_item WHERE source_id=?",
+        (new_source_id,),
+    ).fetchone()
+    if canonical_source:
+        con.execute("DELETE FROM source_item WHERE source_id=?", (old_source_id,))
+    else:
+        con.execute(
+            "UPDATE source_item SET source_id=? WHERE source_id=?",
+            (new_source_id, old_source_id),
+        )
+
+
 def inventory(
     config: Config,
     con: sqlite3.Connection,
@@ -462,7 +582,7 @@ def inventory(
             (relative_path,),
         ).fetchone()
         if previous and previous["source_id"] != source_id:
-            con.execute("DELETE FROM source_item WHERE source_id = ?", (previous["source_id"],))
+            _rekey_legacy_source(con, previous["source_id"], source_id)
         first_seen = previous["first_seen"] if previous else scan_time
         con.execute(
             """

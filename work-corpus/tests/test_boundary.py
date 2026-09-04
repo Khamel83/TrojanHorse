@@ -32,7 +32,7 @@ def test_config_resolves_data_and_derived_roots():
     assert config.data_dir == REPOSITORY_ROOT / "data"
     assert config.corpus_dir != config.data_dir
     assert config.state_dir != config.data_dir
-    assert config.source_root("zoom").path == config.data_dir / "zoom"
+    assert config.source_root("zoom").path == config.data_dir / "Zoom"
 
 
 def test_derived_path_rejects_data_child():

@@ -5,7 +5,7 @@
     "state": "work-corpus/state"
   },
   "source_roots": {
-    "zoom": "data/zoom",
+    "zoom": "data/Zoom",
     "notes_onenote": "data/notes/onenote",
     "notes_notion": "data/notes/notion",
     "notes_capacities": "data/notes/capacities",

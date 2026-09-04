@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from .util import ensure_dir, stable_source_version_id
+from .util import ensure_dir, now_iso, stable_source_version_id
 
 
 SCHEMA = r"""
@@ -259,6 +259,9 @@ def mark_noncurrent_normalized_documents_retained(
                 AND s.kind NOT IN (
                     'media', 'email', 'email_data', 'mcp', 'unknown'
                 )
+                AND COALESCE(s.classification, 'Unknown') IN (
+                    'Work', 'likely_work'
+                )
           )
         """,
         (updated_at,),
@@ -352,6 +355,7 @@ def _migrate_normalized_documents(con: sqlite3.Connection) -> None:
         WHERE s.source_version_id IS NOT NULL
         """
     )
+    con.execute("DROP TABLE normalized_document_legacy")
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -379,5 +383,8 @@ def connect(path: Path) -> sqlite3.Connection:
             con.execute(f"ALTER TABLE source_item ADD COLUMN {column} {sql_type}")
     _backfill_source_versions(con)
     _migrate_normalized_documents(con)
+    # Reconcile legacy output before exposing the migrated connection. Legacy
+    # rows did not have the canonical scope and extraction eligibility fields.
+    mark_noncurrent_normalized_documents_retained(con, now_iso())
     con.commit()
     return con

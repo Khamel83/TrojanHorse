@@ -67,6 +67,19 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _legacy_source_id(
+    relative_path: str,
+    size_bytes: int,
+    mtime_ns: int,
+    content_hash: str,
+) -> str:
+    basis = f"{relative_path}\0{size_bytes}\0{mtime_ns}\0{content_hash}"
+    return "src_" + hashlib.blake2b(
+        basis.encode("utf-8"),
+        digest_size=16,
+    ).hexdigest()
+
+
 @pytest.mark.parametrize(
     ("relative_path", "root_key", "source_system", "match_kind"),
     [
@@ -183,10 +196,13 @@ def test_known_roots_precede_overlapping_configured_formal_root(
 
 def test_zoom_example_uses_canonical_path_spelling(tmp_path: Path):
     default_zoom = load_config(tmp_path).source_root("zoom")
+    shipped_path = Path(__file__).parents[1] / "config.json"
     example_path = Path(__file__).parents[1] / "config.local.example.json"
+    shipped = json.loads(shipped_path.read_text(encoding="utf-8"))
     example = json.loads(example_path.read_text(encoding="utf-8"))
 
     assert default_zoom.relative_path == "data/Zoom"
+    assert shipped["source_roots"]["zoom"] == "data/Zoom"
     assert example["source_roots"]["zoom"] == "data/Zoom"
 
 
@@ -393,6 +409,48 @@ def test_shipped_config_keeps_canonical_non_work_scopes_fail_closed(
     )
 
 
+def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
+    relative_path = (
+        "data/Zoom/2026-09-01 09.00.00 Therapy Session/"
+        "therapy-transcript.vtt"
+    )
+    source_path = tmp_path / relative_path
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        "WEBVTT\n\n00:00.000 --> 00:01.000\nSynthetic private session.\n",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "zoom-scope.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        source, metadata = _row(con, relative_path)
+        result = normalize_all(config, con)
+        normalized = con.execute(
+            """
+            SELECT normalized_path, status
+            FROM normalized_document
+            WHERE source_id=?
+            """,
+            (source["source_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert source["source_system"] == "zoom"
+    assert source["classification"] == "Mixed"
+    assert metadata["scope_proposal"] == "Mixed"
+    assert result == {
+        "normalized": 0,
+        "skipped_unchanged": 0,
+        "review_required": 1,
+        "unsupported": 0,
+        "errors": 0,
+    }
+    assert normalized["status"] == "review_required"
+    assert normalized["normalized_path"] is None
+
+
 def test_ineligible_rescan_retires_prior_normalized_output(tmp_path: Path):
     relative_path = "data/notes/Notes/work-project-retrospective.md"
     source_path = tmp_path / relative_path
@@ -524,11 +582,18 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
     tmp_path: Path,
 ):
     database = tmp_path / "legacy.sqlite"
-    source_id = stable_source_id(
-        "capacities_markdown",
-        "data/notes/Notes/legacy.md",
-    )
+    relative_path = "data/notes/Notes/legacy.md"
     content_hash = hashlib.sha256(b"legacy source bytes").hexdigest()
+    source_path = tmp_path / relative_path
+    source_path.parent.mkdir(parents=True)
+    source_path.write_bytes(b"legacy source bytes")
+    os.utime(source_path, ns=(123, 123))
+    source_id = _legacy_source_id(
+        relative_path,
+        source_path.stat().st_size,
+        123,
+        content_hash,
+    )
     expected_version_id = stable_source_version_id(source_id, content_hash)
     normalized_path = tmp_path / "legacy-normalized.md"
     normalized_path.write_text("legacy normalized bytes\n", encoding="utf-8")
@@ -584,10 +649,10 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
             """,
             (
                 source_id,
-                "data/notes/Notes/legacy.md",
-                str(tmp_path / "legacy.md"),
+                relative_path,
+                str(source_path),
                 content_hash,
-                json.dumps({"extraction_status": "ready"}),
+                json.dumps({}),
             ),
         )
         raw.execute(
@@ -615,19 +680,52 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
             row["name"]: row["pk"]
             for row in con.execute("PRAGMA table_info(normalized_document)")
         }
+        config = load_config(tmp_path)
+        inventory_module.inventory(config, con)
+        current_source = con.execute(
+            "SELECT * FROM source_item WHERE relative_path=?",
+            (relative_path,),
+        ).fetchone()
+        current_version = con.execute(
+            "SELECT * FROM source_version WHERE source_id=?",
+            (current_source["source_id"],),
+        ).fetchone()
+        current_normalized = con.execute(
+            "SELECT * FROM normalized_document WHERE source_id=?",
+            (current_source["source_id"],),
+        ).fetchone()
     finally:
         con.close()
 
     assert expected_version_id is not None
     assert source["source_version_id"] == expected_version_id
-    assert source["extraction_status"] == "ready"
+    assert source["extraction_status"] == "inventory_only"
     assert version["source_version_id"] == expected_version_id
     assert version["source_id"] == source_id
     assert normalized["source_version_id"] == expected_version_id
     assert normalized["source_id"] == source_id
     assert normalized["normalized_path"] == str(normalized_path)
+    assert normalized["status"] == "prior_good_retained"
     assert normalized_columns["source_version_id"] == 1
     assert normalized_columns["source_id"] == 0
+
+    canonical_source_id = stable_source_id(
+        "capacities_markdown",
+        relative_path,
+    )
+    canonical_version_id = stable_source_version_id(
+        canonical_source_id,
+        content_hash,
+    )
+    assert current_source["source_id"] == canonical_source_id
+    assert current_source["relative_path"] == relative_path
+    assert current_source["source_version_id"] == canonical_version_id
+    assert current_version["source_version_id"] == canonical_version_id
+    assert current_version["source_id"] == canonical_source_id
+    assert current_normalized["source_version_id"] == canonical_version_id
+    assert current_normalized["source_id"] == canonical_source_id
+    assert current_normalized["normalized_path"] == str(normalized_path)
+    assert current_normalized["status"] == "prior_good_retained"
 
 
 def test_inventory_keeps_discovery_and_finder_metadata_excluded(tmp_path: Path):
