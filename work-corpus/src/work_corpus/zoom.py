@@ -106,7 +106,7 @@ def zoom_group_is_eligible(
     rows = con.execute(
         """
         SELECT *
-        FROM source_item
+        FROM source_record
         WHERE status='present'
           AND source_system='zoom'
           AND kind IN ('media','transcript','transcript_candidate',
@@ -229,7 +229,7 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
     candidate_rows = con.execute(
         """
         SELECT *
-        FROM source_item
+        FROM source_record
         WHERE status='present'
           AND source_system='zoom'
           AND (kind IN ('media','transcript','transcript_candidate','meeting_chat','document','structured_text'))
@@ -279,7 +279,7 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             )
             con.execute(
                 """
-                INSERT INTO zoom_group (
+                INSERT INTO meeting_group (
                     group_id, folder_relative_path, media_source_id,
                     transcript_source_id, transcript_path, status,
                     duration_seconds, updated_at
@@ -329,7 +329,7 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         duration = _duration_seconds(Path(chosen_media["absolute_path"]), ffprobe_command) if chosen_media else None
 
         existing_group = con.execute(
-            "SELECT status, transcript_path FROM zoom_group WHERE group_id = ?",
+            "SELECT status, transcript_path FROM meeting_group WHERE group_id = ?",
             (group_id,),
         ).fetchone()
         generated_path = None
@@ -362,7 +362,7 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
 
         con.execute(
             """
-            INSERT INTO zoom_group (
+            INSERT INTO meeting_group (
                 group_id, folder_relative_path, media_source_id,
                 transcript_source_id, transcript_path, status,
                 duration_seconds, updated_at
@@ -448,8 +448,8 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                g.duration_seconds, j.status, j.engine, j.model, j.error,
                j.output_stem, j.created_at, j.started_at, j.completed_at
         FROM transcription_job j
-        JOIN zoom_group g ON g.group_id = j.group_id
-        JOIN source_item s ON s.source_id = j.media_source_id
+        JOIN meeting_group g ON g.group_id = j.group_id
+        JOIN source_record s ON s.source_id = j.media_source_id
         ORDER BY CASE j.status
             WHEN 'pending' THEN 0
             WHEN 'error' THEN 1
@@ -477,7 +477,7 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             SELECT group_id, folder_relative_path, media_source_id,
                    transcript_source_id, transcript_path, status,
                    duration_seconds, updated_at
-            FROM zoom_group
+            FROM meeting_group
             ORDER BY folder_relative_path
             """
         )

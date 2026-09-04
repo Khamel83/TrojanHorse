@@ -339,7 +339,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
     eligible = con.execute(
         """
         SELECT s.*
-        FROM source_item s
+        FROM source_record s
         WHERE s.status = 'present'
           AND s.extraction_status = 'ready'
           AND s.content_sha256 IS NOT NULL

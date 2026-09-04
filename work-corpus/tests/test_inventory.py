@@ -59,7 +59,7 @@ def _scope_classifier():
 
 def _row(con: sqlite3.Connection, relative_path: str) -> tuple[sqlite3.Row, dict]:
     row = con.execute(
-        "SELECT * FROM source_item WHERE relative_path=?",
+        "SELECT * FROM source_record WHERE relative_path=?",
         (relative_path,),
     ).fetchone()
     assert row is not None, f"manifest row not found: {relative_path}"
@@ -475,8 +475,8 @@ def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
             """,
             (source["source_id"],),
         ).fetchone()
-        zoom_group = con.execute(
-            "SELECT status FROM zoom_group"
+        meeting_group = con.execute(
+            "SELECT status FROM meeting_group"
         ).fetchone()
     finally:
         con.close()
@@ -494,7 +494,7 @@ def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
     assert zoom_result["meeting_folders"] == 1
     assert zoom_result["with_existing_transcript"] == 0
     assert zoom_result["queued_for_transcription"] == 0
-    assert zoom_group["status"] == "needs_review"
+    assert meeting_group["status"] == "needs_review"
     assert normalized["status"] == "review_required"
     assert normalized["normalized_path"] is None
     assert not list((config.corpus_dir / "transcripts" / "zoom").rglob("*.md"))
@@ -518,7 +518,7 @@ def test_zoom_scope_gate_blocks_sibling_media_and_pending_job(tmp_path: Path):
         scan_result = scan_zoom(config, con)
         group = con.execute(
             "SELECT group_id, status, media_source_id, transcript_source_id "
-            "FROM zoom_group"
+            "FROM meeting_group"
         ).fetchone()
         job_id = "synthetic-pending-job"
         con.execute(
@@ -572,7 +572,7 @@ def test_zoom_meeting_boundary_blocks_nested_personal_sibling(tmp_path: Path):
         inventory_module.inventory(config, con)
         result = scan_zoom(config, con)
         groups = con.execute(
-            "SELECT folder_relative_path, status FROM zoom_group"
+            "SELECT folder_relative_path, status FROM meeting_group"
         ).fetchall()
         jobs = con.execute(
             "SELECT status FROM transcription_job"
@@ -631,7 +631,7 @@ def test_transcribe_jobs_processes_eligible_media(
             "SELECT status FROM transcription_job"
         ).fetchone()
         group = con.execute(
-            "SELECT status, transcript_path FROM zoom_group"
+            "SELECT status, transcript_path FROM meeting_group"
         ).fetchone()
     finally:
         con.close()
@@ -793,7 +793,7 @@ def test_normalization_excludes_non_evidence_and_unhashed_inventory_rows(
     try:
         inventory_module.inventory(config, con)
         rows = con.execute(
-            "SELECT source_id, relative_path, content_sha256, metadata_json FROM source_item"
+            "SELECT source_id, relative_path, content_sha256, metadata_json FROM source_record"
         ).fetchall()
         blocked = {
             row["source_id"]: json.loads(row["metadata_json"])["extraction_status"]
@@ -843,7 +843,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
     try:
         raw.executescript(
             """
-            CREATE TABLE source_item (
+            CREATE TABLE source_record (
                 source_id TEXT PRIMARY KEY,
                 relative_path TEXT NOT NULL UNIQUE,
                 absolute_path TEXT NOT NULL,
@@ -866,7 +866,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
                 metadata_json TEXT
             );
             CREATE TABLE normalized_document (
-                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                source_id TEXT PRIMARY KEY REFERENCES source_record(source_id),
                 normalized_path TEXT,
                 parser TEXT,
                 source_mtime_ns INTEGER,
@@ -881,7 +881,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
         )
         raw.execute(
             """
-            INSERT INTO source_item (
+            INSERT INTO source_record (
                 source_id, relative_path, absolute_path, source_system, kind,
                 extension, size_bytes, mtime_ns, content_sha256,
                 classification, status, first_seen, last_seen, metadata_json
@@ -914,7 +914,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
     con = connect(database)
     try:
         source = con.execute(
-            "SELECT source_version_id, extraction_status FROM source_item"
+            "SELECT source_version_id, extraction_status FROM source_record"
         ).fetchone()
         version = con.execute("SELECT * FROM source_version").fetchone()
         normalized = con.execute("SELECT * FROM normalized_document").fetchone()
@@ -924,7 +924,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
         }
         con.execute(
             """
-            INSERT INTO zoom_group (
+            INSERT INTO meeting_group (
                 group_id, folder_relative_path, media_source_id,
                 transcript_source_id, transcript_path, status,
                 duration_seconds, updated_at
@@ -951,7 +951,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
         config = load_config(tmp_path)
         inventory_module.inventory(config, con)
         current_source = con.execute(
-            "SELECT * FROM source_item WHERE relative_path=?",
+            "SELECT * FROM source_record WHERE relative_path=?",
             (relative_path,),
         ).fetchone()
         current_version = con.execute(
@@ -963,7 +963,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
             (current_source["source_id"],),
         ).fetchone()
         zoom_group_refs = con.execute(
-            "SELECT media_source_id, transcript_source_id FROM zoom_group "
+            "SELECT media_source_id, transcript_source_id FROM meeting_group "
             "WHERE group_id='legacy-group'"
         ).fetchone()
         transcription_ref = con.execute(
@@ -1017,7 +1017,7 @@ def test_connect_drops_obsolete_intermediate_legacy_table(tmp_path: Path):
         raw.execute("PRAGMA foreign_keys=ON")
         raw.execute(
             "CREATE TABLE normalized_document_legacy ("
-            "source_id TEXT PRIMARY KEY REFERENCES source_item(source_id))"
+            "source_id TEXT PRIMARY KEY REFERENCES source_record(source_id))"
         )
         raw.commit()
     finally:
@@ -1043,7 +1043,7 @@ def test_connect_preserves_hashless_legacy_normalized_output(tmp_path: Path):
     try:
         raw.executescript(
             """
-            CREATE TABLE source_item (
+            CREATE TABLE source_record (
                 source_id TEXT PRIMARY KEY,
                 relative_path TEXT NOT NULL UNIQUE,
                 absolute_path TEXT NOT NULL,
@@ -1066,7 +1066,7 @@ def test_connect_preserves_hashless_legacy_normalized_output(tmp_path: Path):
                 metadata_json TEXT
             );
             CREATE TABLE normalized_document (
-                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                source_id TEXT PRIMARY KEY REFERENCES source_record(source_id),
                 normalized_path TEXT,
                 parser TEXT,
                 source_mtime_ns INTEGER,
@@ -1081,7 +1081,7 @@ def test_connect_preserves_hashless_legacy_normalized_output(tmp_path: Path):
         )
         raw.execute(
             """
-            INSERT INTO source_item (
+            INSERT INTO source_record (
                 source_id, relative_path, absolute_path, source_system, kind,
                 extension, size_bytes, mtime_ns, classification,
                 status, first_seen, last_seen, metadata_json
@@ -1136,7 +1136,7 @@ def test_connect_retains_nonempty_intermediate_legacy_table(tmp_path: Path):
         raw.execute("PRAGMA foreign_keys=ON")
         raw.execute(
             """
-            INSERT INTO source_item (
+            INSERT INTO source_record (
                 source_id, relative_path, absolute_path, source_system, kind,
                 extension, size_bytes, mtime_ns, status, first_seen, last_seen
             ) VALUES (
@@ -1149,7 +1149,7 @@ def test_connect_retains_nonempty_intermediate_legacy_table(tmp_path: Path):
         raw.execute(
             """
             CREATE TABLE normalized_document_legacy (
-                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                source_id TEXT PRIMARY KEY REFERENCES source_record(source_id),
                 normalized_path TEXT,
                 parser TEXT,
                 source_mtime_ns INTEGER,
@@ -1204,7 +1204,7 @@ def test_connect_preserves_conflicting_intermediate_legacy_row(tmp_path: Path):
     try:
         con.execute(
             """
-            INSERT INTO source_item (
+            INSERT INTO source_record (
                 source_id, relative_path, absolute_path, source_system, kind,
                 extension, size_bytes, mtime_ns, content_sha256,
                 source_version_id, classification, extraction_status,
@@ -1253,7 +1253,7 @@ def test_connect_preserves_conflicting_intermediate_legacy_row(tmp_path: Path):
         raw.execute(
             """
             CREATE TABLE normalized_document_legacy (
-                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                source_id TEXT PRIMARY KEY REFERENCES source_record(source_id),
                 normalized_path TEXT,
                 parser TEXT,
                 source_mtime_ns INTEGER,
@@ -1331,7 +1331,7 @@ def test_rekey_preserves_conflicting_normalized_output(tmp_path: Path):
         ):
             con.execute(
                 """
-                INSERT INTO source_item (
+                INSERT INTO source_record (
                     source_id, relative_path, absolute_path, source_system, kind,
                     extension, size_bytes, mtime_ns, content_sha256,
                     source_version_id, classification, extraction_status, status,
@@ -1460,7 +1460,7 @@ def test_matching_archives_are_accounted_without_semantic_duplication(tmp_path: 
             f"data/notes/{NOTION_EXPORT}.zip",
         )
         source_row_count = con.execute(
-            "SELECT COUNT(*) FROM source_item WHERE status='present'"
+            "SELECT COUNT(*) FROM source_record WHERE status='present'"
         ).fetchone()[0]
     finally:
         con.close()

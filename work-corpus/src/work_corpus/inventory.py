@@ -329,7 +329,7 @@ def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
                parse_readiness, extraction_status, career_value,
                operations_value, duplicate_group_id, status, first_seen,
                last_seen, metadata_json
-        FROM source_item
+        FROM source_record
         ORDER BY source_system, relative_path
     """
     output: List[Dict[str, object]] = []
@@ -438,6 +438,43 @@ def _rekey_legacy_source(
     if old_source_id == new_source_id:
         return
 
+    canonical_source = con.execute(
+        "SELECT 1 FROM source_record WHERE source_id=?",
+        (new_source_id,),
+    ).fetchone()
+    if not canonical_source:
+        old_source = con.execute(
+            "SELECT * FROM source_record WHERE source_id=?",
+            (old_source_id,),
+        ).fetchone()
+        if old_source is not None:
+            temporary_path = f"__legacy_rekey__/{old_source_id}"
+            con.execute(
+                "UPDATE source_record SET relative_path=? WHERE source_id=?",
+                (temporary_path, old_source_id),
+            )
+            con.execute(
+                """
+                INSERT INTO source_record (
+                    source_id, root_key, relative_path, absolute_path,
+                    source_system, kind, scope, extension, size_bytes, mtime_ns,
+                    content_sha256, source_version_id, date_hint, classification,
+                    sensitivity, parse_readiness, extraction_status, career_value,
+                    operations_value, duplicate_group_id, status, first_seen,
+                    last_seen, metadata_json
+                )
+                SELECT ?, root_key, ?, absolute_path, source_system, kind, scope,
+                       extension, size_bytes, mtime_ns, content_sha256,
+                       source_version_id, date_hint, classification, sensitivity,
+                       parse_readiness, extraction_status, career_value,
+                       operations_value, duplicate_group_id, status, first_seen,
+                       last_seen, metadata_json
+                FROM source_record
+                WHERE source_id=?
+                """,
+                (new_source_id, old_source["relative_path"], old_source_id),
+            )
+
     versions = con.execute(
         """
         SELECT *
@@ -538,52 +575,15 @@ def _rekey_legacy_source(
             (version["source_version_id"],),
         )
 
-    canonical_source = con.execute(
-        "SELECT 1 FROM source_item WHERE source_id=?",
-        (new_source_id,),
-    ).fetchone()
-    if not canonical_source:
-        old_source = con.execute(
-            "SELECT * FROM source_item WHERE source_id=?",
-            (old_source_id,),
-        ).fetchone()
-        if old_source is not None:
-            temporary_path = f"__legacy_rekey__/{old_source_id}"
-            con.execute(
-                "UPDATE source_item SET relative_path=? WHERE source_id=?",
-                (temporary_path, old_source_id),
-            )
-            con.execute(
-                """
-                INSERT INTO source_item (
-                    source_id, relative_path, absolute_path, source_system,
-                    kind, extension, size_bytes, mtime_ns, content_sha256,
-                    source_version_id, date_hint, classification, sensitivity,
-                    parse_readiness, extraction_status, career_value,
-                    operations_value, duplicate_group_id, status, first_seen,
-                    last_seen, metadata_json
-                )
-                SELECT ?, ?, absolute_path, source_system, kind, extension,
-                       size_bytes, mtime_ns, content_sha256, source_version_id,
-                       date_hint, classification, sensitivity, parse_readiness,
-                       extraction_status, career_value, operations_value,
-                       duplicate_group_id, status, first_seen, last_seen,
-                       metadata_json
-                FROM source_item
-                WHERE source_id=?
-                """,
-                (new_source_id, old_source["relative_path"], old_source_id),
-            )
-
     # Keep existing relationship rows valid if a bootstrap database contained
     # Zoom state when the source identity changes. The canonical parent exists
     # before these foreign-key updates.
     con.execute(
-        "UPDATE zoom_group SET media_source_id=? WHERE media_source_id=?",
+        "UPDATE meeting_group SET media_source_id=? WHERE media_source_id=?",
         (new_source_id, old_source_id),
     )
     con.execute(
-        "UPDATE zoom_group SET transcript_source_id=? WHERE transcript_source_id=?",
+        "UPDATE meeting_group SET transcript_source_id=? WHERE transcript_source_id=?",
         (new_source_id, old_source_id),
     )
     con.execute(
@@ -608,9 +608,9 @@ def _rekey_legacy_source(
         )
 
     if canonical_source:
-        con.execute("DELETE FROM source_item WHERE source_id=?", (old_source_id,))
+        con.execute("DELETE FROM source_record WHERE source_id=?", (old_source_id,))
     else:
-        con.execute("DELETE FROM source_item WHERE source_id=?", (old_source_id,))
+        con.execute("DELETE FROM source_record WHERE source_id=?", (old_source_id,))
 
 
 def inventory(
@@ -621,6 +621,32 @@ def inventory(
 ) -> InventoryResult:
     ensure_dir(config.corpus_dir)
     ensure_dir(config.state_dir)
+
+    registry_time = now_iso()
+    for source_root in config.source_roots:
+        con.execute(
+            """
+            INSERT INTO source_root (
+                root_key, relative_path, source_system, precedence, enabled,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(root_key) DO UPDATE SET
+                relative_path=excluded.relative_path,
+                source_system=excluded.source_system,
+                precedence=excluded.precedence,
+                enabled=excluded.enabled,
+                updated_at=excluded.updated_at
+            """,
+            (
+                source_root.key,
+                source_root.relative_path,
+                source_root.source_system,
+                source_root.precedence,
+                int(source_root.enabled),
+                registry_time,
+                registry_time,
+            ),
+        )
 
     ignore = set(config.get("inventory", "ignore_directories", []))
     follow_symlinks = bool(config.get("inventory", "follow_directory_symlinks", False))
@@ -724,7 +750,7 @@ def inventory(
         }
 
         previous = con.execute(
-            "SELECT source_id, first_seen FROM source_item WHERE relative_path = ?",
+            "SELECT source_id, first_seen FROM source_record WHERE relative_path = ?",
             (relative_path,),
         ).fetchone()
         if previous and previous["source_id"] != source_id:
@@ -732,21 +758,23 @@ def inventory(
         first_seen = previous["first_seen"] if previous else scan_time
         con.execute(
             """
-            INSERT INTO source_item (
-                source_id, relative_path, absolute_path, source_system, kind,
-                extension, size_bytes, mtime_ns, content_sha256,
+            INSERT INTO source_record (
+                source_id, root_key, relative_path, absolute_path, source_system,
+                kind, scope, extension, size_bytes, mtime_ns, content_sha256,
                 source_version_id, date_hint, classification, sensitivity,
                 parse_readiness, extraction_status, career_value,
                 operations_value, duplicate_group_id,
                 status, first_seen, last_seen, metadata_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL,
-                    'present', ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    NULL, 'present', ?, ?, ?)
             ON CONFLICT(relative_path) DO UPDATE SET
                 source_id = excluded.source_id,
+                root_key = excluded.root_key,
                 absolute_path = excluded.absolute_path,
                 source_system = excluded.source_system,
                 kind = excluded.kind,
+                scope = excluded.scope,
                 extension = excluded.extension,
                 size_bytes = excluded.size_bytes,
                 mtime_ns = excluded.mtime_ns,
@@ -765,10 +793,12 @@ def inventory(
             """,
             (
                 source_id,
+                source_root_key if match.root else None,
                 relative_path,
                 str(path.resolve(strict=False)),
                 source_system,
                 kind,
+                scope.scope,
                 extension,
                 stat.st_size,
                 stat.st_mtime_ns,
@@ -810,11 +840,11 @@ def inventory(
             )
         total_bytes += stat.st_size
 
-    existing = con.execute("SELECT relative_path FROM source_item").fetchall()
+    existing = con.execute("SELECT relative_path FROM source_record").fetchall()
     for row in existing:
         if row["relative_path"] not in seen_paths:
             con.execute(
-                "UPDATE source_item SET status = 'missing', last_seen = ? WHERE relative_path = ?",
+                "UPDATE source_record SET status = 'missing', last_seen = ? WHERE relative_path = ?",
                 (scan_time, row["relative_path"]),
             )
 
@@ -828,11 +858,11 @@ def inventory(
         ),
     )
 
-    con.execute("UPDATE source_item SET duplicate_group_id=NULL WHERE status='present'")
+    con.execute("UPDATE source_record SET duplicate_group_id=NULL WHERE status='present'")
     duplicate_hashes = con.execute(
         """
         SELECT content_sha256
-        FROM source_item
+        FROM source_record
         WHERE status='present' AND content_sha256 IS NOT NULL AND content_sha256<>''
         GROUP BY content_sha256
         HAVING COUNT(*) > 1
@@ -841,7 +871,7 @@ def inventory(
     for duplicate in duplicate_hashes:
         digest = duplicate[0]
         con.execute(
-            "UPDATE source_item SET duplicate_group_id=? WHERE status='present' AND content_sha256=?",
+            "UPDATE source_record SET duplicate_group_id=? WHERE status='present' AND content_sha256=?",
             ("dup_" + digest[:16], digest),
         )
 

@@ -117,24 +117,24 @@ def _scalar(con: sqlite3.Connection, query: str, params: tuple = ()) -> int:
 def _coverage(con: sqlite3.Connection) -> List[Dict[str, Any]]:
     rows = []
     systems = [row[0] for row in con.execute(
-        "SELECT DISTINCT source_system FROM source_item WHERE status='present' ORDER BY source_system"
+        "SELECT DISTINCT source_system FROM source_record WHERE status='present' ORDER BY source_system"
     )]
     for system in systems:
         count = _scalar(
             con,
-            "SELECT COUNT(*) FROM source_item WHERE status='present' AND source_system=?",
+            "SELECT COUNT(*) FROM source_record WHERE status='present' AND source_system=?",
             (system,),
         )
         total = _scalar(
             con,
-            "SELECT COALESCE(SUM(size_bytes),0) FROM source_item WHERE status='present' AND source_system=?",
+            "SELECT COALESCE(SUM(size_bytes),0) FROM source_record WHERE status='present' AND source_system=?",
             (system,),
         )
         dates = [
             row[0]
             for row in con.execute(
                 """
-                SELECT date_hint FROM source_item
+                SELECT date_hint FROM source_record
                 WHERE status='present' AND source_system=? AND date_hint IS NOT NULL AND date_hint<>''
                 ORDER BY date_hint
                 """,
@@ -158,7 +158,7 @@ def _unsupported(con: sqlite3.Connection) -> List[Dict[str, Any]]:
         """
         SELECT s.source_system, s.extension, n.status, n.error, COUNT(*) AS count
         FROM normalized_document n
-        JOIN source_item s ON s.source_id=n.source_id
+        JOIN source_record s ON s.source_id=n.source_id
         WHERE n.status IN ('unsupported','error')
         GROUP BY s.source_system, s.extension, n.status, n.error
         ORDER BY count DESC, s.source_system, s.extension
@@ -176,7 +176,7 @@ def _duplicates(con: sqlite3.Connection) -> List[Dict[str, Any]]:
             SELECT duplicate_group_id, content_sha256, COUNT(*) AS file_count,
                    SUM(size_bytes) AS total_bytes,
                    GROUP_CONCAT(relative_path, ' | ') AS paths
-            FROM source_item
+            FROM source_record
             WHERE status='present' AND duplicate_group_id IS NOT NULL
             GROUP BY duplicate_group_id, content_sha256
             ORDER BY file_count DESC, duplicate_group_id
@@ -201,7 +201,7 @@ def _version_family_key(relative_path: str) -> str:
 def _version_families(con: sqlite3.Connection) -> List[Dict[str, Any]]:
     groups: Dict[tuple, List[str]] = defaultdict(list)
     for row in con.execute(
-        "SELECT source_system, relative_path FROM source_item WHERE status='present'"
+        "SELECT source_system, relative_path FROM source_record WHERE status='present'"
     ):
         key = _version_family_key(row["relative_path"])
         if key:
@@ -226,7 +226,7 @@ def _sensitive_review(con: sqlite3.Connection) -> List[Dict[str, Any]]:
             """
             SELECT source_id, relative_path, source_system, classification,
                    sensitivity, parse_readiness, career_value, operations_value
-            FROM source_item
+            FROM source_record
             WHERE status='present'
               AND (
                   classification IN (
@@ -247,7 +247,7 @@ def _largest(con: sqlite3.Connection, limit: int = 30) -> List[Dict[str, Any]]:
         for row in con.execute(
             """
             SELECT relative_path, source_system, kind, extension, size_bytes
-            FROM source_item
+            FROM source_record
             WHERE status='present'
             ORDER BY size_bytes DESC
             LIMIT ?
@@ -268,17 +268,16 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     version_families = _version_families(con)
     sensitive_review = _sensitive_review(con)
 
-    source_count = _scalar(con, "SELECT COUNT(*) FROM source_item WHERE status='present'")
-    source_bytes = _scalar(con, "SELECT COALESCE(SUM(size_bytes),0) FROM source_item WHERE status='present'")
+    source_count = _scalar(con, "SELECT COUNT(*) FROM source_record WHERE status='present'")
+    source_bytes = _scalar(con, "SELECT COALESCE(SUM(size_bytes),0) FROM source_record WHERE status='present'")
     normalized = _scalar(con, "SELECT COUNT(*) FROM normalized_document WHERE status='normalized'")
     normalize_errors = _scalar(con, "SELECT COUNT(*) FROM normalized_document WHERE status='error'")
     normalize_unsupported = _scalar(con, "SELECT COUNT(*) FROM normalized_document WHERE status='unsupported'")
-    email_count = _scalar(con, "SELECT COUNT(*) FROM email_message")
     mcp_count = _scalar(con, "SELECT COUNT(*) FROM mcp_item")
-    zoom_total = _scalar(con, "SELECT COUNT(*) FROM zoom_group")
-    zoom_existing = _scalar(con, "SELECT COUNT(*) FROM zoom_group WHERE status='existing_transcript'")
-    zoom_generated = _scalar(con, "SELECT COUNT(*) FROM zoom_group WHERE status='generated_transcript'")
-    zoom_missing = _scalar(con, "SELECT COUNT(*) FROM zoom_group WHERE status='needs_transcription'")
+    zoom_total = _scalar(con, "SELECT COUNT(*) FROM meeting_group")
+    zoom_existing = _scalar(con, "SELECT COUNT(*) FROM meeting_group WHERE status='existing_transcript'")
+    zoom_generated = _scalar(con, "SELECT COUNT(*) FROM meeting_group WHERE status='generated_transcript'")
+    zoom_missing = _scalar(con, "SELECT COUNT(*) FROM meeting_group WHERE status='needs_transcription'")
     tx_pending = _scalar(con, "SELECT COUNT(*) FROM transcription_job WHERE status='pending'")
     tx_errors = _scalar(con, "SELECT COUNT(*) FROM transcription_job WHERE status='error'")
 
@@ -290,7 +289,6 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "normalized_documents": normalized,
         "normalization_errors": normalize_errors,
         "normalization_unsupported": normalize_unsupported,
-        "email_messages": email_count,
         "mcp_items": mcp_count,
         "zoom_meeting_folders": zoom_total,
         "zoom_existing_transcripts": zoom_existing,

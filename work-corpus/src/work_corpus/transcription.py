@@ -314,8 +314,8 @@ def transcribe_jobs(
                s.extraction_status, s.content_sha256, s.source_version_id,
                s.classification, s.kind
         FROM transcription_job j
-        JOIN zoom_group g ON g.group_id = j.group_id
-        JOIN source_item s ON s.source_id = j.media_source_id
+        JOIN meeting_group g ON g.group_id = j.group_id
+        JOIN source_record s ON s.source_id = j.media_source_id
         WHERE j.status IN ({placeholders})
         ORDER BY COALESCE(g.duration_seconds, 999999999), g.folder_relative_path
     """
@@ -399,8 +399,8 @@ def transcribe_jobs(
             else:
                 raise RuntimeError(f"unsupported engine: {engine}")
 
-            group_row = con.execute("SELECT * FROM zoom_group WHERE group_id=?", (job["group_id"],)).fetchone()
-            media_row = con.execute("SELECT * FROM source_item WHERE source_id=?", (job["media_source_id"],)).fetchone()
+            group_row = con.execute("SELECT * FROM meeting_group WHERE group_id=?", (job["group_id"],)).fetchone()
+            media_row = con.execute("SELECT * FROM source_record WHERE source_id=?", (job["media_source_id"],)).fetchone()
             markdown_path = _create_markdown(config, media_row, group_row, vtt_path, txt_path, engine, model)
 
             con.execute(
@@ -413,7 +413,7 @@ def transcribe_jobs(
             )
             con.execute(
                 """
-                UPDATE zoom_group
+                UPDATE meeting_group
                 SET status='generated_transcript', transcript_path=?, updated_at=?
                 WHERE group_id=?
                 """,

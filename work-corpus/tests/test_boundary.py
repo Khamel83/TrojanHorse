@@ -167,7 +167,7 @@ def test_inventory_does_not_follow_external_directory_symlink(tmp_path: Path):
     con = connect(config.state_dir / "symlink.sqlite")
     try:
         inventory_module.inventory(config, con)
-        rows = con.execute("SELECT relative_path FROM source_item").fetchall()
+        rows = con.execute("SELECT relative_path FROM source_record").fetchall()
     finally:
         con.close()
 

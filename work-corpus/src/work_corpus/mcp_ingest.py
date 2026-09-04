@@ -79,7 +79,7 @@ def ingest_mcp_sources(config: Config, con: sqlite3.Connection) -> Dict[str, int
     rows = con.execute(
         """
         SELECT *
-        FROM source_item
+        FROM source_record
         WHERE status='present'
           AND source_system IN ('granola', 'wispr_flow')
           AND extension IN ('.json','.jsonl','.md','.markdown','.txt')
