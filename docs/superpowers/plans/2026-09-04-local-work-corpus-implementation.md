@@ -37,7 +37,7 @@ The root repository is a legacy baseline, not a working implementation of this c
 - The root `tests/` directory contains tests for removed modules and must not be used as evidence that the new corpus is tested.
 - `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` already contains a separate package, schema candidate, local inventory, normalization, Zoom, transcription, report, and MCP-ingest code. It also contains email-specific code and a first-class `career_claim` table. Those parts are reference material only and require the changes below.
 
-The new runtime remains in `work-corpus/` so it can reuse its existing package layout without silently replacing the legacy root package. The first implementation does not modify the raw data or copy the entire bootstrap package blindly.
+The new runtime will be promoted into a root `work-corpus/` package so it can reuse the bootstrap package layout without silently replacing the legacy root package. The first implementation does not modify the raw data or copy the entire bootstrap package blindly. The promoted scaffold is not runnable until the local boundary task removes its out-of-scope surfaces.
 
 ### Planned file map
 
@@ -87,6 +87,44 @@ class SourceRootMatch:
 would allow an adapter to bypass the explicit-root registry.
 
 The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email commands in `cli.py`, email schemas, Outlook scripts, and email runbooks are not in the planned runtime. The bootstrap `career_claim` schema is not carried into the initial database.
+
+## Task 0: Promote the reviewed bootstrap scaffold
+
+**Files:**
+
+- Create: `work-corpus/pyproject.toml`
+- Create: `work-corpus/config.json`
+- Create: `work-corpus/src/work_corpus/__init__.py`
+- Create: `work-corpus/src/work_corpus/__main__.py`
+- Create: `work-corpus/src/work_corpus/cli.py`
+- Create: `work-corpus/src/work_corpus/config.py`
+- Create: `work-corpus/src/work_corpus/db.py`
+- Create: `work-corpus/src/work_corpus/doctor.py`
+- Create: `work-corpus/src/work_corpus/inventory.py`
+- Create: `work-corpus/src/work_corpus/mcp_ingest.py`
+- Create: `work-corpus/src/work_corpus/normalize.py`
+- Create: `work-corpus/src/work_corpus/report.py`
+- Create: `work-corpus/src/work_corpus/transcription.py`
+- Create: `work-corpus/src/work_corpus/util.py`
+- Create: `work-corpus/src/work_corpus/zoom.py`
+- Create: `work-corpus/tests/README.md`
+
+Promote only these files from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/`.
+Do not copy `email_ingest.py`, email schemas, Outlook scripts, email
+requirements, email runbooks, `.pyc` files, or any data. Do not use a wildcard
+copy. The copied `cli.py`, `config.py`, and `db.py` are untrusted candidates
+until Tasks 1 and 3 remove their email and career-claim surfaces.
+
+**Interfaces:**
+
+- The promoted package has the existing `work_corpus` setuptools entry point.
+- `python -m work_corpus --help` is not an acceptance command until Task 1 removes the out-of-scope commands.
+
+- [ ] Create the listed directories with `mkdir -p`.
+- [ ] Copy the listed files one by one from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` into the root `work-corpus/` package. Use the exact paths listed above.
+- [ ] Confirm that `work-corpus/src/work_corpus/email_ingest.py` and `work-corpus/tests/fixtures/sample.eml` do not exist.
+- [ ] Confirm that no path under `data/` was read or written by the scaffold operation.
+- [ ] Commit the untrusted scaffold with `git commit -m "chore: promote work corpus package scaffold"`.
 
 ## Task 1: Lock the local boundary and package entry point
 
