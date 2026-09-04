@@ -114,7 +114,11 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("zoom-scan", help="Detect existing Zoom transcripts and queue missing ones.")
 
     tx = sub.add_parser("transcribe", help="Run local transcription jobs.")
-    tx.add_argument("--engine", default="", choices=("", "auto", "custom", "whisper_cpp", "faster_whisper", "openai_whisper"))
+    tx.add_argument(
+        "--engine",
+        default="",
+        choices=("", "auto", "custom", "whisper_cpp", "faster_whisper", "openai_whisper"),
+    )
     tx.add_argument("--max-files", type=int, default=None)
     tx.add_argument("--all", action="store_true", help="Process all pending jobs.")
     tx.add_argument("--retry-errors", action="store_true")
@@ -125,7 +129,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()

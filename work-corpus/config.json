@@ -1,8 +1,17 @@
 {
   "paths": {
     "data": "data",
-    "corpus": "corpus",
-    "state": "state"
+    "corpus": "work-corpus/corpus",
+    "state": "work-corpus/state"
+  },
+  "source_roots": {
+    "zoom": "data/zoom",
+    "notes_onenote": "data/notes/onenote",
+    "notes_notion": "data/notes/notion",
+    "notes_capacities": "data/notes/capacities",
+    "notes_other": "data/notes/other",
+    "mcp_granola": "data/mcp/granola",
+    "mcp_wispr_flow": "data/mcp/wispr_flow"
   },
   "inventory": {
     "ignore_directories": [
@@ -47,15 +56,6 @@
     "keep_temporary_wav": false,
     "custom_command": [],
     "custom_output_format": "vtt"
-  },
-  "email": {
-    "since": "2024-01-01",
-    "attachments": "metadata_only",
-    "legacy_outlook_folders": [
-      "Inbox",
-      "Sent Items"
-    ],
-    "legacy_outlook_max_messages_per_folder": 2000
   },
   "mcp": {
     "granola_inbox": "data/mcp/granola",

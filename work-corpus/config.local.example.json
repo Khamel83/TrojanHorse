@@ -21,5 +21,8 @@
       "--output",
       "{output_vtt}"
     ]
+  },
+  "source_roots": {
+    "zoom": "data/zoom"
   }
 }
