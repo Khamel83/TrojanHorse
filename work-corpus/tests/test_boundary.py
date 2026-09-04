@@ -46,7 +46,7 @@ def test_cli_command_set_has_no_email_or_atlas_command():
     parser = cli._parser()
     commands = _command_names(parser)
 
-    assert {
+    assert commands == {
         "inventory",
         "normalize",
         "zoom-scan",
@@ -54,7 +54,7 @@ def test_cli_command_set_has_no_email_or_atlas_command():
         "report",
         "query",
         "mcp-import",
-    } <= commands
+    }
     assert "email-import" not in commands
     assert "promote-to-atlas" not in commands
     assert "--atlas-url" not in {
@@ -62,6 +62,18 @@ def test_cli_command_set_has_no_email_or_atlas_command():
         for action in parser._actions
         for option in action.option_strings
     }
+
+
+def test_bootstrap_creates_only_derived_directories(tmp_path: Path):
+    config = load_config(tmp_path)
+
+    cli.bootstrap(config)
+
+    assert not config.data_dir.exists()
+    assert config.corpus_dir.is_dir()
+    assert config.state_dir.is_dir()
+    assert all((config.corpus_dir / rel).is_dir() for rel in cli.CORPUS_SUBDIRS)
+    assert all((config.state_dir / rel).is_dir() for rel in cli.STATE_SUBDIRS)
 
 
 @pytest.mark.parametrize(

@@ -18,18 +18,6 @@ from .util import ensure_dir, now_iso, stable_id
 from .zoom import scan_zoom
 
 
-DATA_SUBDIRS = [
-    "zoom",
-    "notes/onenote",
-    "notes/notion",
-    "notes/capacities",
-    "notes/other",
-    "inventory",
-    "databases",
-    "documents",
-    "mcp/granola",
-    "mcp/wispr_flow",
-]
 CORPUS_SUBDIRS = [
     "normalized",
     "transcripts/zoom/existing",
@@ -42,11 +30,8 @@ STATE_SUBDIRS = ["tmp", "mcp"]
 
 
 def bootstrap(config: Config) -> None:
-    ensure_dir(config.data_dir)
     ensure_dir(config.corpus_dir)
     ensure_dir(config.state_dir)
-    for rel in DATA_SUBDIRS:
-        ensure_dir(config.data_dir / rel)
     for rel in CORPUS_SUBDIRS:
         ensure_dir(config.corpus_dir / rel)
     for rel in STATE_SUBDIRS:
