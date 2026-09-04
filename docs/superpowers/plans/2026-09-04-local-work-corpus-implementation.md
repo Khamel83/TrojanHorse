@@ -97,24 +97,24 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 
 **Files:**
 
-- Create: `work-corpus/pyproject.toml`
-- Create: `work-corpus/config.json`
+- Promote: `work-corpus/pyproject.toml`
+- Promote: `work-corpus/config.json`
 - Promote: `work-corpus/config.local.example.json`
 - Promote: `work-corpus/requirements-optional.txt`
-- Create: `work-corpus/src/work_corpus/__init__.py`
-- Create: `work-corpus/src/work_corpus/__main__.py`
+- Promote: `work-corpus/src/work_corpus/__init__.py`
+- Promote: `work-corpus/src/work_corpus/__main__.py`
 - Create: `work-corpus/src/work_corpus/cli.py` as a minimal safe local CLI entry point
-- Create: `work-corpus/src/work_corpus/config.py`
-- Create: `work-corpus/src/work_corpus/db.py`
-- Create: `work-corpus/src/work_corpus/doctor.py`
-- Create: `work-corpus/src/work_corpus/inventory.py`
-- Create: `work-corpus/src/work_corpus/mcp_ingest.py`
-- Create: `work-corpus/src/work_corpus/normalize.py`
-- Create: `work-corpus/src/work_corpus/report.py`
-- Create: `work-corpus/src/work_corpus/transcription.py`
-- Create: `work-corpus/src/work_corpus/util.py`
-- Create: `work-corpus/src/work_corpus/zoom.py`
-- Create: `work-corpus/tests/README.md`
+- Promote: `work-corpus/src/work_corpus/config.py`
+- Promote: `work-corpus/src/work_corpus/db.py`
+- Promote: `work-corpus/src/work_corpus/doctor.py`
+- Promote: `work-corpus/src/work_corpus/inventory.py`
+- Promote: `work-corpus/src/work_corpus/mcp_ingest.py`
+- Promote: `work-corpus/src/work_corpus/normalize.py`
+- Promote: `work-corpus/src/work_corpus/report.py`
+- Promote: `work-corpus/src/work_corpus/transcription.py`
+- Promote: `work-corpus/src/work_corpus/util.py`
+- Promote: `work-corpus/src/work_corpus/zoom.py`
+- Promote: `work-corpus/tests/README.md`
 - Promote: `work-corpus/tests/fixtures/sample.vtt`
 - Promote: `work-corpus/tests/test_util.py` after retaining only the date-hint and VTT-conversion tests
 
@@ -250,6 +250,7 @@ The initial schema must contain these tables and no email or career-claim table:
 | `relationship` | Evidence-backed typed edge between canonical records or a record and an evidence item. |
 | `review_item` | Issue type, source/evidence IDs, proposed result, reason, confidence, status, resolution. |
 | `ingestion_checkpoint` | Provider/root, cursor or source version, last successful retrieval, count, error. |
+| `mcp_item` | Provider, source record, external record ID, capture/event date, retrieval date, normalized evidence ID, and update time. This is an integration index, not a second factual corpus. |
 
 Add indexes for source system, scope, source status, event dates, entity aliases, relationship endpoints, review status, task candidate status, and FTS document IDs. Add a SQLite FTS5 table for searchable derived text. Add a repository query function `current_tasks(con, run_date)` that applies the run-date rule; SQLite views do not accept parameters, so do not pretend that `current_tasks(run_date)` is a SQL view. Do not persist a stale boolean as the source of truth.
 
@@ -362,6 +363,7 @@ unverified OneNote package name.
 
 - Create: `work-corpus/src/work_corpus/entities.py`
 - Create: `work-corpus/src/work_corpus/tasks.py`
+- Create: `work-corpus/entity_aliases.example.json`
 - Modify: `work-corpus/src/work_corpus/db.py`
 - Modify: `work-corpus/src/work_corpus/normalize.py`
 - Create: `work-corpus/tests/test_entities.py`
@@ -386,8 +388,8 @@ unverified OneNote package name.
 - [ ] Write task tests for explicit versus implied language, future events, the exact 14-day boundary, old notes, export-only dates, and missing dates.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_entities.py work-corpus/tests/test_tasks.py` before implementation and verify that no stale `career_claim` table or generic classifier is used.
 - [ ] Implement `entities.py` and `tasks.py` with deterministic proposal keys and review records.
-- [ ] Seed a local-only name dictionary template at `work-corpus/config/entity_aliases.example.json`. Keep actual names in ignored `config.local.json` or the SQLite review state, not in a public commit.
-- [ ] Run tests on the safe batch only: the three clearly work-labeled Zoom VTTs and five clearly work-labeled Capacities Markdown records. Keep the coaching/family caption, personnel files, TAB workbook, legal notes, personal trust notes, OneNote binaries, pointer-only records, raw `.zoom`, and `.tmp` files out of the first semantic batch.
+- [ ] Seed the local-only name dictionary template at `work-corpus/entity_aliases.example.json`. Keep actual names in ignored `config.local.json` or the SQLite review state, not in a public commit.
+- [ ] Run the entity and task tests against synthetic fixtures only. The real safe batch is executed in Task 9. Keep the coaching/family caption, personnel files, TAB workbook, legal notes, personal trust notes, OneNote binaries, pointer-only records, raw `.zoom`, and `.tmp` files out of the first semantic batch.
 - [ ] Commit with `git commit -m "feat: add canonical entities and current task rules"`.
 
 ## Task 7: Implement local query, evidence labels, and rebuildable indexes
@@ -426,7 +428,7 @@ The query builder must make it impossible for the default path to join `Personal
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_query.py work-corpus/tests/test_redaction.py` before implementation. Expected failures: the bootstrap fallback has a Work predicate but no complete query layer, FTS scope join, or secret redaction contract.
 - [ ] Implement exact search, relationship traversal, and fallback first. Do not make embeddings a dependency for the first useful query.
 - [ ] Add the optional local embedding index and a rebuild command only when the exact query gate is green.
-- [ ] Run the safe-batch query checks and confirm source locations point to the original relative paths without URL leakage.
+- [ ] Run the query checks against synthetic fixtures and confirm source locations point to the original relative paths without URL leakage. Defer the real safe batch to Task 9.
 - [ ] Commit with `git commit -m "feat: add scoped source-backed query layer"`.
 
 ## Task 8: Add future Wispr Flow and Granola intake without live connections

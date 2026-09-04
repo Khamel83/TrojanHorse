@@ -49,3 +49,22 @@ Gemini 3.1 Pro identified four additional issues:
 The plan was revised to reuse the safe fixture and tests, promote the config
 example, prefix every explicit pytest command, and define the OneNote local
 converter boundary. A final confirmation is still required.
+
+## Follow-up review 3
+
+Gemini 3.1 Pro identified four additional issues:
+
+- High: Task 8 MCP items — schema contradiction — the plan needed an explicit
+  `mcp_item` table or a clear mapping to existing source/evidence tables.
+- High: Tasks 6 and 7 safe-batch execution — sequence contradiction — real
+  data must be deferred to the Task 9 acceptance sequence; those tasks should
+  use synthetic fixtures only.
+- Medium: Task 0 file operations — ambiguity — files copied from the bootstrap
+  must be marked as promoted rather than created.
+- Low: Entity alias template — path consistency — keep the example at
+  `work-corpus/entity_aliases.example.json`, matching the package-level config
+  layout.
+
+The plan was revised to add `mcp_item`, move real safe-batch work to Task 9,
+mark promoted files explicitly, and move the alias template. A final
+confirmation is required after this revision.
