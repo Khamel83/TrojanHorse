@@ -550,9 +550,11 @@ def test_zoom_scope_gate_blocks_sibling_media_and_pending_job(tmp_path: Path):
     assert group["status"] == "needs_review"
     assert group["media_source_id"] == media["source_id"]
     assert group["transcript_source_id"]
-    assert tx_result == {"attempted": 0, "complete": 0, "errors": 0}
-    assert job["status"] == "needs_review"
-    assert job["error"]
+    assert tx_result["attempted"] == 0
+    assert tx_result["complete"] == 0
+    assert tx_result["errors"] == 0
+    assert job["status"] == "pending_approval"
+    assert job["error"] is None
 
 
 def test_zoom_meeting_boundary_blocks_nested_personal_sibling(tmp_path: Path):
@@ -597,6 +599,7 @@ def test_transcribe_jobs_processes_eligible_media(
     media_path.parent.mkdir(parents=True)
     media_path.write_bytes(b"synthetic eligible media bytes")
     config = load_config(tmp_path)
+    config.payload["zoom"]["custom_command"] = ["synthetic-local-engine"]
     con = connect(config.state_dir / "zoom-positive.sqlite")
     try:
         inventory_module.inventory(config, con)
@@ -626,7 +629,12 @@ def test_transcribe_jobs_processes_eligible_media(
             "_transcribe_custom",
             fake_custom,
         )
-        tx_result = transcribe_jobs(config, con, requested_engine="custom")
+        tx_result = transcribe_jobs(
+            config,
+            con,
+            requested_engine="custom",
+            approve_run=True,
+        )
         job = con.execute(
             "SELECT status FROM transcription_job"
         ).fetchone()
@@ -637,9 +645,12 @@ def test_transcribe_jobs_processes_eligible_media(
         con.close()
 
     assert scan_result["queued_for_transcription"] == 1
-    assert tx_result == {"attempted": 1, "complete": 1, "errors": 0}
-    assert job["status"] == "complete"
-    assert group["status"] == "generated_transcript"
+    assert tx_result["attempted"] == 1
+    assert tx_result["succeeded"] == 1
+    assert tx_result["complete"] == 1
+    assert tx_result["errors"] == 0
+    assert job["status"] == "succeeded"
+    assert group["status"] == "succeeded"
     assert group["transcript_path"]
 
 
