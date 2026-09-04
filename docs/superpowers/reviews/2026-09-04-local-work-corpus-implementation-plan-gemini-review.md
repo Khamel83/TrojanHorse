@@ -31,3 +31,21 @@ The plan was revised again so Task 0 creates a minimal local CLI instead of
 copying the bootstrap CLI, which would import the excluded email module. The
 plan also states that all test commands use `PYTHONPATH=work-corpus/src`.
 Gemini 3.1 Pro should perform one final confirmation after this revision.
+
+## Follow-up review 2
+
+Gemini 3.1 Pro identified four additional issues:
+
+- High: Task 0 test promotion — reuse — Reuse the bootstrap's non-email VTT
+  fixture and safe utility tests instead of discarding all passing coverage.
+- Medium: `config.local.example.json` — reuse — Promote the reviewed bootstrap
+  example in Task 0 rather than recreating it.
+- Medium: Pytest commands — convention alignment — Put
+  `PYTHONPATH=work-corpus/src` in each test command, not only in the preamble.
+- Medium: OneNote integration dependencies — missing constraint — Define the
+  local `pyOneNote`/converter prerequisite and fail closed when it is absent;
+  do not download it during a corpus run.
+
+The plan was revised to reuse the safe fixture and tests, promote the config
+example, prefix every explicit pytest command, and define the OneNote local
+converter boundary. A final confirmation is still required.

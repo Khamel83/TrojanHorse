@@ -47,6 +47,7 @@ The new runtime will be promoted into a root `work-corpus/` package so it can re
 
 - Create or modify `work-corpus/config.json`: non-sensitive defaults and explicit source-root rules.
 - Create `work-corpus/config.local.json` from the existing local example, ignored by Git: machine paths and local tool commands only.
+- Promote `work-corpus/config.local.example.json` from the reviewed bootstrap example.
 - Modify `work-corpus/src/work_corpus/config.py`: validate root paths, source-root precedence, derived-output paths, and local-only transcription settings.
 - Modify `work-corpus/src/work_corpus/util.py`: stable IDs, path containment, atomic derived writes, date parsing, text decoding, and URL/secret redaction helpers.
 - Modify `work-corpus/src/work_corpus/db.py`: the SQLite schema, migrations, indexes, views, and connection policy.
@@ -98,6 +99,8 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 
 - Create: `work-corpus/pyproject.toml`
 - Create: `work-corpus/config.json`
+- Promote: `work-corpus/config.local.example.json`
+- Promote: `work-corpus/requirements-optional.txt`
 - Create: `work-corpus/src/work_corpus/__init__.py`
 - Create: `work-corpus/src/work_corpus/__main__.py`
 - Create: `work-corpus/src/work_corpus/cli.py` as a minimal safe local CLI entry point
@@ -112,6 +115,8 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 - Create: `work-corpus/src/work_corpus/util.py`
 - Create: `work-corpus/src/work_corpus/zoom.py`
 - Create: `work-corpus/tests/README.md`
+- Promote: `work-corpus/tests/fixtures/sample.vtt`
+- Promote: `work-corpus/tests/test_util.py` after retaining only the date-hint and VTT-conversion tests
 
 Promote only the listed non-CLI files from
 `Omar_Work_Corpus_Bootstrap_v1/work-corpus/`. Create `cli.py` as a minimal
@@ -120,7 +125,9 @@ bootstrap CLI imports the excluded email module. Do not copy `email_ingest.py`,
 email schemas, Outlook scripts, email requirements, email runbooks, `.pyc`
 files, or any data. Do not use a wildcard copy. The copied `config.py` and
 `db.py` are untrusted candidates until Tasks 1 and 3 remove their email and
-career-claim surfaces.
+career-claim surfaces. The promoted utility fixture and tests are safe reuse;
+do not promote the bootstrap `test_pipeline.py` unchanged because it imports
+email and creates an email fixture.
 
 **Interfaces:**
 
@@ -129,6 +136,7 @@ career-claim surfaces.
 
 - [ ] Create the listed directories with `mkdir -p`.
 - [ ] Copy the listed non-CLI files one by one from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` into the root `work-corpus/` package. Use the exact paths listed above.
+- [ ] Copy `tests/fixtures/sample.vtt` and the non-email date/VTT tests from the bootstrap test set. Do not copy `sample.eml`, `test_email.py`, or the email portion of `test_pipeline.py`.
 - [ ] Create the minimal `cli.py` entry point with `main(argv: Optional[list[str]]) -> int`, an argparse parser, and the local command names `inventory`, `normalize`, `zoom-scan`, `transcribe`, `report`, `query`, and `mcp-import`. It must not import Atlas or email modules.
 - [ ] Confirm that `work-corpus/src/work_corpus/email_ingest.py` and `work-corpus/tests/fixtures/sample.eml` do not exist.
 - [ ] Run `PYTHONPATH=work-corpus/src python -m work_corpus --help` and confirm that it exits 0 without importing email or Atlas.
@@ -141,7 +149,7 @@ career-claim surfaces.
 
 - Create: `work-corpus/.gitignore`
 - Modify: `work-corpus/config.json`
-- Create: `work-corpus/config.local.example.json`
+- Modify: `work-corpus/config.local.example.json`
 - Modify: `work-corpus/src/work_corpus/config.py`
 - Modify: `work-corpus/src/work_corpus/cli.py`
 - Create: `work-corpus/tests/test_boundary.py`
@@ -158,9 +166,9 @@ career-claim surfaces.
 - [ ] Write `test_boundary.py::test_derived_path_rejects_data_child` and assert that a path under `data/` raises the configuration error.
 - [ ] Write `test_boundary.py::test_cli_command_set_has_no_email_or_atlas_command` and assert that the parser contains `inventory`, `normalize`, `zoom-scan`, `transcribe`, `report`, `query`, and `mcp-import`, but not `email-import`, `promote-to-atlas`, or an Atlas URL option.
 - [ ] Write `test_boundary.py::test_local_transcription_is_the_only_allowed_transcription_mode` and assert that configuration rejects remote provider names and accepts an explicit local executable or a supported local engine.
-- [ ] Run `pytest -q work-corpus/tests/test_boundary.py`. Expected result before implementation: the new tests fail because the package still has email and old boundary behavior.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_boundary.py`. Expected result before implementation: the new tests fail because the package still has email and old boundary behavior.
 - [ ] Implement the smallest configuration and CLI changes. Do not delete legacy files in this task. Record the required manual service check in `state/` only when a real run is authorized.
-- [ ] Run `pytest -q work-corpus/tests/test_boundary.py`. Expected result: all boundary tests pass and no file under `data/` is created or modified.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_boundary.py`. Expected result: all boundary tests pass and no file under `data/` is created or modified.
 - [ ] Commit only the boundary files and tests with `git commit -m "feat: establish local work corpus boundary"`.
 
 **Safety gate:** Before any command that reads source content, verify that no enabled bridge service or launch agent points at `data/`. If one is active, stop and disable it as a separate, explicit local operation. Do not remove the legacy source files as part of an automatic ingestion run.
@@ -204,11 +212,11 @@ career-claim surfaces.
 - [ ] Write fixture tests for explicit Notion-versus-Capacities classification, nested OneNote paths, discovery exclusion from extraction, and complete inclusion of `.DS_Store` as metadata.
 - [ ] Write `test_inventory.py::test_source_and_version_identity_rules` and assert that changing only `mtime_ns` leaves both semantic IDs unchanged, while changing `content_sha256` leaves `source_id` unchanged and changes `source_version_id`.
 - [ ] Write `test_inventory.py::test_root_precedence_does_not_use_filename_heuristics` and use a synthetic file whose name contains `notion` under the Capacities root; assert that the root wins.
-- [ ] Run the fixture tests and confirm they fail against the bootstrap's current filename-heuristic classifier.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_inventory.py` and confirm the fixture tests fail against the bootstrap's current filename-heuristic classifier.
 - [ ] Replace the classifier with explicit root matching. Keep discovery rows in the manifest with `kind=discovery` and `extraction_status=excluded`.
 - [ ] Generate a derived manifest report under `corpus/reports/` without overwriting the reviewed `01_INVENTORY/source_manifest.csv`.
 - [ ] Run the manifest against the real tree only after the boundary gate. Expected accounting: 1,413 physical files, 1,394 substantive files after 19 Finder metadata files are identified, 134 Notion ExportBlock rows, 276 Zoom dated folders, and 29 OneNote files.
-- [ ] Run the fixture and manifest tests again. Expected result: all pass and the raw tree's before/after file list, sizes, modification times, and hashes are identical.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_inventory.py` again. Expected result: all pass and the raw tree's before/after file list, sizes, modification times, and hashes are identical.
 - [ ] Commit with `git commit -m "feat: add explicit immutable source manifest"`.
 
 ## Task 3: Replace the bootstrap schema with the provenance model
@@ -256,9 +264,9 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 - [ ] Write tests for foreign keys, deterministic IDs, source-version retention, idempotent reruns, and the current-task query boundary.
 - [ ] Write `test_db.py::test_schema_has_no_email_or_career_claim_table` and assert those table names are absent.
 - [ ] Write `test_db.py::test_current_tasks_use_run_date_and_event_date` with dates on both sides of the run-date minus 14-day boundary, a future date, an export-only date, and a missing event date.
-- [ ] Run the database tests against a temporary SQLite file. Expected initial failures: missing tables, stale bootstrap schema, and incorrect task-date behavior.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_db.py` against a temporary SQLite file. Expected initial failures: missing tables, stale bootstrap schema, and incorrect task-date behavior.
 - [ ] Replace `db.py` schema initialization and add forward-only migrations. Do not drop a user's existing state database automatically; use a new schema version or a documented migration failure.
-- [ ] Run the tests again. Expected result: all pass, and reopening the same database does not duplicate rows.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_db.py` again. Expected result: all pass, and reopening the same database does not duplicate rows.
 - [ ] Commit with `git commit -m "feat: define provenance-first corpus schema"`.
 
 ## Task 4: Implement safe extraction adapters
@@ -295,15 +303,27 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 - Parser errors create `review_item` rows and do not replace a prior successful normalized output with an empty file.
 - Derived text used for FTS is scrubbed of signed URLs and secret-like values. The original text remains only in the immutable source.
 
+**OneNote dependency boundary:** The core package does not download or
+silently install a converter. `onenote.py` accepts a configured local
+`ONENOTE_CONVERTER_ROOT` or converter command and `doctor.py` verifies that the
+tested exporter and its `pyOneNote` dependency are available. If they are not
+available, the adapter reports `blocked` and does not read `.one` files. The
+one-time operator setup may install the dependency in a dedicated local
+environment or point to a reviewed local source checkout; the exact converter
+path and version are recorded in `state/tool_versions.json`. The corpus run
+itself makes no network request. The already promoted
+`requirements-optional.txt` covers local Office parsers; it does not invent an
+unverified OneNote package name.
+
 **Idempotency:** Each extraction result is keyed by source version, adapter name, adapter version, and locator. Repeating a run updates the same derived row and output path. A failed retry leaves the last good output and records the new failure separately.
 
 - [ ] Write fixture tests for each parser, provenance headers, pointer-only attachment handling, signed-URL removal, and prior-good-output preservation on parser failure.
 - [ ] Write `test_extraction.py::test_matching_archive_does_not_duplicate_directory_content` and assert that a directory item and its archive member map to one semantic evidence unit with two source references.
 - [ ] Write `test_extraction.py::test_discovery_report_is_not_searchable_evidence` and assert that discovery text produces a manifest row but no normalized document or FTS row.
-- [ ] Run fixture tests and confirm that the bootstrap's generic source classifier fails the Notion/Capacities distinction before the replacement is active.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_extraction.py` and confirm that the bootstrap's generic source classifier fails the Notion/Capacities distinction before the replacement is active.
 - [ ] Port only the reusable local parsing functions from `work-corpus/src/work_corpus/normalize.py` and `util.py`; remove email/archive-message branches from the runtime path.
 - [ ] Integrate the selected OneNote converter behind a local adapter command or pinned local module. Record converter version and the terminator-node workaround in the adapter metadata.
-- [ ] Run the synthetic fixtures, then run a read-only OneNote acceptance pass over all 29 `.one` files. Expected result: 29 parsed files and 295 extracted pages with no raw file changes.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_extraction.py`, then run the documented read-only OneNote acceptance command over all 29 `.one` files. Expected result: 29 parsed files and 295 extracted pages with no raw file changes.
 - [ ] Commit with `git commit -m "feat: add provenance-preserving source adapters"`.
 
 ## Task 5: Correct Zoom grouping and build the local transcription queue
@@ -330,7 +350,7 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 - [ ] Write `test_zoom.py::test_existing_transcript_wins_over_media_queue` and assert that a usable VTT changes the group to `existing_transcript` and creates no transcription job.
 - [ ] Write `test_zoom.py::test_transcript_only_group_is_not_title_matched` and assert that a same-title transcript in another folder creates a review item instead of an automatic link.
 - [ ] Write transcription tests for approval gating, local-engine rejection of remote commands, idempotent job keys, retry after failure, partial quality, and preservation of a prior successful transcript.
-- [ ] Run the tests against synthetic meeting folders. Expected initial failures: bootstrap immediate-parent grouping, missing approval state, and remote-engine branches.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_zoom.py work-corpus/tests/test_transcription.py` against synthetic meeting folders. Expected initial failures: bootstrap immediate-parent grouping, missing approval state, and remote-engine branches.
 - [ ] Correct `zoom.py` and `transcription.py` without reading or changing real media during unit tests.
 - [ ] Run a read-only Zoom scan on the real tree. Expected grouping: 276 dated folders, with the inventory's 95 final-media/no-transcript folders and 4 final-media/with-transcript folders represented at the dated-folder boundary. Do not interpret 133 bootstrap pending rows as 133 meetings.
 - [ ] Produce a queue report. Do not start bulk transcription. A later approved batch uses the local engine only and records one job per selected media source version.
@@ -364,7 +384,7 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 
 - [ ] Write entity tests for exact aliases, regex spelling normalization, valid-frequency selection, collision separation, former-name links, and ambiguous merge review.
 - [ ] Write task tests for explicit versus implied language, future events, the exact 14-day boundary, old notes, export-only dates, and missing dates.
-- [ ] Run the tests before implementation and verify that no stale `career_claim` table or generic classifier is used.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_entities.py work-corpus/tests/test_tasks.py` before implementation and verify that no stale `career_claim` table or generic classifier is used.
 - [ ] Implement `entities.py` and `tasks.py` with deterministic proposal keys and review records.
 - [ ] Seed a local-only name dictionary template at `work-corpus/config/entity_aliases.example.json`. Keep actual names in ignored `config.local.json` or the SQLite review state, not in a public commit.
 - [ ] Run tests on the safe batch only: the three clearly work-labeled Zoom VTTs and five clearly work-labeled Capacities Markdown records. Keep the coaching/family caption, personnel files, TAB workbook, legal notes, personal trust notes, OneNote binaries, pointer-only records, raw `.zoom`, and `.tmp` files out of the first semantic batch.
@@ -403,7 +423,7 @@ The query builder must make it impossible for the default path to join `Personal
 - [ ] Write `test_query.py::test_raw_fallback_requires_work_scope` and assert that raw fallback never returns non-Work evidence even when the text matches exactly.
 - [ ] Write redaction tests for signed URLs, bearer values, API-key-shaped strings, ordinary local paths, and timestamp text.
 - [ ] Write evidence-label tests for canonical, unreviewed, inference, conflict, and missing results.
-- [ ] Run tests before implementation. Expected failures: the bootstrap fallback has a Work predicate but no complete query layer, FTS scope join, or secret redaction contract.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_query.py work-corpus/tests/test_redaction.py` before implementation. Expected failures: the bootstrap fallback has a Work predicate but no complete query layer, FTS scope join, or secret redaction contract.
 - [ ] Implement exact search, relationship traversal, and fallback first. Do not make embeddings a dependency for the first useful query.
 - [ ] Add the optional local embedding index and a rebuild command only when the exact query gate is green.
 - [ ] Run the safe-batch query checks and confirm source locations point to the original relative paths without URL leakage.
@@ -425,7 +445,7 @@ Each item stores provider, external record ID, capture/event date, retrieval dat
 
 - [ ] Write tests for provider classification, external-ID idempotency, content-hash fallback, cursor persistence, malformed-item review, and event-date preservation.
 - [ ] Remove or bypass bootstrap email imports and email-specific checkpoint directories from `mcp_ingest.py` and `cli.py`.
-- [ ] Run local snapshot fixtures with no network-enabled code path. Expected result: repeat import creates no duplicate item or evidence row.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_mcp_ingest.py` with local snapshot fixtures and no network-enabled code path. Expected result: repeat import creates no duplicate item or evidence row.
 - [ ] Add feed freshness to `report.py`. Unknown retrieval time must be reported as unknown, not as current.
 - [ ] Commit with `git commit -m "feat: add local Wispr and Granola snapshot intake"`.
 
@@ -481,7 +501,7 @@ Each item stores provider, external record ID, capture/event date, retrieval dat
 - `TODO.md` receives the final reviewed implementation checklist. It must not claim tasks are complete before their verification gates pass.
 
 - [ ] Write report tests using only synthetic database rows. Assert that all report categories are present and sensitive values are not printed.
-- [ ] Run the report tests and the full `work-corpus` test suite.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_reports.py` and then `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests`.
 - [ ] Run `git diff --check` and a placeholder scan over the plan and docs.
 - [ ] Compare raw-file snapshots before and after the acceptance run. Expected result: identical paths, sizes, modification times, and hashes.
 - [ ] Record every unresolved item in `review_item` or the report. Do not hide parser failures or convert uncertainty into a successful status.
