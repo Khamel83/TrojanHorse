@@ -303,15 +303,21 @@ def parse_source(path: Path, kind: str, extension: str, config: Config) -> Tuple
 
 
 def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
-    skip_classifications = set(
-        config.get(
+    skip_classifications = {
+        str(value).casefold()
+        for value in config.get(
             "normalization",
             "skip_classifications",
             list(DEFAULT_SKIP_CLASSIFICATIONS),
         )
-    )
+        if str(value).strip()
+    }
 
-    mark_noncurrent_normalized_documents_retained(con, now_iso())
+    mark_noncurrent_normalized_documents_retained(
+        con,
+        now_iso(),
+        skip_classifications=skip_classifications,
+    )
 
     eligible = con.execute(
         """
@@ -334,8 +340,16 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ORDER BY s.source_system, s.relative_path
         """
     ).fetchall()
-    rows = [row for row in eligible if (row["classification"] or "Unknown") not in skip_classifications]
-    review_rows = [row for row in eligible if (row["classification"] or "Unknown") in skip_classifications]
+    rows = [
+        row
+        for row in eligible
+        if (row["classification"] or "Unknown").casefold() not in skip_classifications
+    ]
+    review_rows = [
+        row
+        for row in eligible
+        if (row["classification"] or "Unknown").casefold() in skip_classifications
+    ]
 
     result = {
         "normalized": 0,

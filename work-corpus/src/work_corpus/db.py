@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from .util import ensure_dir, now_iso, stable_source_version_id
 
@@ -232,10 +232,36 @@ ON normalized_document(source_id);
 def mark_noncurrent_normalized_documents_retained(
     con: sqlite3.Connection,
     updated_at: str,
+    skip_classifications: Optional[Iterable[str]] = None,
 ) -> int:
     """Keep prior output bytes while removing them from the active result set."""
+    if skip_classifications is None:
+        skip_values = {
+            "personal",
+            "mixed",
+            "unknown",
+            "potential_personal",
+            "mixed_or_review",
+        }
+    else:
+        skip_values = {
+            str(value).casefold()
+            for value in skip_classifications
+            if str(value).strip()
+        }
+    if skip_values:
+        placeholders = ", ".join("?" for _ in sorted(skip_values))
+        classification_guard = (
+            f"AND LOWER(COALESCE(s.classification, 'Unknown')) "
+            f"NOT IN ({placeholders})"
+        )
+        parameters = (updated_at, *sorted(skip_values))
+    else:
+        classification_guard = ""
+        parameters = (updated_at,)
+
     cursor = con.execute(
-        """
+        f"""
         UPDATE normalized_document
         SET status='prior_good_retained',
             error='Prior good output retained; source version is no longer current and eligible',
@@ -259,12 +285,10 @@ def mark_noncurrent_normalized_documents_retained(
                 AND s.kind NOT IN (
                     'media', 'email', 'email_data', 'mcp', 'unknown'
                 )
-                AND COALESCE(s.classification, 'Unknown') IN (
-                    'Work', 'likely_work'
-                )
+                {classification_guard}
           )
         """,
-        (updated_at,),
+        parameters,
     )
     return max(cursor.rowcount, 0)
 
@@ -335,6 +359,7 @@ def _migrate_normalized_documents(con: sqlite3.Connection) -> None:
         for row in con.execute("PRAGMA table_info(normalized_document)")
     }
     if columns.get("source_version_id") == 1:
+        con.execute("DROP TABLE IF EXISTS normalized_document_legacy")
         return
 
     con.execute("ALTER TABLE normalized_document RENAME TO normalized_document_legacy")

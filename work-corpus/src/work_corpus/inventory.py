@@ -10,7 +10,13 @@ import sqlite3
 from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple, TypedDict
 import zipfile
 
-from .config import Config, EXPLICIT_SOURCE_ROOTS, SourceRoot, SourceRootMatch
+from .config import (
+    Config,
+    DEFAULT_SKIP_CLASSIFICATIONS,
+    EXPLICIT_SOURCE_ROOTS,
+    SourceRoot,
+    SourceRootMatch,
+)
 from .db import mark_noncurrent_normalized_documents_retained
 from .report import write_manifest_reports
 from .util import (
@@ -435,8 +441,46 @@ def _rekey_legacy_source(
             (version["source_version_id"],),
         )
 
+    canonical_source = con.execute(
+        "SELECT 1 FROM source_item WHERE source_id=?",
+        (new_source_id,),
+    ).fetchone()
+    if not canonical_source:
+        old_source = con.execute(
+            "SELECT * FROM source_item WHERE source_id=?",
+            (old_source_id,),
+        ).fetchone()
+        if old_source is not None:
+            temporary_path = f"__legacy_rekey__/{old_source_id}"
+            con.execute(
+                "UPDATE source_item SET relative_path=? WHERE source_id=?",
+                (temporary_path, old_source_id),
+            )
+            con.execute(
+                """
+                INSERT INTO source_item (
+                    source_id, relative_path, absolute_path, source_system,
+                    kind, extension, size_bytes, mtime_ns, content_sha256,
+                    source_version_id, date_hint, classification, sensitivity,
+                    parse_readiness, extraction_status, career_value,
+                    operations_value, duplicate_group_id, status, first_seen,
+                    last_seen, metadata_json
+                )
+                SELECT ?, ?, absolute_path, source_system, kind, extension,
+                       size_bytes, mtime_ns, content_sha256, source_version_id,
+                       date_hint, classification, sensitivity, parse_readiness,
+                       extraction_status, career_value, operations_value,
+                       duplicate_group_id, status, first_seen, last_seen,
+                       metadata_json
+                FROM source_item
+                WHERE source_id=?
+                """,
+                (new_source_id, old_source["relative_path"], old_source_id),
+            )
+
     # Keep existing relationship rows valid if a bootstrap database contained
-    # Zoom state when the source identity changes.
+    # Zoom state when the source identity changes. The canonical parent exists
+    # before these foreign-key updates.
     con.execute(
         "UPDATE zoom_group SET media_source_id=? WHERE media_source_id=?",
         (new_source_id, old_source_id),
@@ -454,17 +498,10 @@ def _rekey_legacy_source(
         (new_source_id, old_source_id),
     )
 
-    canonical_source = con.execute(
-        "SELECT 1 FROM source_item WHERE source_id=?",
-        (new_source_id,),
-    ).fetchone()
     if canonical_source:
         con.execute("DELETE FROM source_item WHERE source_id=?", (old_source_id,))
     else:
-        con.execute(
-            "UPDATE source_item SET source_id=? WHERE source_id=?",
-            (new_source_id, old_source_id),
-        )
+        con.execute("DELETE FROM source_item WHERE source_id=?", (old_source_id,))
 
 
 def inventory(
@@ -672,7 +709,15 @@ def inventory(
                 (scan_time, row["relative_path"]),
             )
 
-    mark_noncurrent_normalized_documents_retained(con, scan_time)
+    mark_noncurrent_normalized_documents_retained(
+        con,
+        scan_time,
+        skip_classifications=config.get(
+            "normalization",
+            "skip_classifications",
+            list(DEFAULT_SKIP_CLASSIFICATIONS),
+        ),
+    )
 
     con.execute("UPDATE source_item SET duplicate_group_id=NULL WHERE status='present'")
     duplicate_hashes = con.execute(

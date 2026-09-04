@@ -19,7 +19,9 @@ from work_corpus.util import (
     detect_source_system,
     stable_source_id,
     stable_source_version_id,
+    stable_evidence_id,
 )
+from work_corpus.zoom import scan_zoom
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "inventory_tree"
@@ -426,6 +428,7 @@ def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
         inventory_module.inventory(config, con)
         source, metadata = _row(con, relative_path)
         result = normalize_all(config, con)
+        zoom_result = scan_zoom(config, con)
         normalized = con.execute(
             """
             SELECT normalized_path, status
@@ -447,8 +450,45 @@ def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
         "unsupported": 0,
         "errors": 0,
     }
+    assert zoom_result["meeting_folders"] == 0
     assert normalized["status"] == "review_required"
     assert normalized["normalized_path"] is None
+    assert not list((config.corpus_dir / "transcripts" / "zoom").rglob("*.md"))
+
+
+def test_explicit_scope_override_remains_active(tmp_path: Path):
+    relative_path = "data/notes/Notes/untitled.md"
+    source_path = tmp_path / relative_path
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("# Explicit synthetic override\n", encoding="utf-8")
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps({"normalization": {"skip_classifications": []}}),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "scope-override.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        source, _ = _row(con, relative_path)
+        first_result = normalize_all(config, con)
+        inventory_module.inventory(config, con)
+        normalized = con.execute(
+            """
+            SELECT status, normalized_path
+            FROM normalized_document
+            WHERE source_id=?
+            """,
+            (source["source_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert source["classification"] == "Unknown"
+    assert first_result["normalized"] == 1
+    assert normalized["status"] == "normalized"
+    assert normalized["normalized_path"]
 
 
 def test_ineligible_rescan_retires_prior_normalized_output(tmp_path: Path):
@@ -582,7 +622,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
     tmp_path: Path,
 ):
     database = tmp_path / "legacy.sqlite"
-    relative_path = "data/notes/Notes/legacy.md"
+    relative_path = "data/Zoom/2026-09-01 09.00.00 Team Sync/legacy.md"
     content_hash = hashlib.sha256(b"legacy source bytes").hexdigest()
     source_path = tmp_path / relative_path
     source_path.parent.mkdir(parents=True)
@@ -643,7 +683,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
                 source_id, relative_path, absolute_path, source_system, kind,
                 extension, size_bytes, mtime_ns, content_sha256,
                 classification, status, first_seen, last_seen, metadata_json
-            ) VALUES (?, ?, ?, 'capacities', 'document', '.md', 19, 123, ?,
+                ) VALUES (?, ?, ?, 'zoom', 'document', '.md', 19, 123, ?,
                       'Unknown', 'present', '2026-09-04T00:00:00Z',
                       '2026-09-04T00:00:00Z', ?)
             """,
@@ -680,6 +720,32 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
             row["name"]: row["pk"]
             for row in con.execute("PRAGMA table_info(normalized_document)")
         }
+        con.execute(
+            """
+            INSERT INTO zoom_group (
+                group_id, folder_relative_path, media_source_id,
+                transcript_source_id, transcript_path, status,
+                duration_seconds, updated_at
+            ) VALUES (
+                'legacy-group', 'data/Zoom/2026-09-01 09.00.00 Team Sync',
+                ?, ?, NULL, 'existing_transcript', NULL, '2026-09-04T00:00:00Z'
+            )
+            """,
+            (source_id, source_id),
+        )
+        con.execute(
+            """
+            INSERT INTO transcription_job (
+                job_id, group_id, media_source_id, output_stem,
+                engine, model, status, error, created_at
+            ) VALUES (
+                'legacy-job', 'legacy-group', ?, 'legacy-output',
+                NULL, NULL, 'error', 'legacy fixture', '2026-09-04T00:00:00Z'
+            )
+            """,
+            (source_id,),
+        )
+        con.commit()
         config = load_config(tmp_path)
         inventory_module.inventory(config, con)
         current_source = con.execute(
@@ -693,6 +759,14 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
         current_normalized = con.execute(
             "SELECT * FROM normalized_document WHERE source_id=?",
             (current_source["source_id"],),
+        ).fetchone()
+        zoom_group_refs = con.execute(
+            "SELECT media_source_id, transcript_source_id FROM zoom_group "
+            "WHERE group_id='legacy-group'"
+        ).fetchone()
+        transcription_ref = con.execute(
+            "SELECT media_source_id FROM transcription_job "
+            "WHERE job_id='legacy-job'"
         ).fetchone()
     finally:
         con.close()
@@ -710,7 +784,7 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
     assert normalized_columns["source_id"] == 0
 
     canonical_source_id = stable_source_id(
-        "capacities_markdown",
+        "zoom",
         relative_path,
     )
     canonical_version_id = stable_source_version_id(
@@ -726,6 +800,49 @@ def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
     assert current_normalized["source_id"] == canonical_source_id
     assert current_normalized["normalized_path"] == str(normalized_path)
     assert current_normalized["status"] == "prior_good_retained"
+    assert zoom_group_refs["media_source_id"] == canonical_source_id
+    assert zoom_group_refs["transcript_source_id"] == canonical_source_id
+    assert transcription_ref["media_source_id"] == canonical_source_id
+
+
+def test_connect_drops_obsolete_intermediate_legacy_table(tmp_path: Path):
+    database = tmp_path / "intermediate.sqlite"
+    con = connect(database)
+    con.close()
+
+    raw = sqlite3.connect(database)
+    try:
+        raw.execute("PRAGMA foreign_keys=ON")
+        raw.execute(
+            "CREATE TABLE normalized_document_legacy ("
+            "source_id TEXT PRIMARY KEY REFERENCES source_item(source_id))"
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    con = connect(database)
+    try:
+        legacy_table = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name='normalized_document_legacy'"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert legacy_table is None
+
+
+def test_evidence_identity_requires_version_and_locator(tmp_path: Path):
+    source_version_id = "version-for-evidence"
+    locator = "line:12"
+    expected = hashlib.sha256(
+        f"evidence:v1:{source_version_id}:{locator}".encode("utf-8")
+    ).hexdigest()
+
+    assert stable_evidence_id(source_version_id, locator) == expected
+    with pytest.raises(ValueError, match="source version"):
+        stable_evidence_id("", locator)
 
 
 def test_inventory_keeps_discovery_and_finder_metadata_excluded(tmp_path: Path):

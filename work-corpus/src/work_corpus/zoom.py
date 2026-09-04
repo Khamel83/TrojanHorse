@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .config import Config
+from .config import Config, DEFAULT_SKIP_CLASSIFICATIONS
 from .util import (
     atomic_write_text,
     executable,
@@ -138,7 +138,7 @@ def _normalize_existing_transcript(config: Config, row: sqlite3.Row, group_id: s
 
 
 def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
-    rows = con.execute(
+    candidate_rows = con.execute(
         """
         SELECT *
         FROM source_item
@@ -148,6 +148,39 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ORDER BY relative_path
         """
     ).fetchall()
+    skip_classifications = {
+        str(value).casefold()
+        for value in config.get(
+            "normalization",
+            "skip_classifications",
+            list(DEFAULT_SKIP_CLASSIFICATIONS),
+        )
+        if str(value).strip()
+    }
+    rows = []
+    for row in candidate_rows:
+        if (row["classification"] or "Unknown").casefold() in skip_classifications:
+            continue
+        if row["extraction_status"] != "ready":
+            continue
+        if not row["content_sha256"] or not row["source_version_id"]:
+            continue
+        if not con.execute(
+            """
+            SELECT 1
+            FROM source_version
+            WHERE source_version_id=?
+              AND source_id=?
+              AND content_sha256=?
+            """,
+            (
+                row["source_version_id"],
+                row["source_id"],
+                row["content_sha256"],
+            ),
+        ).fetchone():
+            continue
+        rows.append(row)
 
     groups: Dict[str, List[sqlite3.Row]] = {}
     for row in rows:
