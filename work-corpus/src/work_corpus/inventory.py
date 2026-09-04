@@ -1,27 +1,68 @@
 from __future__ import annotations
 
-import csv
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
+import posixpath
+import re
 import sqlite3
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple, TypedDict
+import zipfile
 
-from .config import Config
+from .config import Config, SourceRoot, SourceRootMatch
+from .report import write_manifest_reports
 from .util import (
     detect_kind,
-    detect_source_system,
     ensure_dir,
     now_iso,
     parse_date_hint,
     safe_relpath,
     sha256_file,
     stable_source_id,
-    write_csv,
+    stable_source_version_id,
 )
 
 
-def _iter_files(root: Path, ignore_names: Set[str], follow_symlinks: bool) -> Iterator[Path]:
+class InventoryResult(TypedDict):
+    scanned_at: str
+    data_dir: str
+    files_present: int
+    substantive_files: int
+    finder_metadata_files: int
+    total_bytes: int
+    counts_by_source_system: Dict[str, int]
+    counts_by_root_key: Dict[str, int]
+    archive_members_listed: int
+    zoom_dated_folders: int
+    notion_export_files: int
+    onenote_files: int
+    residual_files: int
+    residual_paths: List[str]
+    errors: int
+    error_messages: List[str]
+    manifest: str
+
+
+@dataclass(frozen=True)
+class ScopeProposal:
+    scope: str
+    reason: str
+
+
+ARCHIVE_DIRECTORY_KEYS = {
+    "capacities_archive": "capacities_markdown",
+    "notion_archive": "notion_export",
+}
+FINDER_METADATA_NAMES = {".DS_Store"}
+ZOOM_FOLDER_PATTERN = re.compile(r"^data/Zoom/([^/]+)/")
+
+
+def _iter_files(
+    root: Path,
+    ignore_names: Set[str],
+    follow_symlinks: bool,
+) -> Iterator[Path]:
     if not root.exists():
         return
     if root.is_file():
@@ -50,11 +91,9 @@ def _iter_files(root: Path, ignore_names: Set[str], follow_symlinks: bool) -> It
             if child.is_symlink() and not follow_symlinks:
                 continue
             filtered_dirs.append(name)
-        dirs[:] = filtered_dirs
+        dirs[:] = sorted(filtered_dirs)
 
-        for name in files:
-            if name == ".DS_Store" or name.startswith("._"):
-                continue
+        for name in sorted(files):
             path = current_path / name
             if path.is_symlink() and not path.exists():
                 continue
@@ -80,18 +119,78 @@ SENSITIVE_PATH_TERMS = {
     "divorce", "custody", "tax", "confidential", "personnel",
 }
 
+TRUSTED_WORK_SYSTEMS = {"formal_records", "granola", "wispr_flow", "zoom"}
 
-def _path_classification(relative_path: str) -> str:
+
+def _normalise_relative_path(value: str) -> str:
+    normalised = posixpath.normpath(value.replace("\\", "/"))
+    while normalised.startswith("./"):
+        normalised = normalised[2:]
+    return "" if normalised == "." else normalised
+
+
+def _root_matches(relative_path: str, root: SourceRoot) -> bool:
+    root_path = _normalise_relative_path(root.relative_path).rstrip("/")
+    if not root_path:
+        return False
+    if root.key == "onenote_backup" and not relative_path.lower().endswith(".one"):
+        return False
+    if root.key.endswith("_archive"):
+        return relative_path == root_path
+    return relative_path == root_path or relative_path.startswith(root_path + "/")
+
+
+def classify_root(
+    relative_path: str,
+    roots: Sequence[SourceRoot],
+) -> SourceRootMatch:
+    """Match a path against the reviewed source registry by precedence."""
+    normalised = _normalise_relative_path(relative_path)
+    candidates = roots.values() if isinstance(roots, dict) else roots
+    ordered = sorted(
+        (root for root in candidates if root.enabled and _root_matches(normalised, root)),
+        key=lambda root: (root.precedence, -len(root.relative_path), root.key),
+    )
+    if not ordered:
+        return SourceRootMatch(root=None, relative_path=normalised, kind="residual")
+
+    root = ordered[0]
+    if root.source_system == "inventory_discovery":
+        kind = "discovery"
+    elif root.key.endswith("_archive"):
+        kind = "archive"
+    else:
+        kind = "source"
+    return SourceRootMatch(root=root, relative_path=normalised, kind=kind)
+
+
+def classify_scope(relative_path: str, source_system: str) -> ScopeProposal:
+    """Return a conservative scope proposal for review and later promotion."""
+    if source_system == "inventory_discovery":
+        return ScopeProposal("Unknown", "Machine-discovery evidence is accounting-only.")
+    if source_system in TRUSTED_WORK_SYSTEMS:
+        return ScopeProposal("Work", f"The approved {source_system} source is work-scoped.")
+
     low = relative_path.lower().replace("_", " ").replace("-", " ")
-    personal = any(term in low for term in PERSONAL_PATH_TERMS)
-    work = any(term in low for term in WORK_PATH_TERMS)
-    if personal and work:
-        return "mixed_or_review"
-    if personal:
-        return "potential_personal"
-    if work:
-        return "likely_work"
-    return "unknown"
+    personal_hits = sorted(term for term in PERSONAL_PATH_TERMS if term in low)
+    work_hits = sorted(term for term in WORK_PATH_TERMS if term in low)
+    if personal_hits and work_hits:
+        return ScopeProposal(
+            "Mixed",
+            "Path contains both personal and work indicators: "
+            + ", ".join(personal_hits + work_hits),
+        )
+    if personal_hits:
+        return ScopeProposal(
+            "Personal",
+            "Path contains personal indicators: " + ", ".join(personal_hits),
+        )
+    if work_hits:
+        return ScopeProposal(
+            "Work",
+            "Path contains work indicators: " + ", ".join(work_hits),
+        )
+    return ScopeProposal("Unknown", "No approved scope indicator was found in the path.")
 
 
 def _sensitivity(relative_path: str, source_system: str) -> str:
@@ -104,6 +203,8 @@ def _sensitivity(relative_path: str, source_system: str) -> str:
 
 
 def _parse_readiness(kind: str, extension: str) -> str:
+    if kind in {"metadata", "discovery"}:
+        return "excluded"
     if kind == "media":
         return "transcription_or_existing_transcript"
     if extension in {".one", ".onepkg", ".olm", ".pst", ".ost", ".doc", ".ppt", ".xls"}:
@@ -112,7 +213,10 @@ def _parse_readiness(kind: str, extension: str) -> str:
         return "optional_parser"
     if kind == "archive":
         return "archive_inventory_only" if extension == ".zip" else "conversion_required"
-    if kind in {"document", "table", "transcript", "transcript_candidate", "structured_text", "email", "email_data", "mcp", "database"}:
+    if kind in {
+        "document", "table", "transcript", "transcript_candidate",
+        "structured_text", "email", "email_data", "mcp", "database",
+    }:
         return "direct_or_supported"
     return "unknown"
 
@@ -124,11 +228,71 @@ def _value_flags(source_system: str, kind: str) -> tuple[str, str]:
         return "medium", "high"
     if source_system in {"notion", "onenote", "capacities", "other"}:
         return "medium", "medium"
-    if source_system == "inventory":
+    if source_system == "inventory_discovery":
         return "none", "low"
     if kind == "media":
         return "indirect", "medium"
     return "unknown", "unknown"
+
+
+def _root_by_key(config: Config, key: str) -> Optional[SourceRoot]:
+    return next((root for root in config.source_roots if root.key == key), None)
+
+
+def _archive_metadata(
+    config: Config,
+    path: Path,
+    root: SourceRoot,
+    max_entries: int,
+) -> Tuple[Dict[str, object], List[Dict[str, object]], Optional[str]]:
+    extracted_key = ARCHIVE_DIRECTORY_KEYS.get(root.key)
+    extracted_root = _root_by_key(config, extracted_key) if extracted_key else None
+    extracted_present = bool(
+        extracted_root and (config.root / extracted_root.relative_path).is_dir()
+    )
+    metadata: Dict[str, object] = {
+        "archive_member_count": 0,
+        "archive_members_listed": 0,
+        "archive_members_truncated": False,
+        "archive_matches_extracted_root": extracted_present,
+        "archive_extracted_root_key": extracted_key or "",
+        "archive_semantic_status": (
+            "duplicate_of_extracted" if extracted_present else "archive_only"
+        ),
+    }
+    member_rows: List[Dict[str, object]] = []
+    try:
+        with zipfile.ZipFile(path) as archive:
+            infos = archive.infolist()
+            metadata["archive_member_count"] = len(infos)
+            selected = infos[:max_entries]
+            metadata["archive_members_listed"] = len(selected)
+            metadata["archive_members_truncated"] = len(selected) < len(infos)
+            for info in selected:
+                member = {
+                    "member_path": info.filename,
+                    "size_bytes": info.file_size,
+                    "compressed_size_bytes": info.compress_size,
+                    "is_directory": info.is_dir(),
+                    "encrypted": bool(info.flag_bits & 0x1),
+                }
+                member_rows.append(member)
+            metadata["archive_members"] = member_rows
+    except (OSError, zipfile.BadZipFile) as exc:
+        return metadata, member_rows, f"archive listing {path}: {exc}"
+    return metadata, member_rows, None
+
+
+def _extraction_status(
+    kind: str,
+    content_hash: str,
+    archive_matches_extracted_root: bool,
+) -> str:
+    if kind in {"metadata", "discovery"} or archive_matches_extracted_root:
+        return "excluded"
+    if kind == "archive":
+        return "archive_only_inventory" if content_hash else "inventory_only"
+    return "ready" if content_hash else "inventory_only"
 
 
 def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
@@ -136,26 +300,70 @@ def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
         SELECT source_id, relative_path, absolute_path, source_system, kind,
                extension, size_bytes, mtime_ns, content_sha256, date_hint,
                classification, sensitivity, parse_readiness, career_value,
-               operations_value, duplicate_group_id, status, first_seen, last_seen
+               operations_value, duplicate_group_id, status, first_seen, last_seen,
+               metadata_json
         FROM source_item
         ORDER BY source_system, relative_path
     """
-    return [dict(row) for row in con.execute(query)]
+    output: List[Dict[str, object]] = []
+    for row in con.execute(query):
+        item = dict(row)
+        try:
+            metadata = json.loads(item.get("metadata_json") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        item.update(
+            {
+                "source_root_key": metadata.get("source_root_key", "residual"),
+                "root_match_kind": metadata.get("root_match_kind", "residual"),
+                "source_version_id": metadata.get("source_version_id"),
+                "scope_proposal": metadata.get(
+                    "scope_proposal", item.get("classification") or "Unknown"
+                ),
+                "scope_reason": metadata.get("scope_reason", ""),
+                "extraction_status": metadata.get("extraction_status", "inventory_only"),
+                "archive_member_count": metadata.get("archive_member_count", 0),
+                "archive_members": metadata.get("archive_members", []),
+                "archive_semantic_status": metadata.get("archive_semantic_status", ""),
+                "archive_extracted_root_key": metadata.get(
+                    "archive_extracted_root_key", ""
+                ),
+            }
+        )
+        output.append(item)
+    return output
 
 
-def inventory(config: Config, con: sqlite3.Connection, full_hash: bool = False) -> Dict[str, object]:
+def _is_finder_metadata(path: Path) -> bool:
+    return path.name in FINDER_METADATA_NAMES or path.name.startswith("._")
+
+
+def inventory(
+    config: Config,
+    con: sqlite3.Connection,
+    *,
+    full_hash: bool = False,
+) -> InventoryResult:
     ensure_dir(config.corpus_dir)
     ensure_dir(config.state_dir)
 
     ignore = set(config.get("inventory", "ignore_directories", []))
     follow_symlinks = bool(config.get("inventory", "follow_directory_symlinks", False))
     hash_limit = int(config.get("inventory", "hash_files_up_to_mb", 32)) * 1024 * 1024
+    max_archive_entries = int(
+        config.get("inventory", "max_archive_entries_to_list", 100000)
+    )
 
     scan_time = now_iso()
     seen_paths: Set[str] = set()
     counts: Dict[str, int] = {}
+    root_counts: Dict[str, int] = {}
     errors: List[str] = []
     total_bytes = 0
+    finder_metadata_files = 0
+    archive_members_listed = 0
+    zoom_folders: Set[str] = set()
+    residual_paths: List[str] = []
 
     for path in _iter_files(config.data_dir, ignore, follow_symlinks):
         try:
@@ -168,36 +376,84 @@ def inventory(config: Config, con: sqlite3.Connection, full_hash: bool = False) 
 
         relative_path = safe_relpath(path, config.root)
         seen_paths.add(relative_path)
-        source_system = detect_source_system(relative_path)
-        kind = detect_kind(path, source_system)
+        match = classify_root(relative_path, config.source_roots)
+        source_root_key = match.root.key if match.root else "residual"
+        source_system = match.root.source_system if match.root else "unclassified"
         extension = path.suffix.lower()
-        content_hash = ""
+        if _is_finder_metadata(path):
+            kind = "metadata"
+            finder_metadata_files += 1
+        elif match.kind == "discovery":
+            kind = "discovery"
+        else:
+            kind = detect_kind(path, source_system)
 
+        content_hash = ""
         if full_hash or stat.st_size <= hash_limit:
             try:
                 content_hash = sha256_file(path)
             except OSError as exc:
                 errors.append(f"hash {path}: {exc}")
 
-        source_id = stable_source_id(relative_path, stat.st_size, stat.st_mtime_ns, content_hash)
-        date_hint = parse_date_hint(relative_path)
-        classification = _path_classification(relative_path)
-        sensitivity = _sensitivity(relative_path, source_system)
-        parse_readiness = _parse_readiness(kind, extension)
-        career_value, operations_value = _value_flags(source_system, kind)
-        metadata = {
+        source_id = stable_source_id(source_root_key, relative_path)
+        source_version_id = stable_source_version_id(source_id, content_hash)
+        scope = classify_scope(relative_path, source_system)
+        archive_metadata: Dict[str, object] = {}
+        archive_error: Optional[str] = None
+        archive_member_rows: List[Dict[str, object]] = []
+        if match.root and match.kind == "archive":
+            archive_metadata, archive_member_rows, archive_error = _archive_metadata(
+                config,
+                path,
+                match.root,
+                max_archive_entries,
+            )
+            if archive_error:
+                errors.append(archive_error)
+            archive_members_listed += len(archive_member_rows)
+
+        extraction_status = _extraction_status(
+            kind,
+            content_hash,
+            bool(archive_metadata.get("archive_matches_extracted_root")),
+        )
+        parse_readiness = (
+            "excluded"
+            if extraction_status == "excluded"
+            else _parse_readiness(kind, extension)
+        )
+        if match.root is None:
+            residual_paths.append(relative_path)
+        if match.root:
+            root_counts[source_root_key] = root_counts.get(source_root_key, 0) + 1
+        counts[source_system] = counts.get(source_system, 0) + 1
+        zoom_match = ZOOM_FOLDER_PATTERN.match(relative_path)
+        if zoom_match and parse_date_hint(zoom_match.group(1)):
+            zoom_folders.add(zoom_match.group(1))
+
+        metadata: Dict[str, object] = {
             "is_symlink": path.is_symlink(),
             "parent": safe_relpath(path.parent, config.root),
+            "source_root_key": source_root_key,
+            "root_match_kind": match.kind,
+            "source_relative_path": (
+                relative_path[len(match.root.relative_path):].lstrip("/")
+                if match.root and relative_path.startswith(match.root.relative_path)
+                else relative_path
+            ),
+            "source_version_id": source_version_id,
+            "scope_proposal": scope.scope,
+            "scope_reason": scope.reason,
+            "extraction_status": extraction_status,
+            **archive_metadata,
         }
 
         previous = con.execute(
             "SELECT source_id, first_seen FROM source_item WHERE relative_path = ?",
             (relative_path,),
         ).fetchone()
-
         if previous and previous["source_id"] != source_id:
             con.execute("DELETE FROM source_item WHERE source_id = ?", (previous["source_id"],))
-
         first_seen = previous["first_seen"] if previous else scan_time
         con.execute(
             """
@@ -238,18 +494,17 @@ def inventory(config: Config, con: sqlite3.Connection, full_hash: bool = False) 
                 stat.st_size,
                 stat.st_mtime_ns,
                 content_hash or None,
-                date_hint or None,
-                classification,
-                sensitivity,
+                parse_date_hint(relative_path) or None,
+                scope.scope,
+                _sensitivity(relative_path, source_system),
                 parse_readiness,
-                career_value,
-                operations_value,
+                _value_flags(source_system, kind)[0],
+                _value_flags(source_system, kind)[1],
                 first_seen,
                 scan_time,
                 json.dumps(metadata, ensure_ascii=False),
             ),
         )
-        counts[source_system] = counts.get(source_system, 0) + 1
         total_bytes += stat.st_size
 
     existing = con.execute("SELECT relative_path FROM source_item").fetchall()
@@ -260,7 +515,6 @@ def inventory(config: Config, con: sqlite3.Connection, full_hash: bool = False) 
                 (scan_time, row["relative_path"]),
             )
 
-    # Exact duplicate grouping is available for files that were hashed.
     con.execute("UPDATE source_item SET duplicate_group_id=NULL WHERE status='present'")
     duplicate_hashes = con.execute(
         """
@@ -281,43 +535,31 @@ def inventory(config: Config, con: sqlite3.Connection, full_hash: bool = False) 
     con.commit()
 
     rows = _source_rows(con)
-    manifest_path = config.corpus_dir / "source_manifest.csv"
-    write_csv(
-        manifest_path,
-        rows,
-        [
-            "source_id",
-            "relative_path",
-            "absolute_path",
-            "source_system",
-            "kind",
-            "extension",
-            "size_bytes",
-            "mtime_ns",
-            "content_sha256",
-            "date_hint",
-            "classification",
-            "sensitivity",
-            "parse_readiness",
-            "career_value",
-            "operations_value",
-            "duplicate_group_id",
-            "status",
-            "first_seen",
-            "last_seen",
-        ],
-    )
+    manifest_path = write_manifest_reports(config, rows)
 
     errors_path = config.state_dir / "inventory_errors.txt"
-    errors_path.write_text("\n".join(errors) + ("\n" if errors else ""), encoding="utf-8")
-
-    result = {
+    errors_path.write_text(
+        "\n".join(errors) + ("\n" if errors else ""),
+        encoding="utf-8",
+    )
+    residual_paths.sort()
+    result: InventoryResult = {
         "scanned_at": scan_time,
         "data_dir": str(config.data_dir),
         "files_present": len(seen_paths),
+        "substantive_files": len(seen_paths) - finder_metadata_files,
+        "finder_metadata_files": finder_metadata_files,
         "total_bytes": total_bytes,
         "counts_by_source_system": dict(sorted(counts.items())),
+        "counts_by_root_key": dict(sorted(root_counts.items())),
+        "archive_members_listed": archive_members_listed,
+        "zoom_dated_folders": len(zoom_folders),
+        "notion_export_files": root_counts.get("notion_export", 0),
+        "onenote_files": root_counts.get("onenote_backup", 0),
+        "residual_files": len(residual_paths),
+        "residual_paths": residual_paths,
         "errors": len(errors),
+        "error_messages": errors,
         "manifest": str(manifest_path),
     }
     (config.state_dir / "inventory_summary.json").write_text(

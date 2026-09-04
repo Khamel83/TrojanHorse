@@ -1,9 +1,56 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import posixpath
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional, Tuple
+
+
+NOTION_EXPORT_DIRECTORY = (
+    "40b7a161-92e3-450d-8dab-c2bb4a080adf_"
+    "ExportBlock-7045c812-ccf8-4b28-b774-5502ee6696b2"
+)
+CAPACITIES_ARCHIVE_NAME = "Capacities (2026-09-03 14-19-01).zip"
+
+
+EXPLICIT_SOURCE_ROOTS: Dict[str, Dict[str, Any]] = {
+    "inventory_discovery": {
+        "path": "data/note-inventory-20260903-142816",
+        "source_system": "inventory_discovery",
+        "precedence": 10,
+    },
+    "notion_export": {
+        "path": f"data/notes/{NOTION_EXPORT_DIRECTORY}",
+        "source_system": "notion",
+        "precedence": 20,
+    },
+    "notion_archive": {
+        "path": f"data/notes/{NOTION_EXPORT_DIRECTORY}.zip",
+        "source_system": "notion",
+        "precedence": 21,
+    },
+    "capacities_markdown": {
+        "path": "data/notes/Notes",
+        "source_system": "capacities",
+        "precedence": 30,
+    },
+    "capacities_archive": {
+        "path": f"data/notes/{CAPACITIES_ARCHIVE_NAME}",
+        "source_system": "capacities",
+        "precedence": 31,
+    },
+    "onenote_backup": {
+        "path": "data/notes/Backup",
+        "source_system": "onenote",
+        "precedence": 40,
+    },
+    "zoom": {
+        "path": "data/Zoom",
+        "source_system": "zoom",
+        "precedence": 50,
+    },
+}
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -13,13 +60,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "state": "work-corpus/state",
     },
     "source_roots": {
-        "zoom": "data/zoom",
-        "notes_onenote": "data/notes/onenote",
-        "notes_notion": "data/notes/notion",
-        "notes_capacities": "data/notes/capacities",
-        "notes_other": "data/notes/other",
-        "mcp_granola": "data/mcp/granola",
-        "mcp_wispr_flow": "data/mcp/wispr_flow",
+        key: dict(value) for key, value in EXPLICIT_SOURCE_ROOTS.items()
     },
     "inventory": {
         "ignore_directories": [".git", "node_modules", "__pycache__", ".venv", "venv", "corpus", "state"],
@@ -81,8 +122,29 @@ class ConfigurationError(ValueError):
 
 @dataclass(frozen=True)
 class SourceRoot:
-    name: str
-    path: Path
+    key: str
+    relative_path: str
+    source_system: str
+    precedence: int
+    enabled: bool = True
+    _resolved_path: Optional[Path] = field(default=None, repr=False, compare=False)
+
+    @property
+    def name(self) -> str:
+        """Compatibility alias for the Task 1 named-root interface."""
+        return self.key
+
+    @property
+    def path(self) -> Path:
+        """Return the configured filesystem path for existing callers."""
+        return self._resolved_path or Path(self.relative_path)
+
+
+@dataclass(frozen=True)
+class SourceRootMatch:
+    root: Optional[SourceRoot]
+    relative_path: str
+    kind: str
 
 
 def _merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,7 +164,10 @@ class Config:
         self.data_dir = self.resolve_path(payload["paths"]["data"])
         self.corpus_dir = self.resolve_path(payload["paths"]["corpus"])
         self.state_dir = self.resolve_path(payload["paths"]["state"])
-        self.source_roots = self._load_source_roots(payload.get("source_roots", {}))
+        configured_roots = payload.get("source_roots", {})
+        self.source_roots = self._load_source_roots(configured_roots)
+        self._source_root_lookup = {root.key: root for root in self.source_roots}
+        self._source_root_lookup.update(self._load_legacy_source_roots(configured_roots))
         self._validate_derived_roots()
         self._validate_local_transcription()
 
@@ -118,7 +183,7 @@ class Config:
 
     def source_root(self, name: str) -> SourceRoot:
         try:
-            return self.source_roots[name]
+            return self._source_root_lookup[name]
         except KeyError as exc:
             raise ConfigurationError(f"unknown source root: {name}") from exc
 
@@ -129,17 +194,142 @@ class Config:
                 f"derived path must be outside data/: {resolved}"
             )
 
-    def _load_source_roots(self, configured: Any) -> Dict[str, SourceRoot]:
+    def _load_source_roots(self, configured: Any) -> Tuple[SourceRoot, ...]:
         if not isinstance(configured, dict):
             raise ConfigurationError("source_roots must be an object")
 
-        roots: Dict[str, SourceRoot] = {}
-        for name, value in configured.items():
-            raw_path = value.get("path") if isinstance(value, dict) else value
+        roots: list[SourceRoot] = []
+        data_relative = self._normalise_source_path(self.payload["paths"]["data"])
+
+        for key, base in EXPLICIT_SOURCE_ROOTS.items():
+            configured_value = configured.get(key)
+            definition = dict(base)
+            if isinstance(configured_value, dict):
+                definition.update(configured_value)
+
+            raw_path = self._configured_path(configured_value) or definition.get("path")
             if not isinstance(raw_path, str) or not raw_path:
-                raise ConfigurationError(f"source root {name!r} must define a path")
-            roots[name] = SourceRoot(name=name, path=self.resolve_path(raw_path))
-        return roots
+                raise ConfigurationError(f"source root {key!r} must define a path")
+            if isinstance(configured_value, dict):
+                relative_candidate = (
+                    configured_value.get("relative_path")
+                    or definition.get("relative_path")
+                    or definition.get("path")
+                )
+            else:
+                # A legacy string override supplies a compatibility path but
+                # cannot change the reviewed canonical matching path.
+                relative_candidate = base["path"]
+            relative_path = self._normalise_source_path(
+                relative_candidate
+            )
+            self._validate_source_root_path(relative_path, data_relative)
+            source_system = definition.get("source_system")
+            precedence = definition.get("precedence")
+            if not isinstance(source_system, str) or not source_system:
+                raise ConfigurationError(f"source root {key!r} must define a source system")
+            if not isinstance(precedence, int):
+                raise ConfigurationError(f"source root {key!r} must define precedence")
+            enabled = definition.get("enabled", True)
+            if not isinstance(enabled, bool):
+                raise ConfigurationError(f"source root {key!r} enabled must be boolean")
+            roots.append(
+                SourceRoot(
+                    key=key,
+                    relative_path=relative_path,
+                    source_system=source_system,
+                    precedence=precedence,
+                    enabled=enabled,
+                    _resolved_path=self.resolve_path(raw_path),
+                )
+            )
+
+        for key, value in configured.items():
+            if key in EXPLICIT_SOURCE_ROOTS:
+                continue
+            if not isinstance(value, dict):
+                continue
+            if "source_system" not in value or "precedence" not in value:
+                continue
+            raw_path = self._configured_path(value)
+            if not raw_path:
+                raise ConfigurationError(f"source root {key!r} must define a path")
+            relative_path = self._normalise_source_path(
+                value.get("relative_path") or raw_path
+            )
+            self._validate_source_root_path(relative_path, data_relative)
+            source_system = value["source_system"]
+            precedence = value["precedence"]
+            enabled = value.get("enabled", True)
+            if not isinstance(source_system, str) or not source_system:
+                raise ConfigurationError(f"source root {key!r} must define a source system")
+            if not isinstance(precedence, int):
+                raise ConfigurationError(f"source root {key!r} must define precedence")
+            if not isinstance(enabled, bool):
+                raise ConfigurationError(f"source root {key!r} enabled must be boolean")
+            roots.append(
+                SourceRoot(
+                    key=key,
+                    relative_path=relative_path,
+                    source_system=source_system,
+                    precedence=precedence,
+                    enabled=enabled,
+                    _resolved_path=self.resolve_path(raw_path),
+                )
+            )
+        return tuple(sorted(roots, key=lambda root: (root.precedence, root.key)))
+
+    def _load_legacy_source_roots(self, configured: Dict[str, Any]) -> Dict[str, SourceRoot]:
+        source_systems = {
+            "notes_onenote": "onenote",
+            "notes_notion": "notion",
+            "notes_capacities": "capacities",
+            "notes_other": "other",
+            "mcp_granola": "granola",
+            "mcp_wispr_flow": "wispr_flow",
+        }
+        legacy: Dict[str, SourceRoot] = {}
+        for key, value in configured.items():
+            if key in EXPLICIT_SOURCE_ROOTS or not isinstance(value, str) or not value:
+                continue
+            relative_path = self._normalise_source_path(value)
+            legacy[key] = SourceRoot(
+                key=key,
+                relative_path=relative_path,
+                source_system=source_systems.get(key, "other"),
+                precedence=100000,
+                enabled=False,
+                _resolved_path=self.resolve_path(value),
+            )
+        return legacy
+
+    @staticmethod
+    def _configured_path(value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            raw_path = value.get("path") or value.get("relative_path")
+            return raw_path if isinstance(raw_path, str) else None
+        return None
+
+    @staticmethod
+    def _normalise_source_path(value: Any) -> str:
+        if not isinstance(value, str) or not value:
+            raise ConfigurationError("source root path must be a non-empty string")
+        raw = value.replace("\\", "/")
+        if raw.startswith("/"):
+            raise ConfigurationError(f"source root must be repository-relative: {value!r}")
+        normalised = posixpath.normpath(raw)
+        if normalised in {"", ".", ".."} or normalised.startswith("../"):
+            raise ConfigurationError(f"source root escapes repository: {value!r}")
+        return normalised
+
+    @staticmethod
+    def _validate_source_root_path(relative_path: str, data_relative: str) -> None:
+        if relative_path != data_relative and not relative_path.startswith(data_relative + "/"):
+            raise ConfigurationError(
+                f"source root must be under data/: {relative_path}"
+            )
 
     def _validate_derived_roots(self) -> None:
         self.assert_derived_path(self.corpus_dir)

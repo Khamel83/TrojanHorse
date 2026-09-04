@@ -81,9 +81,27 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
 
 
-def stable_source_id(relative_path: str, size_bytes: int, mtime_ns: int, content_hash: str = "") -> str:
-    basis = f"{relative_path}\\0{size_bytes}\\0{mtime_ns}\\0{content_hash}"
-    return "src_" + hashlib.blake2b(basis.encode("utf-8"), digest_size=16).hexdigest()
+def _identity_digest(*parts: str) -> str:
+    return hashlib.sha256(":".join(parts).encode("utf-8")).hexdigest()
+
+
+def stable_source_id(root_key: str, relative_path: str) -> str:
+    """Return the immutable identity of a physical source location."""
+    return _identity_digest("source-file:v1", root_key, relative_path)
+
+
+def stable_source_version_id(source_id: str, content_sha256: str) -> Optional[str]:
+    """Return a content identity, or None until the file has been hashed."""
+    if not content_sha256:
+        return None
+    return _identity_digest("source-version:v1", source_id, content_sha256)
+
+
+def stable_evidence_id(source_version_id: str, locator: str) -> str:
+    """Return the immutable identity of a locator within one source version."""
+    if not source_version_id:
+        raise ValueError("evidence requires a source version")
+    return _identity_digest("evidence:v1", source_version_id, locator)
 
 
 def stable_id(prefix: str, *parts: Any) -> str:

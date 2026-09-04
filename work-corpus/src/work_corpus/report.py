@@ -12,6 +12,99 @@ from .config import Config
 from .util import atomic_write_json, atomic_write_text, ensure_dir, human_bytes, now_iso, write_csv
 
 
+MANIFEST_FIELDS = [
+    "source_id",
+    "source_version_id",
+    "source_root_key",
+    "root_match_kind",
+    "relative_path",
+    "absolute_path",
+    "source_system",
+    "kind",
+    "extension",
+    "size_bytes",
+    "mtime_ns",
+    "content_sha256",
+    "date_hint",
+    "scope_proposal",
+    "scope_reason",
+    "classification",
+    "sensitivity",
+    "parse_readiness",
+    "extraction_status",
+    "career_value",
+    "operations_value",
+    "duplicate_group_id",
+    "archive_member_count",
+    "archive_semantic_status",
+    "archive_extracted_root_key",
+    "status",
+    "first_seen",
+    "last_seen",
+]
+ARCHIVE_MEMBER_FIELDS = [
+    "source_id",
+    "archive_path",
+    "source_system",
+    "member_path",
+    "size_bytes",
+    "compressed_size_bytes",
+    "is_directory",
+    "encrypted",
+    "semantic_status",
+    "extracted_root_key",
+]
+RESIDUAL_FIELDS = [
+    "relative_path",
+    "absolute_path",
+    "source_id",
+    "source_system",
+    "kind",
+    "extension",
+    "size_bytes",
+    "mtime_ns",
+    "scope_proposal",
+    "scope_reason",
+    "status",
+]
+
+
+def write_manifest_reports(config: Config, rows: List[Dict[str, Any]]) -> Path:
+    """Write derived manifest views without touching the reviewed inventory."""
+    reports = ensure_dir(config.corpus_dir / "reports")
+    manifest_path = reports / "source_manifest.csv"
+    archive_path = reports / "archive_members.csv"
+    residual_path = reports / "source_root_residuals.csv"
+    for path in (manifest_path, archive_path, residual_path):
+        config.assert_derived_path(path)
+
+    archive_rows: List[Dict[str, Any]] = []
+    residual_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        if row.get("root_match_kind") == "residual" and row.get("status") == "present":
+            residual_rows.append(row)
+        for member in row.get("archive_members") or []:
+            archive_rows.append(
+                {
+                    "source_id": row.get("source_id", ""),
+                    "archive_path": row.get("relative_path", ""),
+                    "source_system": row.get("source_system", ""),
+                    "member_path": member.get("member_path", ""),
+                    "size_bytes": member.get("size_bytes", 0),
+                    "compressed_size_bytes": member.get("compressed_size_bytes", 0),
+                    "is_directory": member.get("is_directory", False),
+                    "encrypted": member.get("encrypted", False),
+                    "semantic_status": row.get("archive_semantic_status", ""),
+                    "extracted_root_key": row.get("archive_extracted_root_key", ""),
+                }
+            )
+
+    write_csv(manifest_path, rows, MANIFEST_FIELDS)
+    write_csv(archive_path, archive_rows, ARCHIVE_MEMBER_FIELDS)
+    write_csv(residual_path, residual_rows, RESIDUAL_FIELDS)
+    return manifest_path
+
+
 def _count_phrase(count: int, singular: str, plural: str = "") -> str:
     return f"{count} {singular if count == 1 else (plural or singular + 's')}"
 
@@ -136,7 +229,10 @@ def _sensitive_review(con: sqlite3.Connection) -> List[Dict[str, Any]]:
             FROM source_item
             WHERE status='present'
               AND (
-                  classification IN ('potential_personal','mixed_or_review')
+                  classification IN (
+                      'potential_personal', 'mixed_or_review',
+                      'Personal', 'Mixed', 'Unknown'
+                  )
                   OR sensitivity='potential_restricted'
               )
             ORDER BY classification, sensitivity, relative_path
