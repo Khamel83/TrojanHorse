@@ -26,6 +26,7 @@ from .util import (
     parse_date_hint,
     safe_relpath,
     sha256_file,
+    stable_id,
     stable_source_id,
     stable_source_version_id,
 )
@@ -76,6 +77,7 @@ def _iter_files(
         yield root
         return
 
+    root_resolved = root.resolve(strict=False)
     visited: Set[Tuple[int, int]] = set()
     for current, dirs, files in os.walk(root, followlinks=follow_symlinks):
         current_path = Path(current)
@@ -95,15 +97,27 @@ def _iter_files(
             if name in ignore_names or name.startswith(".git"):
                 continue
             child = current_path / name
-            if child.is_symlink() and not follow_symlinks:
-                continue
+            if child.is_symlink():
+                if not follow_symlinks:
+                    continue
+                try:
+                    if not child.resolve(strict=True).is_relative_to(root_resolved):
+                        continue
+                except OSError:
+                    continue
             filtered_dirs.append(name)
         dirs[:] = sorted(filtered_dirs)
 
         for name in sorted(files):
             path = current_path / name
-            if path.is_symlink() and not path.exists():
-                continue
+            if path.is_symlink():
+                if not follow_symlinks or not path.exists():
+                    continue
+                try:
+                    if not path.resolve(strict=True).is_relative_to(root_resolved):
+                        continue
+                except OSError:
+                    continue
             yield path
 
 
@@ -353,6 +367,68 @@ def _is_finder_metadata(path: Path) -> bool:
     return path.name in FINDER_METADATA_NAMES or path.name.startswith("._")
 
 
+def _preserve_rekey_conflict(
+    con: sqlite3.Connection,
+    old_source_id: str,
+    new_source_id: str,
+    normalized: sqlite3.Row,
+) -> None:
+    """Keep both normalized records when a source-ID rekey collides."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS normalized_document_rekey_conflict (
+            conflict_id TEXT PRIMARY KEY,
+            old_source_id TEXT NOT NULL,
+            new_source_id TEXT NOT NULL,
+            old_source_version_id TEXT,
+            normalized_path TEXT,
+            parser TEXT,
+            source_mtime_ns INTEGER,
+            char_count INTEGER,
+            line_count INTEGER,
+            content_sha256 TEXT,
+            status TEXT NOT NULL,
+            error TEXT,
+            updated_at TEXT NOT NULL,
+            preserved_at TEXT NOT NULL
+        )
+        """
+    )
+    conflict_id = stable_id(
+        "norm-rekey-conflict",
+        old_source_id,
+        new_source_id,
+        normalized["source_version_id"],
+        normalized["normalized_path"],
+    )
+    con.execute(
+        """
+        INSERT INTO normalized_document_rekey_conflict (
+            conflict_id, old_source_id, new_source_id, old_source_version_id,
+            normalized_path, parser, source_mtime_ns, char_count, line_count,
+            content_sha256, status, error, updated_at, preserved_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(conflict_id) DO NOTHING
+        """,
+        (
+            conflict_id,
+            old_source_id,
+            new_source_id,
+            normalized["source_version_id"],
+            normalized["normalized_path"],
+            normalized["parser"],
+            normalized["source_mtime_ns"],
+            normalized["char_count"],
+            normalized["line_count"],
+            normalized["content_sha256"],
+            normalized["status"],
+            normalized["error"],
+            normalized["updated_at"],
+            now_iso(),
+        ),
+    )
+
+
 def _rekey_legacy_source(
     con: sqlite3.Connection,
     old_source_id: str,
@@ -406,7 +482,7 @@ def _rekey_legacy_source(
         ).fetchone()
         if normalized:
             target = con.execute(
-                "SELECT 1 FROM normalized_document WHERE source_version_id=?",
+                "SELECT * FROM normalized_document WHERE source_version_id=?",
                 (canonical_version_id,),
             ).fetchone()
             if target is None:
@@ -431,6 +507,27 @@ def _rekey_legacy_source(
                         normalized["error"],
                         normalized["updated_at"],
                     ),
+                )
+            elif any(
+                target[field] != normalized[field]
+                for field in (
+                    "source_id",
+                    "normalized_path",
+                    "parser",
+                    "source_mtime_ns",
+                    "char_count",
+                    "line_count",
+                    "content_sha256",
+                    "status",
+                    "error",
+                    "updated_at",
+                )
+            ):
+                _preserve_rekey_conflict(
+                    con,
+                    old_source_id,
+                    new_source_id,
+                    normalized,
                 )
             con.execute(
                 "DELETE FROM normalized_document WHERE source_version_id=?",

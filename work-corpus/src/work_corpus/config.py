@@ -339,6 +339,10 @@ class Config:
             )
 
     def _validate_derived_roots(self) -> None:
+        if not _is_within(self.data_dir, self.root):
+            raise ConfigurationError(
+                f"data root must remain inside repository: {self.data_dir}"
+            )
         self.assert_derived_path(self.corpus_dir)
         self.assert_derived_path(self.state_dir)
 

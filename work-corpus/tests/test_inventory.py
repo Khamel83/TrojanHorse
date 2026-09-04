@@ -1267,6 +1267,106 @@ def test_connect_preserves_conflicting_intermediate_legacy_row(tmp_path: Path):
     assert legacy["normalized_path"] == str(legacy_path)
 
 
+def test_rekey_preserves_conflicting_normalized_output(tmp_path: Path):
+    database = tmp_path / "rekey-conflict.sqlite"
+    old_source_id = "legacy-rekey-source"
+    new_source_id = "canonical-rekey-source"
+    content_hash = hashlib.sha256(b"rekey source bytes").hexdigest()
+    old_version_id = stable_source_version_id(old_source_id, content_hash)
+    new_version_id = stable_source_version_id(new_source_id, content_hash)
+    old_output = tmp_path / "old-output.md"
+    current_output = tmp_path / "current-output.md"
+    old_output.write_text("old output\n", encoding="utf-8")
+    current_output.write_text("current output\n", encoding="utf-8")
+
+    con = connect(database)
+    try:
+        for source_id, relative_path, version_id in (
+            (
+                old_source_id,
+                "data/Zoom/2026-09-04 12.00.00 Team Sync/meeting.md",
+                old_version_id,
+            ),
+            (
+                new_source_id,
+                "data/Zoom/other-meeting/meeting.md",
+                new_version_id,
+            ),
+        ):
+            con.execute(
+                """
+                INSERT INTO source_item (
+                    source_id, relative_path, absolute_path, source_system, kind,
+                    extension, size_bytes, mtime_ns, content_sha256,
+                    source_version_id, classification, extraction_status, status,
+                    first_seen, last_seen, metadata_json
+                ) VALUES (?, ?, '', 'zoom', 'document', '.md', 18, 123, ?, ?,
+                          'Work', 'ready', 'present',
+                          '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z', '{}')
+                """,
+                (source_id, relative_path, content_hash, version_id),
+            )
+            con.execute(
+                """
+                INSERT INTO source_version (
+                    source_version_id, source_id, content_sha256, size_bytes,
+                    mtime_ns, first_seen, last_seen
+                ) VALUES (?, ?, ?, 18, 123, '2026-09-04T00:00:00Z',
+                          '2026-09-04T00:00:00Z')
+                """,
+                (version_id, source_id, content_hash),
+            )
+        con.execute(
+            """
+            INSERT INTO normalized_document (
+                source_version_id, source_id, normalized_path, parser,
+                source_mtime_ns, char_count, line_count, content_sha256,
+                status, error, updated_at
+            ) VALUES (?, ?, ?, 'plain_text', 123, 11, 2, ?, 'normalized',
+                      NULL, '2026-09-04T00:00:00Z')
+            """,
+            (
+                old_version_id,
+                old_source_id,
+                str(old_output),
+                hashlib.sha256(b"old output\n").hexdigest(),
+            ),
+        )
+        con.execute(
+            """
+            INSERT INTO normalized_document (
+                source_version_id, source_id, normalized_path, parser,
+                source_mtime_ns, char_count, line_count, content_sha256,
+                status, error, updated_at
+            ) VALUES (?, ?, ?, 'plain_text', 123, 15, 2, ?, 'normalized',
+                      NULL, '2026-09-04T00:00:00Z')
+            """,
+            (
+                new_version_id,
+                new_source_id,
+                str(current_output),
+                hashlib.sha256(b"current output\n").hexdigest(),
+            ),
+        )
+        con.commit()
+        inventory_module._rekey_legacy_source(con, old_source_id, new_source_id)
+        con.commit()
+        current = con.execute(
+            "SELECT normalized_path FROM normalized_document WHERE source_version_id=?",
+            (new_version_id,),
+        ).fetchone()
+        legacy = con.execute(
+            "SELECT normalized_path FROM normalized_document_rekey_conflict "
+            "WHERE old_source_id=? AND new_source_id=?",
+            (old_source_id, new_source_id),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert current["normalized_path"] == str(current_output)
+    assert legacy["normalized_path"] == str(old_output)
+
+
 def test_evidence_identity_requires_version_and_locator():
     source_version_id = "version-for-evidence"
     locator = "line:12"

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from work_corpus import cli
 from work_corpus.config import ConfigurationError, load_config
+import work_corpus.inventory as inventory_module
+from work_corpus.db import connect
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +84,25 @@ def test_inventory_cli_does_not_create_raw_data_directory(tmp_path: Path):
 
     assert exit_code == 0
     assert not (tmp_path / "data").exists()
+
+
+def test_inventory_does_not_follow_external_directory_symlink(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    outside_dir = tmp_path / "outside"
+    data_dir.mkdir()
+    outside_dir.mkdir()
+    (outside_dir / "secret.txt").write_text("outside boundary\n", encoding="utf-8")
+    os.symlink(outside_dir, data_dir / "linked")
+
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "symlink.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        rows = con.execute("SELECT relative_path FROM source_item").fetchall()
+    finally:
+        con.close()
+
+    assert all(not row["relative_path"].startswith("data/linked/") for row in rows)
 
 
 def test_source_root_rejects_unknown_name_from_synthetic_root(tmp_path: Path):
