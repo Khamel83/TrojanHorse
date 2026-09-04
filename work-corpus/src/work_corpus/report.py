@@ -351,8 +351,6 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append("No durable Granola dump has been identified; MCP access alone is not a raw archive.")
     if not any(row["source_system"] == "wispr_flow" for row in coverage):
         needs.append("No durable Wispr Flow dump has been identified.")
-    if email_count == 0:
-        needs.append("No parseable email messages have been ingested.")
     if zoom_missing:
         needs.append(f"{zoom_missing} Zoom meeting folders still need local transcription.")
     if normalize_unsupported:
@@ -387,10 +385,6 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         next_steps.append(
             "Review `state/transcription_queue.csv`, configure a local Whisper engine, and run a small transcription batch."
         )
-    if email_count == 0:
-        next_steps.append(
-            "Run `RUN_EMAIL_ACCESS_PROBE.command`, then choose EML/MBOX, legacy Outlook local export, or permitted Graph Mail.Read."
-        )
     if mcp_count == 0:
         next_steps.append(
             "Use the MCP capture prompts to persist a small Granola and Wispr Flow sample under `data/mcp/`."
@@ -411,7 +405,6 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "",
         f"- Raw source files: **{source_count:,}** ({human_bytes(source_bytes)})",
         f"- Normalized documents: **{normalized:,}**",
-        f"- Email messages: **{email_count:,}**",
         f"- Granola/Wispr MCP items: **{mcp_count:,}**",
         f"- Zoom meeting folders: **{zoom_total:,}**",
         f"- Existing Zoom transcripts: **{zoom_existing:,}**",
@@ -440,8 +433,8 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "## Interpretation boundary",
         "",
         "This report establishes storage, format, date, transcript, and ingestion coverage. "
-        "It does not establish that every historical note is current, every email is authorized "
-        "for external use, or every apparent accomplishment belongs on a résumé.",
+        "It does not establish that every historical note is current or every apparent "
+        "accomplishment belongs on a résumé.",
         "",
     ])
     atomic_write_text(reports / "what_we_have_and_need.md", "\n".join(md))
@@ -491,7 +484,6 @@ th {{ background: #eee; }}
 <div class="cards">
 <div class="card"><strong>{source_count:,}</strong>raw files<br>{html.escape(human_bytes(source_bytes))}</div>
 <div class="card"><strong>{normalized:,}</strong>normalized documents</div>
-<div class="card"><strong>{email_count:,}</strong>email messages</div>
 <div class="card"><strong>{mcp_count:,}</strong>MCP items</div>
 <div class="card"><strong>{zoom_total:,}</strong>Zoom folders</div>
 <div class="card"><strong>{zoom_missing:,}</strong>Zoom transcripts missing</div>
@@ -545,7 +537,6 @@ determination that every item is current, accurate, externally safe, or résumé
         "- Keep `data/` unchanged and append new raw capture batches.",
         "- Review sensitive candidates before broad model access.",
         "- Validate three Zoom transcripts before bulk transcription.",
-        "- Backfill email once; use read-only deltas thereafter.",
         "- Backfill Granola/Wispr in bounded windows and persist raw responses.",
         "- Build current tasks only after historical evidence is separated from active commitments.",
         "",

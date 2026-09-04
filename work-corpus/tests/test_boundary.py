@@ -114,6 +114,21 @@ def test_normalized_output_slugifies_untrusted_source_system(tmp_path: Path):
     assert output == config.corpus_dir / "normalized" / "outside" / "version.md"
 
 
+def test_report_builds_against_provenance_schema_without_email_surface(tmp_path: Path):
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "report-provenance.sqlite")
+    try:
+        summary = build_report(config, con)
+    finally:
+        con.close()
+
+    assert summary["source_files"] == 0
+    status = (config.corpus_dir / "reports" / "status.json").read_text(
+        encoding="utf-8"
+    )
+    assert "email" not in status.casefold()
+
+
 def test_cli_command_set_has_no_email_or_atlas_command():
     parser = cli._parser()
     commands = _command_names(parser)
