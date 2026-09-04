@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy to config.local.json and include only overrides needed on this machine.",
+  "inventory": {
+    "follow_directory_symlinks": true,
+    "hash_files_up_to_mb": 32
+  },
+  "normalization": {
+    "skip_classifications": [
+      "potential_personal",
+      "mixed_or_review"
+    ],
+    "max_table_rows": 100000
+  },
+  "zoom": {
+    "engine": "custom",
+    "language": "en",
+    "custom_command": [
+      "/absolute/path/to/local-transcriber",
+      "--input",
+      "{input}",
+      "--output",
+      "{output_vtt}"
+    ]
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "paths": {
+    "data": "data",
+    "corpus": "corpus",
+    "state": "state"
+  },
+  "inventory": {
+    "ignore_directories": [
+      ".git",
+      ".svn",
+      ".hg",
+      "node_modules",
+      "__pycache__",
+      ".venv",
+      "venv",
+      ".Trash",
+      ".DS_Store",
+      "corpus",
+      "state"
+    ],
+    "hash_files_up_to_mb": 32,
+    "follow_directory_symlinks": true,
+    "max_archive_entries_to_list": 100000
+  },
+  "normalization": {
+    "max_text_file_mb": 200,
+    "max_table_rows": 100000,
+    "extract_pdf_when_pypdf_available": true,
+    "extract_docx_when_available": true,
+    "extract_pptx_when_available": true,
+    "extract_xlsx_when_available": true,
+    "skip_classifications": [
+      "potential_personal",
+      "mixed_or_review"
+    ]
+  },
+  "zoom": {
+    "language": "en",
+    "engine": "auto",
+    "model": "small.en",
+    "whisper_cpp_command": "whisper-cli",
+    "whisper_cpp_model": "",
+    "ffmpeg_command": "ffmpeg",
+    "ffprobe_command": "ffprobe",
+    "local_models_only": true,
+    "auto_transcribe_max_files": 0,
+    "keep_temporary_wav": false,
+    "custom_command": [],
+    "custom_output_format": "vtt"
+  },
+  "email": {
+    "since": "2024-01-01",
+    "attachments": "metadata_only",
+    "legacy_outlook_folders": [
+      "Inbox",
+      "Sent Items"
+    ],
+    "legacy_outlook_max_messages_per_folder": 2000
+  },
+  "mcp": {
+    "granola_inbox": "data/mcp/granola",
+    "wispr_flow_inbox": "data/mcp/wispr_flow"
+  }
+}
