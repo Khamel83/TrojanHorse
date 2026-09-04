@@ -229,6 +229,43 @@ ON normalized_document(source_id);
 """
 
 
+def mark_noncurrent_normalized_documents_retained(
+    con: sqlite3.Connection,
+    updated_at: str,
+) -> int:
+    """Keep prior output bytes while removing them from the active result set."""
+    cursor = con.execute(
+        """
+        UPDATE normalized_document
+        SET status='prior_good_retained',
+            error='Prior good output retained; source version is no longer current and eligible',
+            updated_at=?
+        WHERE status='normalized'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM source_item s
+              JOIN source_version v
+                ON v.source_version_id=s.source_version_id
+               AND v.source_id=s.source_id
+               AND v.content_sha256=s.content_sha256
+              WHERE s.source_id=normalized_document.source_id
+                AND s.source_version_id=normalized_document.source_version_id
+                AND s.status='present'
+                AND s.extraction_status='ready'
+                AND s.content_sha256 IS NOT NULL
+                AND s.content_sha256<>''
+                AND s.source_version_id IS NOT NULL
+                AND s.source_version_id<>''
+                AND s.kind NOT IN (
+                    'media', 'email', 'email_data', 'mcp', 'unknown'
+                )
+          )
+        """,
+        (updated_at,),
+    )
+    return max(cursor.rowcount, 0)
+
+
 def _backfill_source_versions(con: sqlite3.Connection) -> None:
     rows = con.execute(
         """

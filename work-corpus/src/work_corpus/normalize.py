@@ -10,7 +10,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .config import Config
+from .config import Config, DEFAULT_SKIP_CLASSIFICATIONS
+from .db import mark_noncurrent_normalized_documents_retained
 from .util import (
     atomic_write_text,
     ensure_dir,
@@ -306,30 +307,11 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         config.get(
             "normalization",
             "skip_classifications",
-            ["potential_personal", "mixed_or_review"],
+            list(DEFAULT_SKIP_CLASSIFICATIONS),
         )
     )
 
-    con.execute(
-        """
-        UPDATE normalized_document
-        SET status='excluded',
-            error='Current source version is not eligible for extraction',
-            updated_at=?
-        WHERE EXISTS (
-            SELECT 1
-            FROM source_item s
-            WHERE s.source_id=normalized_document.source_id
-              AND s.source_version_id=normalized_document.source_version_id
-              AND (
-                  s.extraction_status<>'ready'
-                  OR s.content_sha256 IS NULL
-                  OR s.content_sha256=''
-              )
-        )
-        """,
-        (now_iso(),),
-    )
+    mark_noncurrent_normalized_documents_retained(con, now_iso())
 
     eligible = con.execute(
         """
@@ -352,8 +334,8 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ORDER BY s.source_system, s.relative_path
         """
     ).fetchall()
-    rows = [row for row in eligible if (row["classification"] or "unknown") not in skip_classifications]
-    review_rows = [row for row in eligible if (row["classification"] or "unknown") in skip_classifications]
+    rows = [row for row in eligible if (row["classification"] or "Unknown") not in skip_classifications]
+    review_rows = [row for row in eligible if (row["classification"] or "Unknown") in skip_classifications]
 
     result = {
         "normalized": 0,

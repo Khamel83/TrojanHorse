@@ -245,10 +245,11 @@ def test_source_and_version_identity_rules(tmp_path: Path):
 
 def test_source_version_and_normalized_history_survive_changed_bytes(tmp_path: Path):
     root = _prepare_tree(tmp_path)
+    relative_path = "data/notes/Notes/work-project-roadmap.md"
+    source_path = root / relative_path
+    source_path.write_text("# Work project roadmap\n", encoding="utf-8")
     config = load_config(root)
     con = connect(config.state_dir / "version-history.sqlite")
-    relative_path = "data/notes/Notes/notion-roadmap.md"
-    source_path = root / relative_path
     try:
         inventory_module.inventory(config, con)
         first_row, first_metadata = _row(con, relative_path)
@@ -313,10 +314,168 @@ def test_source_version_and_normalized_history_survive_changed_bytes(tmp_path: P
     }
     assert len(version_rows) == 2
     assert len(normalized_rows) == 2
-    assert {row["status"] for row in normalized_rows} == {"normalized"}
+    statuses_by_version = {
+        row["source_version_id"]: row["status"] for row in normalized_rows
+    }
+    assert statuses_by_version == {
+        first_version_id: "prior_good_retained",
+        changed_metadata["source_version_id"]: "normalized",
+    }
     assert len({row["normalized_path"] for row in normalized_rows}) == 2
     assert first_output.read_bytes() == first_output_bytes
     assert all(Path(row["normalized_path"]).is_file() for row in normalized_rows)
+
+
+@pytest.mark.parametrize(
+    ("file_name", "expected_scope"),
+    [
+        ("therapy-journal.md", "Personal"),
+        ("work-therapy-plan.md", "Mixed"),
+        ("untitled.md", "Unknown"),
+    ],
+)
+def test_default_normalization_fails_closed_for_canonical_non_work_scopes(
+    tmp_path: Path,
+    file_name: str,
+    expected_scope: str,
+):
+    relative_path = f"data/notes/Notes/{file_name}"
+    source_path = tmp_path / relative_path
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("Private synthetic journal entry.\n", encoding="utf-8")
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "scope-boundary.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        source, metadata = _row(con, relative_path)
+
+        result = normalize_all(config, con)
+        normalized_rows = con.execute(
+            """
+            SELECT normalized_path, status
+            FROM normalized_document
+            WHERE source_id=?
+            """,
+            (source["source_id"],),
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert source["classification"] == expected_scope
+    assert source["content_sha256"]
+    assert source["source_version_id"]
+    assert metadata["extraction_status"] == "ready"
+    assert result == {
+        "normalized": 0,
+        "skipped_unchanged": 0,
+        "review_required": 1,
+        "unsupported": 0,
+        "errors": 0,
+    }
+    assert len(normalized_rows) == 1
+    assert normalized_rows[0]["status"] == "review_required"
+    assert normalized_rows[0]["normalized_path"] is None
+    assert not list((config.corpus_dir / "normalized").rglob("*.md"))
+
+
+@pytest.mark.parametrize(
+    "config_name",
+    ["config.json", "config.local.example.json"],
+)
+def test_shipped_config_keeps_canonical_non_work_scopes_fail_closed(
+    config_name: str,
+):
+    config_path = Path(__file__).parents[1] / config_name
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert {"Personal", "Mixed", "Unknown"} <= set(
+        payload["normalization"]["skip_classifications"]
+    )
+
+
+def test_ineligible_rescan_retires_prior_normalized_output(tmp_path: Path):
+    relative_path = "data/notes/Notes/work-project-retrospective.md"
+    source_path = tmp_path / relative_path
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("# Work project retrospective\n", encoding="utf-8")
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "ineligible-transition.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        initial_source, _ = _row(con, relative_path)
+        initial_version_id = initial_source["source_version_id"]
+        first_result = normalize_all(config, con)
+        initial_normalized = con.execute(
+            """
+            SELECT source_version_id, normalized_path, status
+            FROM normalized_document
+            WHERE source_id=?
+            """,
+            (initial_source["source_id"],),
+        ).fetchone()
+        assert initial_normalized is not None
+        retained_path = Path(initial_normalized["normalized_path"])
+        retained_bytes = retained_path.read_bytes()
+
+        config_dir = tmp_path / "work-corpus"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.json").write_text(
+            json.dumps({"inventory": {"hash_files_up_to_mb": 0}}),
+            encoding="utf-8",
+        )
+        ineligible_config = load_config(tmp_path)
+        inventory_module.inventory(ineligible_config, con)
+
+        current_source, current_metadata = _row(con, relative_path)
+        rows_after_scan = con.execute(
+            """
+            SELECT source_version_id, normalized_path, status, error
+            FROM normalized_document
+            WHERE source_id=?
+            """,
+            (initial_source["source_id"],),
+        ).fetchall()
+        version_count = con.execute(
+            """
+            SELECT COUNT(*)
+            FROM source_version
+            WHERE source_id=? AND source_version_id=?
+            """,
+            (initial_source["source_id"], initial_version_id),
+        ).fetchone()[0]
+
+        second_result = normalize_all(ineligible_config, con)
+        active_after_normalize = con.execute(
+            """
+            SELECT COUNT(*)
+            FROM normalized_document
+            WHERE source_id=? AND status='normalized'
+            """,
+            (initial_source["source_id"],),
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    assert first_result["normalized"] == 1
+    assert initial_normalized["status"] == "normalized"
+    assert initial_normalized["source_version_id"] == initial_version_id
+    assert current_source["content_sha256"] is None
+    assert current_source["source_version_id"] is None
+    assert current_metadata["extraction_status"] == "inventory_only"
+    assert len(rows_after_scan) == 1
+    assert rows_after_scan[0]["status"] == "prior_good_retained"
+    assert rows_after_scan[0]["error"]
+    assert Path(rows_after_scan[0]["normalized_path"]) == retained_path
+    assert retained_path.read_bytes() == retained_bytes
+    assert version_count == 1
+    assert second_result == {
+        "normalized": 0,
+        "skipped_unchanged": 0,
+        "review_required": 0,
+        "unsupported": 0,
+        "errors": 0,
+    }
+    assert active_after_normalize == 0
 
 
 def test_normalization_excludes_non_evidence_and_unhashed_inventory_rows(

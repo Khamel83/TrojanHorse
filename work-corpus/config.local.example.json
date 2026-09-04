@@ -6,6 +6,9 @@
   },
   "normalization": {
     "skip_classifications": [
+      "Personal",
+      "Mixed",
+      "Unknown",
       "potential_personal",
       "mixed_or_review"
     ],

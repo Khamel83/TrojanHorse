@@ -39,6 +39,9 @@
     "extract_pptx_when_available": true,
     "extract_xlsx_when_available": true,
     "skip_classifications": [
+      "Personal",
+      "Mixed",
+      "Unknown",
       "potential_personal",
       "mixed_or_review"
     ]

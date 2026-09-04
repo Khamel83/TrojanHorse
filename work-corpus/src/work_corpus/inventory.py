@@ -11,6 +11,7 @@ from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple, TypedDi
 import zipfile
 
 from .config import Config, EXPLICIT_SOURCE_ROOTS, SourceRoot, SourceRootMatch
+from .db import mark_noncurrent_normalized_documents_retained
 from .report import write_manifest_reports
 from .util import (
     detect_kind,
@@ -550,6 +551,8 @@ def inventory(
                 "UPDATE source_item SET status = 'missing', last_seen = ? WHERE relative_path = ?",
                 (scan_time, row["relative_path"]),
             )
+
+    mark_noncurrent_normalized_documents_retained(con, scan_time)
 
     con.execute("UPDATE source_item SET duplicate_group_id=NULL WHERE status='present'")
     duplicate_hashes = con.execute(

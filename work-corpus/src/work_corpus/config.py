@@ -12,6 +12,13 @@ NOTION_EXPORT_DIRECTORY = (
     "ExportBlock-7045c812-ccf8-4b28-b774-5502ee6696b2"
 )
 CAPACITIES_ARCHIVE_NAME = "Capacities (2026-09-03 14-19-01).zip"
+DEFAULT_SKIP_CLASSIFICATIONS = (
+    "Personal",
+    "Mixed",
+    "Unknown",
+    "potential_personal",
+    "mixed_or_review",
+)
 
 
 EXPLICIT_SOURCE_ROOTS: Dict[str, Dict[str, Any]] = {
@@ -75,7 +82,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "extract_docx_when_available": True,
         "extract_pptx_when_available": True,
         "extract_xlsx_when_available": True,
-        "skip_classifications": ["potential_personal", "mixed_or_review"],
+        "skip_classifications": list(DEFAULT_SKIP_CLASSIFICATIONS),
     },
     "zoom": {
         "language": "en",
