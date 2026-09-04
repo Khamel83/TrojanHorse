@@ -2,7 +2,37 @@
 
 > Tracks progress through continuous plan execution. Use `bd ready` to see next tasks.
 
+## Current corpus status — 2026-09-04
+
+The old Bridge log below is historical. The current project is the separate,
+local-only work corpus described in `CONTEXT.md`.
+
+- [x] Reviewed the raw `data/` inventory without mutating it.
+- [x] Resolved local access status for Capacities, Notion, OneNote, Zoom, and
+  formal records.
+- [x] Committed the design specification and Antigravity adversarial review.
+- [x] Committed the implementation plan and Gemini 3.1 Pro review.
+- [ ] Promote the reviewed bootstrap scaffold into the root `work-corpus/`
+  package.
+- [ ] Implement and verify the corpus in the order defined by the plan.
+
+Current authoritative documents:
+
+- `CONTEXT.md`
+- `docs/superpowers/specs/2026-09-04-local-work-corpus-design.md`
+- `docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md`
+- `01_INVENTORY/coverage_and_gaps.md`
+
+The project has not started corpus implementation. Do not run the old Atlas
+bridge against `data/`.
+
 ---
+
+## Historical bridge log — not current project status
+
+The following entries describe the retired Atlas bridge work. They are kept
+for provenance only. Do not use them as instructions for the local work
+corpus.
 
 ## Session History
 

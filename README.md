@@ -1,4 +1,25 @@
-# TrojanHorse: Local Vault Processor + Q&A
+# TrojanHorse: Local Work Corpus
+
+> Current status: design and implementation plan approved. Implementation has
+> not started.
+
+The current project is a private, local, single-user work-evidence corpus. It
+is separate from Atlas and does not include email. The raw `data/` tree stays
+unchanged. The reviewed design, inventory, and implementation plan are the
+authoritative project documents:
+
+- [Project context](CONTEXT.md)
+- [Design specification](docs/superpowers/specs/2026-09-04-local-work-corpus-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md)
+- [Inventory and gaps](01_INVENTORY/coverage_and_gaps.md)
+- [Source access matrix](01_INVENTORY/source_access_matrix.md)
+- [Boundary ADR](docs/adr/0001-local-work-corpus-boundary.md)
+
+The repository also contains an older vault/RAG processor and Atlas bridge
+description below. That material is historical and is not an instruction to
+run the old bridge against `data/`.
+
+## Historical legacy README
 
 A minimal, local-first system that watches folders, processes new text/markdown files, classifies them using LLMs, writes structured notes, and provides RAG-based Q&A.
 

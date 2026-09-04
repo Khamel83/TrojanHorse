@@ -1,6 +1,12 @@
 # Local Work Corpus Design
 
-Status: Revised after adversarial review; pending user approval
+Status: Approved; implementation plan reviewed; implementation not started
+
+Review record: Antigravity/Gemini 3.8 Flash adversarial review is recorded in
+`docs/superpowers/reviews/2026-09-04-local-work-corpus-antigravity-review.md`.
+The implementation plan is recorded in
+`docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md` and
+was reviewed by Gemini 3.1 Pro.
 
 ## Goal
 
