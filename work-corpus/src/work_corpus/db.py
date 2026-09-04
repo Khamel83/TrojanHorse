@@ -605,6 +605,49 @@ def _table_exists(con: sqlite3.Connection, name: str) -> bool:
     ).fetchone() is not None
 
 
+def _has_foreign_key(
+    con: sqlite3.Connection,
+    table: str,
+    from_column: str,
+    target_table: str,
+    target_column: str = "",
+) -> bool:
+    """Return whether a table has the FK needed by the provenance model."""
+    for row in con.execute(f'PRAGMA foreign_key_list("{table}")'):
+        if row[3] != from_column or row[2] != target_table:
+            continue
+        if target_column and row[4] != target_column:
+            continue
+        return True
+    return False
+
+
+def _reject_unsafe_legacy_schema(con: sqlite3.Connection) -> None:
+    """Fail closed when bootstrap tables cannot enforce provenance FKs.
+
+    SQLite cannot add a foreign key with ALTER TABLE. Rebuilding a user's
+    existing source tables without a complete, reviewed data migration could
+    lose rows or silently orphan dependent evidence. Leave that database
+    untouched and require an explicit migration instead.
+    """
+    source_table = "source_record" if _table_exists(con, "source_record") else "source_item"
+    if _table_exists(con, source_table) and not _has_foreign_key(
+        con, source_table, "root_key", "source_root", "root_key"
+    ):
+        raise RuntimeError(
+            "legacy source table lacks the provenance source_root foreign key; "
+            "database preserved, run an explicit reviewed migration"
+        )
+    if _table_exists(con, "source_version") and _table_exists(con, "source_record"):
+        if not _has_foreign_key(
+            con, "source_version", "source_id", "source_record", "source_id"
+        ):
+            raise RuntimeError(
+                "legacy source_version table lacks the provenance source_record "
+                "foreign key; database preserved, run an explicit reviewed migration"
+            )
+
+
 def _rename_bootstrap_tables(con: sqlite3.Connection) -> None:
     """Move bootstrap names forward without deleting data."""
     for old_name, new_name in (
@@ -740,6 +783,7 @@ def connect(
         con.execute("PRAGMA foreign_keys=OFF")
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA synchronous=NORMAL")
+        _reject_unsafe_legacy_schema(con)
         _rename_bootstrap_tables(con)
         # Add columns used by CREATE INDEX statements before applying the full
         # schema to a bootstrap database whose tables already exist.
@@ -999,7 +1043,7 @@ def current_tasks(
           AND COALESCE(source_event_date, event_date) IS NOT NULL
           AND date(COALESCE(source_event_date, event_date)) >= date(?)
           AND LOWER(COALESCE(candidate_status, 'candidate'))
-              NOT IN ('rejected', 'review_required', 'historical')
+              IN ('accepted', 'approved', 'confirmed', 'current')
           AND LOWER(COALESCE(task_status, status, 'open'))
               NOT IN ('completed', 'cancelled', 'dismissed', 'historical')
         ORDER BY date(COALESCE(source_event_date, event_date)), task_id

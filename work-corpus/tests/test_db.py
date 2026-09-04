@@ -118,6 +118,68 @@ def test_foreign_keys_reject_orphan_provenance(tmp_path):
         con.close()
 
 
+def test_unsafe_legacy_schema_fails_closed_without_accepting_orphans(tmp_path):
+    database = tmp_path / "legacy.sqlite"
+    legacy = sqlite3.connect(database)
+    try:
+        legacy.executescript(
+            """
+            CREATE TABLE source_item (
+                source_id TEXT PRIMARY KEY,
+                relative_path TEXT NOT NULL UNIQUE,
+                absolute_path TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                mtime_ns INTEGER NOT NULL,
+                content_sha256 TEXT,
+                source_version_id TEXT,
+                date_hint TEXT,
+                classification TEXT,
+                sensitivity TEXT,
+                parse_readiness TEXT,
+                extraction_status TEXT NOT NULL DEFAULT 'inventory_only',
+                career_value TEXT,
+                operations_value TEXT,
+                duplicate_group_id TEXT,
+                status TEXT NOT NULL DEFAULT 'present',
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL,
+                metadata_json TEXT
+            );
+            CREATE TABLE source_version (
+                source_version_id TEXT PRIMARY KEY,
+                source_id TEXT NOT NULL,
+                content_sha256 TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                mtime_ns INTEGER NOT NULL,
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL
+            );
+            INSERT INTO source_version VALUES
+                ('orphan', 'missing-source', 'hash', 1, 1, 'a', 'a');
+            """
+        )
+        legacy.commit()
+    finally:
+        legacy.close()
+
+    with pytest.raises(RuntimeError, match="database preserved"):
+        connect(database)
+
+    check = sqlite3.connect(database)
+    try:
+        assert check.execute(
+            "SELECT source_id FROM source_version WHERE source_version_id='orphan'"
+        ).fetchone() == ("missing-source",)
+        assert check.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='source_item'"
+        ).fetchone() == ("source_item",)
+    finally:
+        check.close()
+
+
 def test_deterministic_ids_retain_versions_and_make_reruns_idempotent(tmp_path):
     database = tmp_path / "state.sqlite"
     con = connect(database)
@@ -215,6 +277,17 @@ def test_current_tasks_use_run_date_and_event_date(tmp_path):
                       '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z')
             """,
             [(name, f"Do {name}", event_date, evidence_id) for name, event_date in rows],
+        )
+        con.execute(
+            """
+            INSERT INTO task (
+                task_id, action, source_event_date, due_date, candidate_status,
+                task_status, source_evidence_id, created_at, updated_at
+            ) VALUES ('unaccepted', 'Do not surface', '2026-09-01', NULL,
+                      'candidate', 'open', ?, '2026-09-04T00:00:00Z',
+                      '2026-09-04T00:00:00Z')
+            """,
+            (evidence_id,),
         )
         con.execute(
             """
