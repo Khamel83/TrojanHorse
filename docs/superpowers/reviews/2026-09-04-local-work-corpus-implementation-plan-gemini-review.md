@@ -68,3 +68,16 @@ Gemini 3.1 Pro identified four additional issues:
 The plan was revised to add `mcp_item`, move real safe-batch work to Task 9,
 mark promoted files explicitly, and move the alias template. A final
 confirmation is required after this revision.
+
+## Follow-up review 4
+
+Gemini 3.1 Pro identified two final consistency issues:
+
+- High: `mcp_item` schema — align the exact fields in Task 3 with the fields
+  described in Task 8, including the original response hash and checkpoint.
+- Low: file layout — remove the extra `schema.sql`, `adapters.py`, and
+  `redaction.py` files and keep those responsibilities in the already mapped
+  `db.py`, `normalize.py`, and `util.py` modules.
+
+The plan was revised to align the `mcp_item` columns and remove those extra
+files. A final confirmation is required after this revision.

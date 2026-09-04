@@ -224,7 +224,6 @@ email and creates an email fixture.
 **Files:**
 
 - Modify: `work-corpus/src/work_corpus/db.py`
-- Create: `work-corpus/src/work_corpus/schema.sql`
 - Create: `work-corpus/tests/test_db.py`
 
 The initial schema must contain these tables and no email or career-claim table:
@@ -250,7 +249,7 @@ The initial schema must contain these tables and no email or career-claim table:
 | `relationship` | Evidence-backed typed edge between canonical records or a record and an evidence item. |
 | `review_item` | Issue type, source/evidence IDs, proposed result, reason, confidence, status, resolution. |
 | `ingestion_checkpoint` | Provider/root, cursor or source version, last successful retrieval, count, error. |
-| `mcp_item` | Provider, source record, external record ID, capture/event date, retrieval date, normalized evidence ID, and update time. This is an integration index, not a second factual corpus. |
+| `mcp_item` | `item_id`, `source_id`, `provider`, `external_record_id`, `capture_date`, `event_date`, `retrieval_date`, `original_response_sha256`, `normalized_evidence_id`, `checkpoint_id`, and `updated_at`. This is an integration index, not a second factual corpus. |
 
 Add indexes for source system, scope, source status, event dates, entity aliases, relationship endpoints, review status, task candidate status, and FTS document IDs. Add a SQLite FTS5 table for searchable derived text. Add a repository query function `current_tasks(con, run_date)` that applies the run-date rule; SQLite views do not accept parameters, so do not pretend that `current_tasks(run_date)` is a SQL view. Do not persist a stale boolean as the source of truth.
 
@@ -276,7 +275,6 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 
 - Modify: `work-corpus/src/work_corpus/normalize.py`
 - Modify: `work-corpus/src/work_corpus/util.py`
-- Create: `work-corpus/src/work_corpus/adapters.py`
 - Create: `work-corpus/src/work_corpus/onenote.py`
 - Create: `work-corpus/tests/test_extraction.py`
 - Create: `work-corpus/tests/fixtures/` with synthetic Markdown, HTML, CSV, VTT, PDF/Office metadata, and parser-error files only
@@ -397,7 +395,6 @@ unverified OneNote package name.
 **Files:**
 
 - Create: `work-corpus/src/work_corpus/query.py`
-- Create: `work-corpus/src/work_corpus/redaction.py`
 - Create: `work-corpus/src/work_corpus/embeddings.py`
 - Modify: `work-corpus/src/work_corpus/cli.py`
 - Create: `work-corpus/tests/test_query.py`
@@ -443,7 +440,13 @@ The query builder must make it impossible for the default path to join `Personal
 
 The initial implementation accepts local JSON, JSONL, Markdown, or TXT snapshots under configured future roots such as `data/mcp/wispr_flow/` and `data/mcp/granola/`. It does not connect to a live MCP server during this phase.
 
-Each item stores provider, external record ID, capture/event date, retrieval date, source path, original response hash, and checkpoint. The stable item key is provider plus external ID when present; otherwise it is the source version plus record index and content hash. Repeated snapshots update the same item. Overlapping checkpoints do not duplicate evidence.
+Each `mcp_item` stores exactly these fields: `item_id`, `source_id`,
+`provider`, `external_record_id`, `capture_date`, `event_date`,
+`retrieval_date`, `original_response_sha256`, `normalized_evidence_id`,
+`checkpoint_id`, and `updated_at`. The stable item key is provider plus
+external ID when present; otherwise it is the source version plus record index
+and content hash. Repeated snapshots update the same item. Overlapping
+checkpoints do not duplicate evidence.
 
 - [ ] Write tests for provider classification, external-ID idempotency, content-hash fallback, cursor persistence, malformed-item review, and event-date preservation.
 - [ ] Remove or bypass bootstrap email imports and email-specific checkpoint directories from `mcp_ingest.py` and `cli.py`.
