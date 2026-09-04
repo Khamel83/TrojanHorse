@@ -81,3 +81,11 @@ Gemini 3.1 Pro identified two final consistency issues:
 
 The plan was revised to align the `mcp_item` columns and remove those extra
 files. A final confirmation is required after this revision.
+
+## Final confirmation
+
+Gemini 3.1 Pro returned `SATISFIED`: the plan incorporated the prior
+corrections, deferred real safe-batch execution to the acceptance sequence,
+aligned the schema fields, and removed the out-of-scope files. It suggested
+one low-priority convention improvement: keep redaction tests in the existing
+`test_util.py`. That suggestion was accepted and applied.

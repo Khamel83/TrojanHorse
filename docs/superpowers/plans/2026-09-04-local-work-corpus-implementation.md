@@ -398,7 +398,6 @@ unverified OneNote package name.
 - Create: `work-corpus/src/work_corpus/embeddings.py`
 - Modify: `work-corpus/src/work_corpus/cli.py`
 - Create: `work-corpus/tests/test_query.py`
-- Create: `work-corpus/tests/test_redaction.py`
 
 **Query order:**
 
@@ -420,9 +419,9 @@ The query builder must make it impossible for the default path to join `Personal
 
 - [ ] Write query tests that insert one Work, Personal, Mixed, and Unknown evidence row and assert that the default result contains only Work.
 - [ ] Write `test_query.py::test_raw_fallback_requires_work_scope` and assert that raw fallback never returns non-Work evidence even when the text matches exactly.
-- [ ] Write redaction tests for signed URLs, bearer values, API-key-shaped strings, ordinary local paths, and timestamp text.
+- [ ] Add redaction tests to the promoted `work-corpus/tests/test_util.py` for signed URLs, bearer values, API-key-shaped strings, ordinary local paths, and timestamp text.
 - [ ] Write evidence-label tests for canonical, unreviewed, inference, conflict, and missing results.
-- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_query.py work-corpus/tests/test_redaction.py` before implementation. Expected failures: the bootstrap fallback has a Work predicate but no complete query layer, FTS scope join, or secret redaction contract.
+- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_query.py work-corpus/tests/test_util.py` before implementation. Expected failures: the bootstrap fallback has a Work predicate but no complete query layer, FTS scope join, or secret redaction contract.
 - [ ] Implement exact search, relationship traversal, and fallback first. Do not make embeddings a dependency for the first useful query.
 - [ ] Add the optional local embedding index and a rebuild command only when the exact query gate is green.
 - [ ] Run the query checks against synthetic fixtures and confirm source locations point to the original relative paths without URL leakage. Defer the real safe batch to Task 9.
