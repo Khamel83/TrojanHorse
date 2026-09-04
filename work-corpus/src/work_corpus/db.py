@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from .util import ensure_dir
+from .util import ensure_dir, stable_source_version_id
 
 
 SCHEMA = r"""
@@ -29,10 +29,12 @@ CREATE TABLE IF NOT EXISTS source_item (
     size_bytes INTEGER NOT NULL,
     mtime_ns INTEGER NOT NULL,
     content_sha256 TEXT,
+    source_version_id TEXT,
     date_hint TEXT,
     classification TEXT,
     sensitivity TEXT,
     parse_readiness TEXT,
+    extraction_status TEXT NOT NULL DEFAULT 'inventory_only',
     career_value TEXT,
     operations_value TEXT,
     duplicate_group_id TEXT,
@@ -46,8 +48,24 @@ CREATE INDEX IF NOT EXISTS idx_source_system ON source_item(source_system);
 CREATE INDEX IF NOT EXISTS idx_source_kind ON source_item(kind);
 CREATE INDEX IF NOT EXISTS idx_source_status ON source_item(status);
 
+CREATE TABLE IF NOT EXISTS source_version (
+    source_version_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    mtime_ns INTEGER NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    UNIQUE(source_id, content_sha256)
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_version_source_id
+ON source_version(source_id);
+
 CREATE TABLE IF NOT EXISTS normalized_document (
-    source_id TEXT PRIMARY KEY REFERENCES source_item(source_id) ON DELETE CASCADE,
+    source_version_id TEXT PRIMARY KEY
+        REFERENCES source_version(source_version_id) ON DELETE RESTRICT,
+    source_id TEXT NOT NULL,
     normalized_path TEXT,
     parser TEXT,
     source_mtime_ns INTEGER,
@@ -58,6 +76,9 @@ CREATE TABLE IF NOT EXISTS normalized_document (
     error TEXT,
     updated_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_normalized_document_source_id
+ON normalized_document(source_id);
 
 CREATE TABLE IF NOT EXISTS zoom_group (
     group_id TEXT PRIMARY KEY,
@@ -187,6 +208,115 @@ CREATE TABLE IF NOT EXISTS career_claim (
 """
 
 
+NORMALIZED_DOCUMENT_SCHEMA = r"""
+CREATE TABLE normalized_document (
+    source_version_id TEXT PRIMARY KEY
+        REFERENCES source_version(source_version_id) ON DELETE RESTRICT,
+    source_id TEXT NOT NULL,
+    normalized_path TEXT,
+    parser TEXT,
+    source_mtime_ns INTEGER,
+    char_count INTEGER,
+    line_count INTEGER,
+    content_sha256 TEXT,
+    status TEXT NOT NULL,
+    error TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_normalized_document_source_id
+ON normalized_document(source_id);
+"""
+
+
+def _backfill_source_versions(con: sqlite3.Connection) -> None:
+    rows = con.execute(
+        """
+        SELECT source_id, content_sha256, size_bytes, mtime_ns,
+               first_seen, last_seen, metadata_json, extraction_status
+        FROM source_item
+        """
+    ).fetchall()
+    for row in rows:
+        metadata = {}
+        if row["metadata_json"]:
+            try:
+                import json
+
+                metadata = json.loads(row["metadata_json"])
+            except (TypeError, ValueError):
+                metadata = {}
+        metadata_status = metadata.get("extraction_status")
+        extraction_status = (
+            metadata_status
+            if isinstance(metadata_status, str) and metadata_status
+            else row["extraction_status"] or "inventory_only"
+        )
+        source_version_id = stable_source_version_id(
+            row["source_id"],
+            row["content_sha256"] or "",
+        )
+        con.execute(
+            """
+            UPDATE source_item
+            SET source_version_id=?, extraction_status=?
+            WHERE source_id=?
+            """,
+            (source_version_id, extraction_status, row["source_id"]),
+        )
+        if source_version_id is None:
+            continue
+        con.execute(
+            """
+            INSERT INTO source_version (
+                source_version_id, source_id, content_sha256, size_bytes,
+                mtime_ns, first_seen, last_seen
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_version_id) DO UPDATE SET
+                size_bytes=excluded.size_bytes,
+                mtime_ns=excluded.mtime_ns,
+                last_seen=excluded.last_seen
+            """,
+            (
+                source_version_id,
+                row["source_id"],
+                row["content_sha256"],
+                row["size_bytes"],
+                row["mtime_ns"],
+                row["first_seen"],
+                row["last_seen"],
+            ),
+        )
+
+
+def _migrate_normalized_documents(con: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]: row["pk"]
+        for row in con.execute("PRAGMA table_info(normalized_document)")
+    }
+    if columns.get("source_version_id") == 1:
+        return
+
+    con.execute("ALTER TABLE normalized_document RENAME TO normalized_document_legacy")
+    con.execute("DROP INDEX IF EXISTS idx_normalized_document_source_id")
+    con.executescript(NORMALIZED_DOCUMENT_SCHEMA)
+    con.execute(
+        """
+        INSERT INTO normalized_document (
+            source_version_id, source_id, normalized_path, parser,
+            source_mtime_ns, char_count, line_count, content_sha256,
+            status, error, updated_at
+        )
+        SELECT s.source_version_id, n.source_id, n.normalized_path, n.parser,
+               n.source_mtime_ns, n.char_count, n.line_count, n.content_sha256,
+               n.status, n.error, n.updated_at
+        FROM normalized_document_legacy n
+        JOIN source_item s ON s.source_id=n.source_id
+        WHERE s.source_version_id IS NOT NULL
+        """
+    )
+
+
 def connect(path: Path) -> sqlite3.Connection:
     ensure_dir(path.parent)
     con = sqlite3.connect(str(path))
@@ -204,9 +334,13 @@ def connect(path: Path) -> sqlite3.Connection:
         "career_value": "TEXT",
         "operations_value": "TEXT",
         "duplicate_group_id": "TEXT",
+        "source_version_id": "TEXT",
+        "extraction_status": "TEXT NOT NULL DEFAULT 'inventory_only'",
     }
     for column, sql_type in migrations.items():
         if column not in existing:
             con.execute(f"ALTER TABLE source_item ADD COLUMN {column} {sql_type}")
+    _backfill_source_versions(con)
+    _migrate_normalized_documents(con)
     con.commit()
     return con

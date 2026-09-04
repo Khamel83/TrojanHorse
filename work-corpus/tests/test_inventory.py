@@ -14,7 +14,12 @@ import pytest
 import work_corpus.inventory as inventory_module
 from work_corpus.config import load_config
 from work_corpus.db import connect
-from work_corpus.util import detect_source_system
+from work_corpus.normalize import normalize_all
+from work_corpus.util import (
+    detect_source_system,
+    stable_source_id,
+    stable_source_version_id,
+)
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "inventory_tree"
@@ -131,6 +136,60 @@ def test_root_precedence_does_not_use_filename_heuristics(tmp_path: Path):
     assert match.root.source_system == "capacities"
 
 
+@pytest.mark.parametrize(
+    ("relative_path", "expected_root"),
+    [
+        ("data/Zoom/2026-09-01 09.00.00 Team Sync/audio.m4a", "zoom"),
+        ("data/notes/Notes/quarterly-plan.md", "capacities_markdown"),
+        (f"data/notes/{NOTION_EXPORT}/Project.html", "notion_export"),
+        ("data/notes/Backup/Notebook/Planning.one", "onenote_backup"),
+        ("data/note-inventory-20260903-142816/scan.csv", "inventory_discovery"),
+    ],
+)
+def test_known_roots_precede_overlapping_configured_formal_root(
+    tmp_path: Path,
+    relative_path: str,
+    expected_root: str,
+):
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "source_roots": {
+                    "formal_records": {
+                        "path": "data",
+                        "source_system": "formal_records",
+                        "precedence": -100,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+
+    known_match = _classifier()(relative_path, config.source_roots)
+    residual_match = _classifier()(
+        "data/formal-candidate/performance-review.pdf",
+        config.source_roots,
+    )
+
+    assert known_match.root is not None
+    assert known_match.root.key == expected_root
+    assert residual_match.root is not None
+    assert residual_match.root.key == "formal_records"
+
+
+def test_zoom_example_uses_canonical_path_spelling(tmp_path: Path):
+    default_zoom = load_config(tmp_path).source_root("zoom")
+    example_path = Path(__file__).parents[1] / "config.local.example.json"
+    example = json.loads(example_path.read_text(encoding="utf-8"))
+
+    assert default_zoom.relative_path == "data/Zoom"
+    assert example["source_roots"]["zoom"] == "data/Zoom"
+
+
 def test_nested_non_onenote_file_remains_a_residual(tmp_path: Path):
     match = _classifier()(
         "data/notes/Backup/Notebook/readme.txt",
@@ -182,6 +241,234 @@ def test_source_and_version_identity_rules(tmp_path: Path):
     assert changed_row["source_id"] == first_source_id
     assert changed_metadata["source_version_id"] != first_version_id
     assert changed_row["content_sha256"] != first_content_hash
+
+
+def test_source_version_and_normalized_history_survive_changed_bytes(tmp_path: Path):
+    root = _prepare_tree(tmp_path)
+    config = load_config(root)
+    con = connect(config.state_dir / "version-history.sqlite")
+    relative_path = "data/notes/Notes/notion-roadmap.md"
+    source_path = root / relative_path
+    try:
+        inventory_module.inventory(config, con)
+        first_row, first_metadata = _row(con, relative_path)
+        first_version_id = first_metadata["source_version_id"]
+        normalize_all(config, con)
+        first_normalized = con.execute(
+            """
+            SELECT source_version_id, normalized_path, status
+            FROM normalized_document
+            WHERE source_id=?
+            """,
+            (first_row["source_id"],),
+        ).fetchone()
+        assert first_normalized is not None
+        first_output = Path(first_normalized["normalized_path"])
+        first_output_bytes = first_output.read_bytes()
+
+        initial_stat = source_path.stat()
+        os.utime(
+            source_path,
+            ns=(initial_stat.st_atime_ns, initial_stat.st_mtime_ns + 1_000_000_000),
+        )
+        inventory_module.inventory(config, con)
+        normalize_all(config, con)
+
+        source_path.write_text(
+            "# Capacity note changed without a rename\n",
+            encoding="utf-8",
+        )
+        inventory_module.inventory(config, con)
+        changed_row, changed_metadata = _row(con, relative_path)
+        normalize_all(config, con)
+
+        version_rows = con.execute(
+            """
+            SELECT source_version_id, content_sha256
+            FROM source_version
+            WHERE source_id=?
+            ORDER BY first_seen, source_version_id
+            """,
+            (first_row["source_id"],),
+        ).fetchall()
+        normalized_rows = con.execute(
+            """
+            SELECT source_version_id, normalized_path, status
+            FROM normalized_document
+            WHERE source_id=?
+            ORDER BY source_version_id
+            """,
+            (first_row["source_id"],),
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert first_row["source_version_id"] == first_version_id
+    assert first_row["extraction_status"] == "ready"
+    assert changed_row["source_id"] == first_row["source_id"]
+    assert changed_metadata["source_version_id"] != first_version_id
+    assert {row["source_version_id"] for row in version_rows} == {
+        first_version_id,
+        changed_metadata["source_version_id"],
+    }
+    assert len(version_rows) == 2
+    assert len(normalized_rows) == 2
+    assert {row["status"] for row in normalized_rows} == {"normalized"}
+    assert len({row["normalized_path"] for row in normalized_rows}) == 2
+    assert first_output.read_bytes() == first_output_bytes
+    assert all(Path(row["normalized_path"]).is_file() for row in normalized_rows)
+
+
+def test_normalization_excludes_non_evidence_and_unhashed_inventory_rows(
+    tmp_path: Path,
+):
+    root = _prepare_tree(tmp_path)
+    config_dir = root / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps({"inventory": {"hash_files_up_to_mb": 0}}),
+        encoding="utf-8",
+    )
+    config = load_config(root)
+    con = connect(config.state_dir / "normalization-boundary.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        rows = con.execute(
+            "SELECT source_id, relative_path, content_sha256, metadata_json FROM source_item"
+        ).fetchall()
+        blocked = {
+            row["source_id"]: json.loads(row["metadata_json"])["extraction_status"]
+            for row in rows
+        }
+        result = normalize_all(config, con)
+        normalized_source_ids = {
+            row[0] for row in con.execute("SELECT source_id FROM normalized_document")
+        }
+    finally:
+        con.close()
+
+    assert set(blocked.values()) <= {"excluded", "inventory_only"}
+    assert any(status == "excluded" for status in blocked.values())
+    assert any(status == "inventory_only" for status in blocked.values())
+    assert all(row["content_sha256"] is None for row in rows)
+    assert normalized_source_ids.isdisjoint(blocked)
+    assert result == {
+        "normalized": 0,
+        "skipped_unchanged": 0,
+        "review_required": 0,
+        "unsupported": 0,
+        "errors": 0,
+    }
+
+
+def test_connect_migrates_versioned_normalization_without_losing_legacy_row(
+    tmp_path: Path,
+):
+    database = tmp_path / "legacy.sqlite"
+    source_id = stable_source_id(
+        "capacities_markdown",
+        "data/notes/Notes/legacy.md",
+    )
+    content_hash = hashlib.sha256(b"legacy source bytes").hexdigest()
+    expected_version_id = stable_source_version_id(source_id, content_hash)
+    normalized_path = tmp_path / "legacy-normalized.md"
+    normalized_path.write_text("legacy normalized bytes\n", encoding="utf-8")
+    raw = sqlite3.connect(database)
+    try:
+        raw.executescript(
+            """
+            CREATE TABLE source_item (
+                source_id TEXT PRIMARY KEY,
+                relative_path TEXT NOT NULL UNIQUE,
+                absolute_path TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                mtime_ns INTEGER NOT NULL,
+                content_sha256 TEXT,
+                date_hint TEXT,
+                classification TEXT,
+                sensitivity TEXT,
+                parse_readiness TEXT,
+                career_value TEXT,
+                operations_value TEXT,
+                duplicate_group_id TEXT,
+                status TEXT NOT NULL DEFAULT 'present',
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL,
+                metadata_json TEXT
+            );
+            CREATE TABLE normalized_document (
+                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                normalized_path TEXT,
+                parser TEXT,
+                source_mtime_ns INTEGER,
+                char_count INTEGER,
+                line_count INTEGER,
+                content_sha256 TEXT,
+                status TEXT NOT NULL,
+                error TEXT,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO source_item (
+                source_id, relative_path, absolute_path, source_system, kind,
+                extension, size_bytes, mtime_ns, content_sha256,
+                classification, status, first_seen, last_seen, metadata_json
+            ) VALUES (?, ?, ?, 'capacities', 'document', '.md', 19, 123, ?,
+                      'Unknown', 'present', '2026-09-04T00:00:00Z',
+                      '2026-09-04T00:00:00Z', ?)
+            """,
+            (
+                source_id,
+                "data/notes/Notes/legacy.md",
+                str(tmp_path / "legacy.md"),
+                content_hash,
+                json.dumps({"extraction_status": "ready"}),
+            ),
+        )
+        raw.execute(
+            """
+            INSERT INTO normalized_document (
+                source_id, normalized_path, parser, source_mtime_ns,
+                char_count, line_count, content_sha256, status, updated_at
+            ) VALUES (?, ?, 'plain_text', 123, 24, 2, ?, 'normalized',
+                      '2026-09-04T00:00:00Z')
+            """,
+            (source_id, str(normalized_path), hashlib.sha256(b"derived").hexdigest()),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    con = connect(database)
+    try:
+        source = con.execute(
+            "SELECT source_version_id, extraction_status FROM source_item"
+        ).fetchone()
+        version = con.execute("SELECT * FROM source_version").fetchone()
+        normalized = con.execute("SELECT * FROM normalized_document").fetchone()
+        normalized_columns = {
+            row["name"]: row["pk"]
+            for row in con.execute("PRAGMA table_info(normalized_document)")
+        }
+    finally:
+        con.close()
+
+    assert expected_version_id is not None
+    assert source["source_version_id"] == expected_version_id
+    assert source["extraction_status"] == "ready"
+    assert version["source_version_id"] == expected_version_id
+    assert version["source_id"] == source_id
+    assert normalized["source_version_id"] == expected_version_id
+    assert normalized["source_id"] == source_id
+    assert normalized["normalized_path"] == str(normalized_path)
+    assert normalized_columns["source_version_id"] == 1
+    assert normalized_columns["source_id"] == 0
 
 
 def test_inventory_keeps_discovery_and_finder_metadata_excluded(tmp_path: Path):

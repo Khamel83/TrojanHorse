@@ -10,7 +10,7 @@ import sqlite3
 from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple, TypedDict
 import zipfile
 
-from .config import Config, SourceRoot, SourceRootMatch
+from .config import Config, EXPLICIT_SOURCE_ROOTS, SourceRoot, SourceRootMatch
 from .report import write_manifest_reports
 from .util import (
     detect_kind,
@@ -149,7 +149,12 @@ def classify_root(
     candidates = roots.values() if isinstance(roots, dict) else roots
     ordered = sorted(
         (root for root in candidates if root.enabled and _root_matches(normalised, root)),
-        key=lambda root: (root.precedence, -len(root.relative_path), root.key),
+        key=lambda root: (
+            0 if root.key in EXPLICIT_SOURCE_ROOTS else 1,
+            root.precedence,
+            -len(root.relative_path),
+            root.key,
+        ),
     )
     if not ordered:
         return SourceRootMatch(root=None, relative_path=normalised, kind="residual")
@@ -297,11 +302,12 @@ def _extraction_status(
 
 def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
     query = """
-        SELECT source_id, relative_path, absolute_path, source_system, kind,
-               extension, size_bytes, mtime_ns, content_sha256, date_hint,
-               classification, sensitivity, parse_readiness, career_value,
-               operations_value, duplicate_group_id, status, first_seen, last_seen,
-               metadata_json
+        SELECT source_id, source_version_id, relative_path, absolute_path,
+               source_system, kind, extension, size_bytes, mtime_ns,
+               content_sha256, date_hint, classification, sensitivity,
+               parse_readiness, extraction_status, career_value,
+               operations_value, duplicate_group_id, status, first_seen,
+               last_seen, metadata_json
         FROM source_item
         ORDER BY source_system, relative_path
     """
@@ -316,12 +322,14 @@ def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
             {
                 "source_root_key": metadata.get("source_root_key", "residual"),
                 "root_match_kind": metadata.get("root_match_kind", "residual"),
-                "source_version_id": metadata.get("source_version_id"),
+                "source_version_id": item.get("source_version_id")
+                or metadata.get("source_version_id"),
                 "scope_proposal": metadata.get(
                     "scope_proposal", item.get("classification") or "Unknown"
                 ),
                 "scope_reason": metadata.get("scope_reason", ""),
-                "extraction_status": metadata.get("extraction_status", "inventory_only"),
+                "extraction_status": item.get("extraction_status")
+                or metadata.get("extraction_status", "inventory_only"),
                 "archive_member_count": metadata.get("archive_member_count", 0),
                 "archive_members": metadata.get("archive_members", []),
                 "archive_semantic_status": metadata.get("archive_semantic_status", ""),
@@ -459,12 +467,14 @@ def inventory(
             """
             INSERT INTO source_item (
                 source_id, relative_path, absolute_path, source_system, kind,
-                extension, size_bytes, mtime_ns, content_sha256, date_hint,
-                classification, sensitivity, parse_readiness, career_value,
+                extension, size_bytes, mtime_ns, content_sha256,
+                source_version_id, date_hint, classification, sensitivity,
+                parse_readiness, extraction_status, career_value,
                 operations_value, duplicate_group_id,
                 status, first_seen, last_seen, metadata_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'present', ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL,
+                    'present', ?, ?, ?)
             ON CONFLICT(relative_path) DO UPDATE SET
                 source_id = excluded.source_id,
                 absolute_path = excluded.absolute_path,
@@ -474,10 +484,12 @@ def inventory(
                 size_bytes = excluded.size_bytes,
                 mtime_ns = excluded.mtime_ns,
                 content_sha256 = excluded.content_sha256,
+                source_version_id = excluded.source_version_id,
                 date_hint = excluded.date_hint,
                 classification = excluded.classification,
                 sensitivity = excluded.sensitivity,
                 parse_readiness = excluded.parse_readiness,
+                extraction_status = excluded.extraction_status,
                 career_value = excluded.career_value,
                 operations_value = excluded.operations_value,
                 status = 'present',
@@ -494,10 +506,12 @@ def inventory(
                 stat.st_size,
                 stat.st_mtime_ns,
                 content_hash or None,
+                source_version_id,
                 parse_date_hint(relative_path) or None,
                 scope.scope,
                 _sensitivity(relative_path, source_system),
                 parse_readiness,
+                extraction_status,
                 _value_flags(source_system, kind)[0],
                 _value_flags(source_system, kind)[1],
                 first_seen,
@@ -505,6 +519,28 @@ def inventory(
                 json.dumps(metadata, ensure_ascii=False),
             ),
         )
+        if source_version_id:
+            con.execute(
+                """
+                INSERT INTO source_version (
+                    source_version_id, source_id, content_sha256, size_bytes,
+                    mtime_ns, first_seen, last_seen
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source_version_id) DO UPDATE SET
+                    size_bytes=excluded.size_bytes,
+                    mtime_ns=excluded.mtime_ns,
+                    last_seen=excluded.last_seen
+                """,
+                (
+                    source_version_id,
+                    source_id,
+                    content_hash,
+                    stat.st_size,
+                    stat.st_mtime_ns,
+                    scan_time,
+                    scan_time,
+                ),
+            )
         total_bytes += stat.st_size
 
     existing = con.execute("SELECT relative_path FROM source_item").fetchall()

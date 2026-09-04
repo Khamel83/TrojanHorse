@@ -23,8 +23,8 @@ from .util import (
 )
 
 
-def _output_path(config: Config, source_system: str, source_id: str) -> Path:
-    return config.corpus_dir / "normalized" / source_system / f"{source_id}.md"
+def _output_path(config: Config, source_system: str, source_version_id: str) -> Path:
+    return config.corpus_dir / "normalized" / source_system / f"{source_version_id}.md"
 
 
 def _parse_csv(path: Path, delimiter: str, max_rows: int) -> str:
@@ -310,11 +310,44 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         )
     )
 
+    con.execute(
+        """
+        UPDATE normalized_document
+        SET status='excluded',
+            error='Current source version is not eligible for extraction',
+            updated_at=?
+        WHERE EXISTS (
+            SELECT 1
+            FROM source_item s
+            WHERE s.source_id=normalized_document.source_id
+              AND s.source_version_id=normalized_document.source_version_id
+              AND (
+                  s.extraction_status<>'ready'
+                  OR s.content_sha256 IS NULL
+                  OR s.content_sha256=''
+              )
+        )
+        """,
+        (now_iso(),),
+    )
+
     eligible = con.execute(
         """
         SELECT s.*
         FROM source_item s
         WHERE s.status = 'present'
+          AND s.extraction_status = 'ready'
+          AND s.content_sha256 IS NOT NULL
+          AND s.content_sha256 <> ''
+          AND s.source_version_id IS NOT NULL
+          AND s.source_version_id <> ''
+          AND EXISTS (
+              SELECT 1
+              FROM source_version v
+              WHERE v.source_version_id=s.source_version_id
+                AND v.source_id=s.source_id
+                AND v.content_sha256=s.content_sha256
+          )
           AND s.kind NOT IN ('media', 'email', 'email_data', 'mcp', 'unknown')
         ORDER BY s.source_system, s.relative_path
         """
@@ -334,15 +367,18 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         con.execute(
             """
             INSERT INTO normalized_document (
-                source_id, source_mtime_ns, status, error, updated_at
-            ) VALUES (?, ?, 'review_required', ?, ?)
-            ON CONFLICT(source_id) DO UPDATE SET
+                source_version_id, source_id, source_mtime_ns, status, error,
+                updated_at
+            ) VALUES (?, ?, ?, 'review_required', ?, ?)
+            ON CONFLICT(source_version_id) DO UPDATE SET
+                source_id=excluded.source_id,
                 source_mtime_ns=excluded.source_mtime_ns,
                 status='review_required',
                 error=excluded.error,
                 updated_at=excluded.updated_at
             """,
             (
+                row["source_version_id"],
                 row["source_id"],
                 row["mtime_ns"],
                 f"Skipped pending source review: classification={row['classification']}",
@@ -351,13 +387,17 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         )
     for row in rows:
         source_id = row["source_id"]
+        source_version_id = row["source_version_id"]
         existing = con.execute(
-            "SELECT source_mtime_ns, status, normalized_path FROM normalized_document WHERE source_id = ?",
-            (source_id,),
+            """
+            SELECT status, normalized_path
+            FROM normalized_document
+            WHERE source_version_id = ?
+            """,
+            (source_version_id,),
         ).fetchone()
         if (
             existing
-            and existing["source_mtime_ns"] == row["mtime_ns"]
             and existing["status"] == "normalized"
             and existing["normalized_path"]
             and Path(existing["normalized_path"]).exists()
@@ -366,11 +406,13 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             continue
 
         path = Path(row["absolute_path"])
-        output = _output_path(config, row["source_system"], source_id)
+        output = _output_path(config, row["source_system"], source_version_id)
         try:
             body, parser = parse_source(path, row["kind"], row["extension"], config)
             metadata = {
                 "source_id": source_id,
+                "source_version_id": source_version_id,
+                "source_content_sha256": row["content_sha256"],
                 "source_system": row["source_system"],
                 "original_path": row["absolute_path"],
                 "relative_path": row["relative_path"],
@@ -384,10 +426,12 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             con.execute(
                 """
                 INSERT INTO normalized_document (
-                    source_id, normalized_path, parser, source_mtime_ns, char_count,
-                    line_count, content_sha256, status, error, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'normalized', NULL, ?)
-                ON CONFLICT(source_id) DO UPDATE SET
+                    source_version_id, source_id, normalized_path, parser,
+                    source_mtime_ns, char_count, line_count, content_sha256,
+                    status, error, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'normalized', NULL, ?)
+                ON CONFLICT(source_version_id) DO UPDATE SET
+                    source_id=excluded.source_id,
                     normalized_path=excluded.normalized_path,
                     parser=excluded.parser,
                     source_mtime_ns=excluded.source_mtime_ns,
@@ -399,6 +443,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                     updated_at=excluded.updated_at
                 """,
                 (
+                    source_version_id,
                     source_id,
                     str(output),
                     parser,
@@ -414,30 +459,46 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             con.execute(
                 """
                 INSERT INTO normalized_document (
-                    source_id, source_mtime_ns, status, error, updated_at
-                ) VALUES (?, ?, 'unsupported', ?, ?)
-                ON CONFLICT(source_id) DO UPDATE SET
+                    source_version_id, source_id, source_mtime_ns, status,
+                    error, updated_at
+                ) VALUES (?, ?, ?, 'unsupported', ?, ?)
+                ON CONFLICT(source_version_id) DO UPDATE SET
+                    source_id=excluded.source_id,
                     source_mtime_ns=excluded.source_mtime_ns,
                     status='unsupported',
                     error=excluded.error,
                     updated_at=excluded.updated_at
                 """,
-                (source_id, row["mtime_ns"], str(exc), now_iso()),
+                (
+                    source_version_id,
+                    source_id,
+                    row["mtime_ns"],
+                    str(exc),
+                    now_iso(),
+                ),
             )
             result["unsupported"] += 1
         except Exception as exc:
             con.execute(
                 """
                 INSERT INTO normalized_document (
-                    source_id, source_mtime_ns, status, error, updated_at
-                ) VALUES (?, ?, 'error', ?, ?)
-                ON CONFLICT(source_id) DO UPDATE SET
+                    source_version_id, source_id, source_mtime_ns, status,
+                    error, updated_at
+                ) VALUES (?, ?, ?, 'error', ?, ?)
+                ON CONFLICT(source_version_id) DO UPDATE SET
+                    source_id=excluded.source_id,
                     source_mtime_ns=excluded.source_mtime_ns,
                     status='error',
                     error=excluded.error,
                     updated_at=excluded.updated_at
                 """,
-                (source_id, row["mtime_ns"], f"{type(exc).__name__}: {exc}", now_iso()),
+                (
+                    source_version_id,
+                    source_id,
+                    row["mtime_ns"],
+                    f"{type(exc).__name__}: {exc}",
+                    now_iso(),
+                ),
             )
             result["errors"] += 1
     con.commit()
