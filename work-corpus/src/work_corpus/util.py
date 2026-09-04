@@ -66,6 +66,65 @@ def read_text_guess(path: Path, max_bytes: Optional[int] = None) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+_SIGNED_URL_KEYS = re.compile(
+    r"(?:"
+    r"awsaccesskeyid|x-amz-(?:algorithm|credential|date|expires|security-token|signature)"
+    r"|signature|sig|token|expires|se|sp|sr|st|sv"
+    r")\s*=",
+    re.IGNORECASE,
+)
+_URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+_QUOTED_SECRET_RE = re.compile(
+    r"(?P<prefix>\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
+    r"client[_ -]?secret|secret|password|passwd|private[_ -]?key)\b\s*[:=]\s*)"
+    r"(?P<quote>[\"'])(?P<value>.*?)(?P=quote)",
+    re.IGNORECASE | re.DOTALL,
+)
+_UNQUOTED_SECRET_RE = re.compile(
+    r"(?P<prefix>\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
+    r"client[_ -]?secret|secret|password|passwd|private[_ -]?key)\b\s*[:=]\s*)"
+    r"(?P<value>[^\s,;]+)",
+    re.IGNORECASE,
+)
+_AUTHORIZATION_RE = re.compile(
+    r"(?P<prefix>\b(?:authorization\s*:\s*bearer|bearer)\s+)"
+    r"(?P<value>[^\s,;]+)",
+    re.IGNORECASE,
+)
+_TOKEN_RE = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bsk-[A-Za-z0-9_-]{20,}\b")
+
+
+def scrub_derived_text(value: str) -> str:
+    """Remove signed URLs and secret-like values from derived text only."""
+    text = value
+
+    def redact_url(match: re.Match[str]) -> str:
+        candidate = match.group(0).rstrip(".,;)")
+        query = candidate.split("?", 1)[1] if "?" in candidate else ""
+        if query and _SIGNED_URL_KEYS.search(query):
+            return "[REDACTED_SIGNED_URL]"
+        return candidate
+
+    text = _URL_RE.sub(redact_url, text)
+    text = _QUOTED_SECRET_RE.sub(
+        lambda match: (
+            f"{match.group('prefix')}{match.group('quote')}"
+            "[REDACTED_SECRET]"
+            f"{match.group('quote')}"
+        ),
+        text,
+    )
+    text = _UNQUOTED_SECRET_RE.sub(
+        lambda match: f"{match.group('prefix')}[REDACTED_SECRET]",
+        text,
+    )
+    text = _AUTHORIZATION_RE.sub(
+        lambda match: f"{match.group('prefix')}[REDACTED_SECRET]",
+        text,
+    )
+    return _TOKEN_RE.sub("[REDACTED_SECRET]", text)
+
+
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -224,6 +283,12 @@ JSON_EXTENSIONS = {".json", ".jsonl"}
 def detect_kind(path: Path, source_system: str) -> str:
     ext = path.suffix.lower()
     name = path.name.lower()
+    if (
+        source_system == "zoom"
+        and name.startswith("client_config")
+        and ext in {".json", ".xml", ".plist"}
+    ):
+        return "metadata"
     if ext in MEDIA_EXTENSIONS:
         return "media"
     if ext in TRANSCRIPT_EXTENSIONS:
@@ -259,8 +324,9 @@ def quote_header_value(value: Any) -> str:
 def provenance_header(metadata: Dict[str, Any]) -> str:
     lines = ["---"]
     for key in (
-        "source_id", "source_system", "original_path", "relative_path",
-        "original_date", "file_type", "parser", "generated_at"
+        "source_id", "source_version_id", "source_system", "original_path",
+        "relative_path", "original_date", "source_date_basis", "file_type",
+        "parser", "parser_version", "locator", "generated_at",
     ):
         if key in metadata:
             lines.append(f"{key}: {quote_header_value(metadata[key])}")

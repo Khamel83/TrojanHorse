@@ -1,0 +1,4 @@
+{
+  "format": "synthetic-formal-fixture",
+  "expected_locators": ["page:1", "slide:1", "sheet:Summary:row:1", "row:1", "table:1"]
+}

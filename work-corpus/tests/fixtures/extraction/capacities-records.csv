@@ -1,0 +1,3 @@
+id,type,title,payload
+capacity-1,Note,Planning,Local planning record
+capacity-file,File,Reference,https://files.example.test/ref?X-Amz-Signature=synthetic-signature&X-Amz-Credential=synthetic-credential
