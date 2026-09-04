@@ -353,37 +353,89 @@ def _backfill_source_versions(con: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_legacy_normalized_rows(con: sqlite3.Connection) -> None:
+    """Copy hashable legacy rows and retain unhashable rows for review."""
+    table = con.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type='table' AND name='normalized_document_legacy'
+        """
+    ).fetchone()
+    if table is None:
+        return
+
+    columns = {
+        row["name"]
+        for row in con.execute("PRAGMA table_info(normalized_document_legacy)")
+    }
+    required = {
+        "source_id",
+        "normalized_path",
+        "parser",
+        "source_mtime_ns",
+        "char_count",
+        "line_count",
+        "content_sha256",
+        "status",
+        "error",
+        "updated_at",
+    }
+    if required <= columns:
+        con.execute(
+            """
+            INSERT INTO normalized_document (
+                source_version_id, source_id, normalized_path, parser,
+                source_mtime_ns, char_count, line_count, content_sha256,
+                status, error, updated_at
+            )
+            SELECT s.source_version_id, n.source_id, n.normalized_path, n.parser,
+                   n.source_mtime_ns, n.char_count, n.line_count,
+                   n.content_sha256, n.status, n.error, n.updated_at
+            FROM normalized_document_legacy n
+            JOIN source_item s ON s.source_id=n.source_id
+            WHERE s.source_version_id IS NOT NULL
+            ON CONFLICT(source_version_id) DO NOTHING
+            """
+        )
+        con.execute(
+            """
+            DELETE FROM normalized_document_legacy
+            WHERE source_id IN (
+                SELECT source_id
+                FROM source_item
+                WHERE source_version_id IS NOT NULL
+            )
+            """
+        )
+
+    remaining = con.execute(
+        "SELECT 1 FROM normalized_document_legacy LIMIT 1"
+    ).fetchone()
+    if remaining is None:
+        con.execute("DROP TABLE normalized_document_legacy")
+
+
 def _migrate_normalized_documents(con: sqlite3.Connection) -> None:
     columns = {
         row["name"]: row["pk"]
         for row in con.execute("PRAGMA table_info(normalized_document)")
     }
     if columns.get("source_version_id") == 1:
-        con.execute("DROP TABLE IF EXISTS normalized_document_legacy")
+        _migrate_legacy_normalized_rows(con)
         return
 
     con.execute("ALTER TABLE normalized_document RENAME TO normalized_document_legacy")
     con.execute("DROP INDEX IF EXISTS idx_normalized_document_source_id")
     con.executescript(NORMALIZED_DOCUMENT_SCHEMA)
-    con.execute(
-        """
-        INSERT INTO normalized_document (
-            source_version_id, source_id, normalized_path, parser,
-            source_mtime_ns, char_count, line_count, content_sha256,
-            status, error, updated_at
-        )
-        SELECT s.source_version_id, n.source_id, n.normalized_path, n.parser,
-               n.source_mtime_ns, n.char_count, n.line_count, n.content_sha256,
-               n.status, n.error, n.updated_at
-        FROM normalized_document_legacy n
-        JOIN source_item s ON s.source_id=n.source_id
-        WHERE s.source_version_id IS NOT NULL
-        """
-    )
-    con.execute("DROP TABLE normalized_document_legacy")
+    _migrate_legacy_normalized_rows(con)
 
 
-def connect(path: Path) -> sqlite3.Connection:
+def connect(
+    path: Path,
+    *,
+    skip_classifications: Optional[Iterable[str]] = None,
+) -> sqlite3.Connection:
     ensure_dir(path.parent)
     con = sqlite3.connect(str(path))
     con.row_factory = sqlite3.Row
@@ -410,6 +462,10 @@ def connect(path: Path) -> sqlite3.Connection:
     _migrate_normalized_documents(con)
     # Reconcile legacy output before exposing the migrated connection. Legacy
     # rows did not have the canonical scope and extraction eligibility fields.
-    mark_noncurrent_normalized_documents_retained(con, now_iso())
+    mark_noncurrent_normalized_documents_retained(
+        con,
+        now_iso(),
+        skip_classifications=skip_classifications,
+    )
     con.commit()
     return con

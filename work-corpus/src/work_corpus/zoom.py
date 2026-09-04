@@ -38,6 +38,45 @@ def _is_transcript_candidate(row: sqlite3.Row) -> bool:
     return False
 
 
+def zoom_source_is_eligible(
+    config: Config,
+    con: sqlite3.Connection,
+    row: sqlite3.Row,
+) -> bool:
+    """Return whether a Zoom source may enter grouping or local processing."""
+    skip_classifications = {
+        str(value).casefold()
+        for value in config.get(
+            "normalization",
+            "skip_classifications",
+            list(DEFAULT_SKIP_CLASSIFICATIONS),
+        )
+        if str(value).strip()
+    }
+    if (row["classification"] or "Unknown").casefold() in skip_classifications:
+        return False
+    if row["status"] != "present" or row["extraction_status"] != "ready":
+        return False
+    if not row["content_sha256"] or not row["source_version_id"]:
+        return False
+    return bool(
+        con.execute(
+            """
+            SELECT 1
+            FROM source_version
+            WHERE source_version_id=?
+              AND source_id=?
+              AND content_sha256=?
+            """,
+            (
+                row["source_version_id"],
+                row["source_id"],
+                row["content_sha256"],
+            ),
+        ).fetchone()
+    )
+
+
 def _transcript_score(row: sqlite3.Row) -> int:
     ext = row["extension"].lower()
     name = Path(row["absolute_path"]).name.lower()
@@ -148,42 +187,9 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ORDER BY relative_path
         """
     ).fetchall()
-    skip_classifications = {
-        str(value).casefold()
-        for value in config.get(
-            "normalization",
-            "skip_classifications",
-            list(DEFAULT_SKIP_CLASSIFICATIONS),
-        )
-        if str(value).strip()
-    }
-    rows = []
-    for row in candidate_rows:
-        if (row["classification"] or "Unknown").casefold() in skip_classifications:
-            continue
-        if row["extraction_status"] != "ready":
-            continue
-        if not row["content_sha256"] or not row["source_version_id"]:
-            continue
-        if not con.execute(
-            """
-            SELECT 1
-            FROM source_version
-            WHERE source_version_id=?
-              AND source_id=?
-              AND content_sha256=?
-            """,
-            (
-                row["source_version_id"],
-                row["source_id"],
-                row["content_sha256"],
-            ),
-        ).fetchone():
-            continue
-        rows.append(row)
 
     groups: Dict[str, List[sqlite3.Row]] = {}
-    for row in rows:
+    for row in candidate_rows:
         folder = str(Path(row["relative_path"]).parent)
         groups.setdefault(folder, []).append(row)
 
@@ -199,13 +205,76 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
     ffprobe_command = str(config.get("zoom", "ffprobe_command", "ffprobe"))
 
     for folder, items in sorted(groups.items()):
-        media = [row for row in items if row["extension"].lower() in AUDIO_EXTENSIONS | VIDEO_EXTENSIONS]
-        transcripts = [row for row in items if _is_transcript_candidate(row)]
-        if not media and not transcripts:
+        all_media = [
+            row
+            for row in items
+            if row["extension"].lower() in AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
+        ]
+        all_transcripts = [
+            row for row in items if _is_transcript_candidate(row)
+        ]
+        if not all_media and not all_transcripts:
             continue
 
         result["meeting_folders"] += 1
         group_id = stable_id("zoom", folder)
+        blocked = any(
+            not zoom_source_is_eligible(config, con, row) for row in items
+        )
+        if blocked:
+            chosen_media = max(all_media, key=_media_score) if all_media else None
+            chosen_transcript = (
+                max(all_transcripts, key=_transcript_score)
+                if all_transcripts
+                else None
+            )
+            con.execute(
+                """
+                INSERT INTO zoom_group (
+                    group_id, folder_relative_path, media_source_id,
+                    transcript_source_id, transcript_path, status,
+                    duration_seconds, updated_at
+                ) VALUES (?, ?, ?, ?, NULL, 'needs_review', NULL, ?)
+                ON CONFLICT(group_id) DO UPDATE SET
+                    folder_relative_path=excluded.folder_relative_path,
+                    media_source_id=excluded.media_source_id,
+                    transcript_source_id=excluded.transcript_source_id,
+                    transcript_path=NULL,
+                    status='needs_review',
+                    duration_seconds=NULL,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    group_id,
+                    folder,
+                    chosen_media["source_id"] if chosen_media else None,
+                    chosen_transcript["source_id"] if chosen_transcript else None,
+                    now_iso(),
+                ),
+            )
+            con.execute(
+                """
+                UPDATE transcription_job
+                SET status='needs_review',
+                    error='Zoom meeting contains an ineligible source',
+                    completed_at=?
+                WHERE group_id=?
+                  AND status IN ('pending', 'running', 'error')
+                """,
+                (now_iso(), group_id),
+            )
+            continue
+
+        media = [
+            row
+            for row in all_media
+            if zoom_source_is_eligible(config, con, row)
+        ]
+        transcripts = [
+            row
+            for row in all_transcripts
+            if zoom_source_is_eligible(config, con, row)
+        ]
         chosen_media = max(media, key=_media_score) if media else None
         chosen_transcript = max(transcripts, key=_transcript_score) if transcripts else None
         duration = _duration_seconds(Path(chosen_media["absolute_path"]), ffprobe_command) if chosen_media else None

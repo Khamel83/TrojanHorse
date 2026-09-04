@@ -22,6 +22,7 @@ from .util import (
     run_command,
     vtt_or_srt_to_markdown,
 )
+from .zoom import zoom_source_is_eligible
 
 
 def _format_vtt_time(seconds: float) -> str:
@@ -301,25 +302,44 @@ def transcribe_jobs(
     all_jobs: bool = False,
     retry_errors: bool = False,
 ) -> Dict[str, int]:
-    engine, reason = _engine_available(config, requested_engine)
-    if engine is None:
-        raise RuntimeError(reason)
-
     statuses = ["pending"]
     if retry_errors:
         statuses.append("error")
     placeholders = ",".join("?" for _ in statuses)
     query = f"""
         SELECT j.*, g.folder_relative_path, g.transcript_path,
-               g.duration_seconds, s.absolute_path, s.relative_path,
-               s.date_hint, s.source_id, s.mtime_ns
+               g.duration_seconds, g.status AS group_status,
+               s.absolute_path, s.relative_path, s.date_hint, s.source_id,
+               s.mtime_ns, s.status AS source_status,
+               s.extraction_status, s.content_sha256, s.source_version_id,
+               s.classification, s.kind
         FROM transcription_job j
         JOIN zoom_group g ON g.group_id = j.group_id
         JOIN source_item s ON s.source_id = j.media_source_id
         WHERE j.status IN ({placeholders})
         ORDER BY COALESCE(g.duration_seconds, 999999999), g.folder_relative_path
     """
-    jobs = con.execute(query, statuses).fetchall()
+    candidate_jobs = con.execute(query, statuses).fetchall()
+    jobs = []
+    for job in candidate_jobs:
+        source_eligible = (
+            job["group_status"] != "needs_review"
+            and zoom_source_is_eligible(config, con, job)
+        )
+        if source_eligible:
+            jobs.append(job)
+        else:
+            con.execute(
+                """
+                UPDATE transcription_job
+                SET status='needs_review',
+                    error='Zoom source or meeting is not currently eligible',
+                    completed_at=?
+                WHERE job_id=?
+                """,
+                (now_iso(), job["job_id"]),
+            )
+    con.commit()
 
     if not all_jobs:
         limit = max_files if max_files is not None else 3
@@ -328,6 +348,12 @@ def transcribe_jobs(
         jobs = jobs[: max(0, max_files)]
 
     result = {"attempted": 0, "complete": 0, "errors": 0}
+    if not jobs:
+        return result
+
+    engine, reason = _engine_available(config, requested_engine)
+    if engine is None:
+        raise RuntimeError(reason)
     section = config.section("zoom")
     model = str(section.get("model", "small.en"))
 

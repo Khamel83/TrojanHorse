@@ -15,6 +15,7 @@ import work_corpus.inventory as inventory_module
 from work_corpus.config import load_config
 from work_corpus.db import connect
 from work_corpus.normalize import normalize_all
+from work_corpus.transcription import transcribe_jobs
 from work_corpus.util import (
     detect_source_system,
     stable_source_id,
@@ -437,6 +438,9 @@ def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
             """,
             (source["source_id"],),
         ).fetchone()
+        zoom_group = con.execute(
+            "SELECT status FROM zoom_group"
+        ).fetchone()
     finally:
         con.close()
 
@@ -450,10 +454,68 @@ def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
         "unsupported": 0,
         "errors": 0,
     }
-    assert zoom_result["meeting_folders"] == 0
+    assert zoom_result["meeting_folders"] == 1
+    assert zoom_result["with_existing_transcript"] == 0
+    assert zoom_result["queued_for_transcription"] == 0
+    assert zoom_group["status"] == "needs_review"
     assert normalized["status"] == "review_required"
     assert normalized["normalized_path"] is None
     assert not list((config.corpus_dir / "transcripts" / "zoom").rglob("*.md"))
+
+
+def test_zoom_scope_gate_blocks_sibling_media_and_pending_job(tmp_path: Path):
+    folder = "data/Zoom/2026-09-02 10.00.00 Team Sync"
+    media_path = tmp_path / folder / "meeting.m4a"
+    transcript_path = tmp_path / folder / "therapy-transcript.vtt"
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"synthetic media bytes")
+    transcript_path.write_text(
+        "WEBVTT\n\n00:00.000 --> 00:01.000\nPrivate synthetic session.\n",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "zoom-group-scope.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        media, _ = _row(con, f"{folder}/meeting.m4a")
+        scan_result = scan_zoom(config, con)
+        group = con.execute(
+            "SELECT group_id, status, media_source_id, transcript_source_id "
+            "FROM zoom_group"
+        ).fetchone()
+        job_id = "synthetic-pending-job"
+        con.execute(
+            """
+            INSERT INTO transcription_job (
+                job_id, group_id, media_source_id, output_stem,
+                engine, model, status, error, created_at
+            ) VALUES (?, ?, ?, ?, NULL, NULL, 'pending', NULL, ?)
+            """,
+            (
+                job_id,
+                group["group_id"],
+                media["source_id"],
+                str(config.corpus_dir / "transcripts" / "zoom" / "generated" / group["group_id"]),
+                "2026-09-04T00:00:00Z",
+            ),
+        )
+        con.commit()
+        tx_result = transcribe_jobs(config, con)
+        job = con.execute(
+            "SELECT status, error FROM transcription_job WHERE job_id=?",
+            (job_id,),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert scan_result["meeting_folders"] == 1
+    assert scan_result["queued_for_transcription"] == 0
+    assert group["status"] == "needs_review"
+    assert group["media_source_id"] == media["source_id"]
+    assert group["transcript_source_id"]
+    assert tx_result == {"attempted": 0, "complete": 0, "errors": 0}
+    assert job["status"] == "needs_review"
+    assert job["error"]
 
 
 def test_explicit_scope_override_remains_active(tmp_path: Path):
@@ -482,13 +544,28 @@ def test_explicit_scope_override_remains_active(tmp_path: Path):
             """,
             (source["source_id"],),
         ).fetchone()
-    finally:
+        database = config.state_dir / "scope-override.sqlite"
         con.close()
+        con = connect(
+            database,
+            skip_classifications=config.get(
+                "normalization",
+                "skip_classifications",
+            ),
+        )
+        reopened = con.execute(
+            "SELECT status FROM normalized_document WHERE source_id=?",
+            (source["source_id"],),
+        ).fetchone()
+    finally:
+        if con:
+            con.close()
 
     assert source["classification"] == "Unknown"
     assert first_result["normalized"] == 1
     assert normalized["status"] == "normalized"
     assert normalized["normalized_path"]
+    assert reopened["status"] == "normalized"
 
 
 def test_ineligible_rescan_retires_prior_normalized_output(tmp_path: Path):
@@ -833,7 +910,162 @@ def test_connect_drops_obsolete_intermediate_legacy_table(tmp_path: Path):
     assert legacy_table is None
 
 
-def test_evidence_identity_requires_version_and_locator(tmp_path: Path):
+def test_connect_preserves_hashless_legacy_normalized_output(tmp_path: Path):
+    database = tmp_path / "legacy-unhashed.sqlite"
+    normalized_path = tmp_path / "legacy-unhashed.md"
+    normalized_path.write_text("legacy hashless output\n", encoding="utf-8")
+    raw = sqlite3.connect(database)
+    try:
+        raw.executescript(
+            """
+            CREATE TABLE source_item (
+                source_id TEXT PRIMARY KEY,
+                relative_path TEXT NOT NULL UNIQUE,
+                absolute_path TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                extension TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                mtime_ns INTEGER NOT NULL,
+                content_sha256 TEXT,
+                date_hint TEXT,
+                classification TEXT,
+                sensitivity TEXT,
+                parse_readiness TEXT,
+                career_value TEXT,
+                operations_value TEXT,
+                duplicate_group_id TEXT,
+                status TEXT NOT NULL DEFAULT 'present',
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL,
+                metadata_json TEXT
+            );
+            CREATE TABLE normalized_document (
+                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                normalized_path TEXT,
+                parser TEXT,
+                source_mtime_ns INTEGER,
+                char_count INTEGER,
+                line_count INTEGER,
+                content_sha256 TEXT,
+                status TEXT NOT NULL,
+                error TEXT,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO source_item (
+                source_id, relative_path, absolute_path, source_system, kind,
+                extension, size_bytes, mtime_ns, classification,
+                status, first_seen, last_seen, metadata_json
+            ) VALUES (
+                'legacy-unhashed', 'data/notes/Notes/unhashed.md', '', 'capacities',
+                'document', '.md', 0, 123, 'Unknown', 'present',
+                '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z', '{}'
+            )
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO normalized_document (
+                source_id, normalized_path, parser, source_mtime_ns,
+                char_count, line_count, content_sha256, status, updated_at
+            ) VALUES (
+                'legacy-unhashed', ?, 'plain_text', 123, 24, 2, NULL,
+                'normalized', '2026-09-04T00:00:00Z'
+            )
+            """,
+            (str(normalized_path),),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    con = connect(database)
+    try:
+        current = con.execute(
+            "SELECT COUNT(*) FROM normalized_document"
+        ).fetchone()[0]
+        legacy = con.execute(
+            "SELECT normalized_path, status FROM normalized_document_legacy"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert current == 0
+    assert legacy["normalized_path"] == str(normalized_path)
+    assert legacy["status"] == "normalized"
+
+
+def test_connect_retains_nonempty_intermediate_legacy_table(tmp_path: Path):
+    database = tmp_path / "intermediate-nonempty.sqlite"
+    con = connect(database)
+    con.close()
+
+    normalized_path = tmp_path / "intermediate-legacy.md"
+    normalized_path.write_text("intermediate legacy output\n", encoding="utf-8")
+    raw = sqlite3.connect(database)
+    try:
+        raw.execute("PRAGMA foreign_keys=ON")
+        raw.execute(
+            """
+            INSERT INTO source_item (
+                source_id, relative_path, absolute_path, source_system, kind,
+                extension, size_bytes, mtime_ns, status, first_seen, last_seen
+            ) VALUES (
+                'intermediate-source', 'data/notes/Notes/intermediate.md', '',
+                'capacities', 'document', '.md', 0, 123, 'present',
+                '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z'
+            )
+            """
+        )
+        raw.execute(
+            """
+            CREATE TABLE normalized_document_legacy (
+                source_id TEXT PRIMARY KEY REFERENCES source_item(source_id),
+                normalized_path TEXT,
+                parser TEXT,
+                source_mtime_ns INTEGER,
+                char_count INTEGER,
+                line_count INTEGER,
+                content_sha256 TEXT,
+                status TEXT NOT NULL,
+                error TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO normalized_document_legacy (
+                source_id, normalized_path, parser, source_mtime_ns,
+                char_count, line_count, content_sha256, status, updated_at
+            ) VALUES (
+                'intermediate-source', ?, 'plain_text', 123, 28, 2, NULL,
+                'normalized', '2026-09-04T00:00:00Z'
+            )
+            """,
+            (str(normalized_path),),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    con = connect(database)
+    try:
+        legacy = con.execute(
+            "SELECT normalized_path, status FROM normalized_document_legacy"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert legacy["normalized_path"] == str(normalized_path)
+    assert legacy["status"] == "normalized"
+
+
+def test_evidence_identity_requires_version_and_locator():
     source_version_id = "version-for-evidence"
     locator = "line:12"
     expected = hashlib.sha256(

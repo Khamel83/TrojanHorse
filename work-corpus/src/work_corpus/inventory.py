@@ -497,6 +497,18 @@ def _rekey_legacy_source(
         "UPDATE normalized_document SET source_id=? WHERE source_id=?",
         (new_source_id, old_source_id),
     )
+    legacy_table = con.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type='table' AND name='normalized_document_legacy'
+        """
+    ).fetchone()
+    if legacy_table:
+        con.execute(
+            "UPDATE normalized_document_legacy SET source_id=? WHERE source_id=?",
+            (new_source_id, old_source_id),
+        )
 
     if canonical_source:
         con.execute("DELETE FROM source_item WHERE source_id=?", (old_source_id,))

@@ -120,7 +120,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     root = args.root.expanduser().resolve()
     config = load_config(root)
     bootstrap(config)
-    con = connect(config.state_dir / "work_corpus.sqlite")
+    con = connect(
+        config.state_dir / "work_corpus.sqlite",
+        skip_classifications=config.get(
+            "normalization",
+            "skip_classifications",
+        ),
+    )
     run_id = _record_start(con, args.command)
     details: Dict[str, Any] = {}
 
