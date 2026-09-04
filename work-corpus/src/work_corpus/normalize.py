@@ -28,6 +28,15 @@ def _output_path(config: Config, source_system: str, source_version_id: str) -> 
     return config.corpus_dir / "normalized" / source_system / f"{source_version_id}.md"
 
 
+def _has_explicit_source_root(row: sqlite3.Row) -> bool:
+    """Require the immutable inventory classification before semantic parsing."""
+    try:
+        metadata = json.loads(row["metadata_json"] or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return False
+    return metadata.get("root_match_kind") in {"source", "archive"}
+
+
 def _parse_csv(path: Path, delimiter: str, max_rows: int) -> str:
     text = read_text_guess(path)
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
@@ -340,15 +349,20 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ORDER BY s.source_system, s.relative_path
         """
     ).fetchall()
+    approved_root = [row for row in eligible if _has_explicit_source_root(row)]
+    unapproved_root = [row for row in eligible if not _has_explicit_source_root(row)]
     rows = [
         row
-        for row in eligible
+        for row in approved_root
         if (row["classification"] or "Unknown").casefold() not in skip_classifications
     ]
     review_rows = [
         row
-        for row in eligible
-        if (row["classification"] or "Unknown").casefold() in skip_classifications
+        for row in approved_root + unapproved_root
+        if (
+            not _has_explicit_source_root(row)
+            or (row["classification"] or "Unknown").casefold() in skip_classifications
+        )
     ]
 
     result = {
@@ -377,7 +391,10 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                 row["source_version_id"],
                 row["source_id"],
                 row["mtime_ns"],
-                f"Skipped pending source review: classification={row['classification']}",
+                (
+                    f"Skipped pending source review: classification={row['classification']}"
+                    + ("; source root is not explicitly approved" if not _has_explicit_source_root(row) else "")
+                ),
                 now_iso(),
             ),
         )

@@ -220,6 +220,42 @@ def test_nested_non_onenote_file_remains_a_residual(tmp_path: Path):
     assert match.kind == "residual"
 
 
+def test_residual_work_proposal_requires_explicit_root_before_normalization(
+    tmp_path: Path,
+):
+    source_path = tmp_path / "data" / "residual" / "performance-review.md"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("# Synthetic residual work proposal\n", encoding="utf-8")
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps({"normalization": {"skip_classifications": []}}),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "residual-scope.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        source, metadata = _row(
+            con,
+            "data/residual/performance-review.md",
+        )
+        result = normalize_all(config, con)
+        normalized = con.execute(
+            "SELECT status, normalized_path FROM normalized_document WHERE source_id=?",
+            (source["source_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert source["classification"] == "Work"
+    assert metadata["root_match_kind"] == "residual"
+    assert result["normalized"] == 0
+    assert result["review_required"] == 1
+    assert normalized["status"] == "review_required"
+    assert normalized["normalized_path"] is None
+
+
 def test_source_and_version_identity_rules(tmp_path: Path):
     root = _prepare_tree(tmp_path)
     config = load_config(root)

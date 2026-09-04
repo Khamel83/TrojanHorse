@@ -45,6 +45,49 @@ def test_derived_path_rejects_data_child():
         config.assert_derived_path(config.data_dir / "normalized" / "meeting.md")
 
 
+def test_config_rejects_external_data_and_source_root_symlinks(tmp_path: Path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    data_dir = repository / "data"
+    os.symlink(outside_dir, data_dir)
+
+    with pytest.raises(ConfigurationError, match="data root"):
+        load_config(repository)
+
+    data_dir.unlink()
+    data_dir.mkdir()
+    os.symlink(outside_dir, data_dir / "linked")
+    _write_config(
+        repository,
+        {
+            "source_roots": {
+                "zoom": {
+                    "path": "data/linked",
+                    "relative_path": "data/Zoom",
+                }
+            }
+        },
+    )
+
+    with pytest.raises(ConfigurationError, match="source root"):
+        load_config(repository)
+
+
+def test_derived_path_rejects_external_symlink(tmp_path: Path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    config_dir = repository / "work-corpus"
+    config_dir.mkdir()
+    os.symlink(outside_dir, config_dir / "corpus")
+
+    with pytest.raises(ConfigurationError, match="derived path"):
+        load_config(repository)
+
+
 def test_cli_command_set_has_no_email_or_atlas_command():
     parser = cli._parser()
     commands = _command_names(parser)

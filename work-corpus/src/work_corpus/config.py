@@ -169,6 +169,10 @@ class Config:
         self.root = root.resolve()
         self.payload = payload
         self.data_dir = self.resolve_path(payload["paths"]["data"])
+        if not _is_within(self.data_dir, self.root):
+            raise ConfigurationError(
+                f"data root must remain inside repository: {self.data_dir}"
+            )
         self.corpus_dir = self.resolve_path(payload["paths"]["corpus"])
         self.state_dir = self.resolve_path(payload["paths"]["state"])
         configured_roots = payload.get("source_roots", {})
@@ -196,6 +200,10 @@ class Config:
 
     def assert_derived_path(self, path: Path) -> None:
         resolved = path.expanduser().resolve()
+        if not _is_within(resolved, self.root):
+            raise ConfigurationError(
+                f"derived path must remain inside repository: {resolved}"
+            )
         if _is_within(resolved, self.data_dir):
             raise ConfigurationError(
                 f"derived path must be outside data/: {resolved}"
@@ -240,6 +248,14 @@ class Config:
             enabled = definition.get("enabled", True)
             if not isinstance(enabled, bool):
                 raise ConfigurationError(f"source root {key!r} enabled must be boolean")
+            resolved_path = self.resolve_path(raw_path)
+            if not _is_within(resolved_path, self.root) or not _is_within(
+                resolved_path,
+                self.data_dir,
+            ):
+                raise ConfigurationError(
+                    f"source root must resolve inside data/: {raw_path!r}"
+                )
             roots.append(
                 SourceRoot(
                     key=key,
@@ -247,7 +263,7 @@ class Config:
                     source_system=source_system,
                     precedence=precedence,
                     enabled=enabled,
-                    _resolved_path=self.resolve_path(raw_path),
+                    _resolved_path=resolved_path,
                 )
             )
 
@@ -274,6 +290,14 @@ class Config:
                 raise ConfigurationError(f"source root {key!r} must define precedence")
             if not isinstance(enabled, bool):
                 raise ConfigurationError(f"source root {key!r} enabled must be boolean")
+            resolved_path = self.resolve_path(raw_path)
+            if not _is_within(resolved_path, self.root) or not _is_within(
+                resolved_path,
+                self.data_dir,
+            ):
+                raise ConfigurationError(
+                    f"source root must resolve inside data/: {raw_path!r}"
+                )
             roots.append(
                 SourceRoot(
                     key=key,
@@ -281,7 +305,7 @@ class Config:
                     source_system=source_system,
                     precedence=precedence,
                     enabled=enabled,
-                    _resolved_path=self.resolve_path(raw_path),
+                    _resolved_path=resolved_path,
                 )
             )
         return tuple(sorted(roots, key=lambda root: (root.precedence, root.key)))
@@ -300,13 +324,21 @@ class Config:
             if key in EXPLICIT_SOURCE_ROOTS or not isinstance(value, str) or not value:
                 continue
             relative_path = self._normalise_source_path(value)
+            resolved_path = self.resolve_path(value)
+            if not _is_within(resolved_path, self.root) or not _is_within(
+                resolved_path,
+                self.data_dir,
+            ):
+                raise ConfigurationError(
+                    f"source root must resolve inside data/: {value!r}"
+                )
             legacy[key] = SourceRoot(
                 key=key,
                 relative_path=relative_path,
                 source_system=source_systems.get(key, "other"),
                 precedence=100000,
                 enabled=False,
-                _resolved_path=self.resolve_path(value),
+                _resolved_path=resolved_path,
             )
         return legacy
 
