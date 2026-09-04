@@ -75,15 +75,17 @@ _SIGNED_URL_KEYS = re.compile(
 )
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _QUOTED_SECRET_RE = re.compile(
-    r"(?P<prefix>\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
-    r"client[_ -]?secret|secret|password|passwd|private[_ -]?key)\b\s*[:=]\s*)"
+    r"(?P<prefix>[\"']?\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
+    r"client[_ -]?secret|secret[_ -]?key|client[_ -]?secret|token|credential|"
+    r"secret|password|passwd|private[_ -]?key)\b[\"']?\s*[:=]\s*)"
     r"(?P<quote>[\"'])(?P<value>.*?)(?P=quote)",
     re.IGNORECASE | re.DOTALL,
 )
 _UNQUOTED_SECRET_RE = re.compile(
-    r"(?P<prefix>\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
-    r"client[_ -]?secret|secret|password|passwd|private[_ -]?key)\b\s*[:=]\s*)"
-    r"(?P<value>[^\s,;]+)",
+    r"(?P<prefix>[\"']?\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
+    r"client[_ -]?secret|secret[_ -]?key|client[_ -]?secret|token|credential|"
+    r"secret|password|passwd|private[_ -]?key)\b[\"']?\s*[:=]\s*)"
+    r"(?P<value>(?![\"'])[^\s,;]+)",
     re.IGNORECASE,
 )
 _AUTHORIZATION_RE = re.compile(

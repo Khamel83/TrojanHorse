@@ -20,6 +20,7 @@ from .db import (
 )
 from .onenote import convert_one
 from .util import (
+    atomic_write_json,
     atomic_write_text,
     ensure_dir,
     html_to_text,
@@ -552,10 +553,21 @@ def _result(
     status: str = "normalized",
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> ExtractionResult:
-    cleaned = tuple(
-        ExtractedPart(part.locator, scrub_derived_text(part.text))
-        for part in parts
-    )
+    locator_counts: Dict[str, int] = {}
+    cleaned_parts: List[ExtractedPart] = []
+    for part in parts:
+        base_locator = part.locator or "document"
+        count = locator_counts.get(base_locator, 0) + 1
+        locator_counts[base_locator] = count
+        locator = base_locator if count == 1 else f"{base_locator}#part:{count}"
+        while any(existing.locator == locator for existing in cleaned_parts):
+            count += 1
+            locator_counts[base_locator] = count
+            locator = f"{base_locator}#part:{count}"
+        cleaned_parts.append(
+            ExtractedPart(locator, scrub_derived_text(part.text))
+        )
+    cleaned = tuple(cleaned_parts)
     body = "\n\n".join(part.text.rstrip() for part in cleaned if part.text.strip())
     return ExtractionResult(
         text=body + ("\n" if body else ""),
@@ -916,14 +928,30 @@ def build_archive_reference_map(
             directory_row = by_path.get(directory_path or "")
             if directory_row is None or not directory_row["source_version_id"]:
                 continue
-            semantic_id = stable_evidence_id(
-                directory_row["source_version_id"],
-                "document",
-            )
+            evidence_rows = con.execute(
+                """
+                SELECT evidence_id, locator
+                FROM evidence_record
+                WHERE source_version_id=?
+                ORDER BY locator
+                """,
+                (directory_row["source_version_id"],),
+            ).fetchall()
+            semantic_evidence_ids = [row["evidence_id"] for row in evidence_rows]
+            semantic_locators = [row["locator"] for row in evidence_rows]
+            if semantic_evidence_ids:
+                semantic_id = semantic_evidence_ids[0]
+            else:
+                semantic_id = stable_evidence_id(
+                    directory_row["source_version_id"],
+                    "document",
+                )
             item = result.setdefault(
                 semantic_id,
                 {
                     "semantic_evidence_id": semantic_id,
+                    "semantic_evidence_ids": semantic_evidence_ids or [semantic_id],
+                    "semantic_locators": semantic_locators or ["document"],
                     "directory_relative_path": directory_path,
                     "directory_source_id": directory_row["source_id"],
                     "source_references": [],
@@ -1137,7 +1165,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         source_version_id = row["source_version_id"]
         existing = con.execute(
             """
-            SELECT status, normalized_path
+            SELECT status, normalized_path, parser_version
             FROM normalized_document
             WHERE source_version_id = ?
             """,
@@ -1146,6 +1174,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         if (
             existing
             and existing["status"] in {"normalized", "metadata"}
+            and existing["parser_version"] == PARSER_VERSION
             and existing["normalized_path"]
             and Path(existing["normalized_path"]).exists()
         ):
@@ -1241,4 +1270,10 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             _record_extraction_review(con, row, "parser_error", error)
             result["errors"] += 1
     con.commit()
+    archive_map_path = config.state_dir / "archive_reference_map.json"
+    config.assert_derived_path(archive_map_path)
+    atomic_write_json(
+        archive_map_path,
+        build_archive_reference_map(config, con),
+    )
     return result

@@ -280,11 +280,10 @@ def _archive_metadata(
         "archive_member_count": 0,
         "archive_members_listed": 0,
         "archive_members_truncated": False,
-        "archive_matches_extracted_root": extracted_present,
+        "archive_matches_extracted_root": False,
+        "archive_matching_members": 0,
         "archive_extracted_root_key": extracted_key or "",
-        "archive_semantic_status": (
-            "duplicate_of_extracted" if extracted_present else "archive_only"
-        ),
+        "archive_semantic_status": "archive_only",
     }
     member_rows: List[Dict[str, object]] = []
     try:
@@ -294,7 +293,14 @@ def _archive_metadata(
             selected = infos[:max_entries]
             metadata["archive_members_listed"] = len(selected)
             metadata["archive_members_truncated"] = len(selected) < len(infos)
+            matching_members = 0
+            root_name = (
+                Path(extracted_root.relative_path.rstrip("/")).name
+                if extracted_root
+                else ""
+            )
             for info in selected:
+                member_path = info.filename.replace("\\", "/").strip("/")
                 member = {
                     "member_path": info.filename,
                     "size_bytes": info.file_size,
@@ -302,7 +308,41 @@ def _archive_metadata(
                     "is_directory": info.is_dir(),
                     "encrypted": bool(info.flag_bits & 0x1),
                 }
+                if extracted_present and not info.is_dir() and root_name:
+                    relative_member = member_path
+                    if relative_member == root_name:
+                        relative_member = ""
+                    elif relative_member.startswith(root_name + "/"):
+                        relative_member = relative_member[len(root_name) + 1 :]
+                    candidate = config.root / extracted_root.relative_path / relative_member
+                    try:
+                        candidate.resolve(strict=False).relative_to(
+                            config.data_dir.resolve(strict=False)
+                        )
+                        directory_present = candidate.is_file()
+                    except (OSError, ValueError):
+                        directory_present = False
+                    member["directory_present"] = directory_present
+                    member["directory_relative_path"] = (
+                        safe_relpath(candidate, config.root)
+                        if directory_present
+                        else ""
+                    )
+                    member["size_matches"] = bool(
+                        directory_present and candidate.stat().st_size == info.file_size
+                    )
+                    if directory_present:
+                        matching_members += 1
                 member_rows.append(member)
+            metadata["archive_matching_members"] = matching_members
+            metadata["archive_matches_extracted_root"] = bool(
+                extracted_present and matching_members
+            )
+            metadata["archive_semantic_status"] = (
+                "duplicate_of_extracted"
+                if metadata["archive_matches_extracted_root"]
+                else "archive_only"
+            )
             metadata["archive_members"] = member_rows
     except (OSError, zipfile.BadZipFile) as exc:
         return metadata, member_rows, f"archive listing {path}: {exc}"
@@ -732,6 +772,21 @@ def inventory(
         if zoom_match and parse_date_hint(zoom_match.group(1)):
             zoom_folders.add(zoom_match.group(1))
 
+        date_hint = parse_date_hint(relative_path) or None
+        date_basis = "not_observed"
+        if date_hint:
+            path_parts = relative_path.replace("\\", "/").split("/")
+            if (
+                source_system == "zoom"
+                and len(path_parts) >= 3
+                and parse_date_hint(path_parts[2]) == date_hint
+            ):
+                date_basis = "meeting_folder"
+            elif parse_date_hint(Path(relative_path).name) == date_hint:
+                date_basis = "filename_hint"
+            else:
+                date_basis = "path_hint"
+
         metadata: Dict[str, object] = {
             "is_symlink": path.is_symlink(),
             "parent": safe_relpath(path.parent, config.root),
@@ -745,6 +800,7 @@ def inventory(
             "source_version_id": source_version_id,
             "scope_proposal": scope.scope,
             "scope_reason": scope.reason,
+            "source_date_basis": date_basis,
             "extraction_status": extraction_status,
             **archive_metadata,
         }
@@ -804,7 +860,7 @@ def inventory(
                 stat.st_mtime_ns,
                 content_hash or None,
                 source_version_id,
-                parse_date_hint(relative_path) or None,
+                date_hint,
                 scope.scope,
                 _sensitivity(relative_path, source_system),
                 parse_readiness,

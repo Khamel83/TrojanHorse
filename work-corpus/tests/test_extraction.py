@@ -15,7 +15,7 @@ import work_corpus.inventory as inventory_module
 import work_corpus.normalize as normalize_module
 from work_corpus.config import load_config
 from work_corpus.db import connect
-from work_corpus.util import provenance_header, stable_evidence_id
+from work_corpus.util import provenance_header, scrub_derived_text, stable_evidence_id
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "inventory_tree"
@@ -235,6 +235,101 @@ def test_normalize_records_provenance_evidence_and_scrubs_fts(tmp_path: Path):
     assert "super-secret" not in fts["derived_text"]
 
 
+def test_json_secret_keys_are_scrubbed_before_derived_output():
+    value = '{"api_key": "json-secret", "token": "token-secret", "ok": "value"}'
+
+    scrubbed = scrub_derived_text(value)
+
+    assert "json-secret" not in scrubbed
+    assert "token-secret" not in scrubbed
+    assert "[REDACTED_SECRET]" in scrubbed
+
+
+def test_duplicate_transcript_locators_remain_distinct_evidence(tmp_path: Path):
+    path = tmp_path / "duplicate-cues.vtt"
+    path.write_text(
+        "WEBVTT\n\n"
+        "00:00.000 --> 00:01.000\nFirst cue\n\n"
+        "00:00.000 --> 00:02.000\nSecond cue\n",
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+
+    extracted = normalize_module.extract_source(
+        path,
+        "transcript",
+        ".vtt",
+        config,
+        source_system="zoom",
+        relative_path="data/Zoom/2026-09-01 Meeting/duplicate-cues.vtt",
+    )
+
+    locators = [part.locator for part in extracted.parts]
+    assert len(locators) == 2
+    assert len(set(locators)) == 2
+
+
+def test_zoom_folder_date_has_explicit_date_basis(tmp_path: Path):
+    path = tmp_path / "data" / "Zoom" / "2026-09-02 10.00.00 Team Sync" / "notes.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("# Meeting notes\n", encoding="utf-8")
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.local.json").write_text(
+        json.dumps({"normalization": {"skip_classifications": []}}),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "date-basis.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        normalize_module.normalize_all(config, con)
+        row = _source_row(
+            con,
+            "data/Zoom/2026-09-02 10.00.00 Team Sync/notes.md",
+        )
+        normalized = con.execute(
+            "SELECT normalized_path FROM normalized_document WHERE source_id=?",
+            (row["source_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert normalized is not None
+    output = Path(normalized["normalized_path"]).read_text(encoding="utf-8")
+    assert 'source_date_basis: "meeting_folder"' in output
+
+
+def test_parser_version_change_rebuilds_same_source_version(tmp_path: Path):
+    path = tmp_path / "data" / "notes" / "Notes" / "versioned.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("# Versioned note\n", encoding="utf-8")
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.local.json").write_text(
+        json.dumps({"normalization": {"skip_classifications": []}}),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "parser-version.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        first = normalize_module.normalize_all(config, con)
+        row = _source_row(con, "data/notes/Notes/versioned.md")
+        con.execute(
+            "UPDATE normalized_document SET parser_version='old' WHERE source_id=?",
+            (row["source_id"],),
+        )
+        con.commit()
+        second = normalize_module.normalize_all(config, con)
+    finally:
+        con.close()
+
+    assert first["normalized"] == 1
+    assert second["normalized"] == 1
+    assert second["skipped_unchanged"] == 0
+
+
 def test_matching_archive_does_not_duplicate_directory_content(tmp_path: Path):
     root = _prepare_archive_tree(tmp_path)
     config_dir = root / "work-corpus"
@@ -276,6 +371,7 @@ def test_matching_archive_does_not_duplicate_directory_content(tmp_path: Path):
     }
     assert result["normalized"] >= 1
     assert normalized_archive is None
+    assert (config.state_dir / "archive_reference_map.json").is_file()
 
 
 def test_discovery_report_is_not_searchable_evidence(tmp_path: Path):
