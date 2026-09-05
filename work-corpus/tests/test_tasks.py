@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from work_corpus.db import connect, current_tasks, record_evidence, record_source_version, upsert_source_record
 from work_corpus.tasks import extract_task_proposals
 
@@ -126,6 +128,73 @@ def test_current_tasks_fail_closed_without_an_explicit_date_basis(tmp_path):
     assert current == []
 
 
+def test_current_tasks_require_work_scoped_evidence_provenance(tmp_path):
+    con, source_id, work_evidence_id = _evidence(tmp_path)
+    try:
+        personal_source_id = upsert_source_record(
+            con,
+            root_key="synthetic",
+            relative_path="synthetic/personal.md",
+            source_system="synthetic",
+            kind="document",
+            scope="Personal",
+            sensitivity="personal",
+        )
+        personal_version_id = record_source_version(
+            con, personal_source_id, 14, 1, "p" * 64
+        )
+        personal_evidence_id = record_evidence(
+            con,
+            personal_version_id,
+            "document",
+            "corpus/personal.md",
+            "e" * 64,
+            "derived",
+        )
+        con.executemany(
+            """
+            INSERT INTO task (
+                task_id, action, source_event_date, source_date_basis,
+                candidate_status, task_status, source_evidence_id
+            ) VALUES (?, ?, '2026-09-03', 'meeting_date', 'accepted', 'open', ?)
+            """,
+            [
+                ("work-task", "Prepare the work brief", work_evidence_id),
+                ("personal-task", "Plan the personal trip", personal_evidence_id),
+            ],
+        )
+        con.commit()
+        current = current_tasks(con, RUN_DATE)
+    finally:
+        con.close()
+
+    assert [row["task_id"] for row in current] == ["work-task"]
+    assert "scope" not in current[0].keys()
+    assert source_id != personal_source_id
+
+
+def test_current_tasks_fail_closed_when_task_provenance_is_missing(tmp_path):
+    con, _source_id, _evidence_id = _evidence(tmp_path)
+    try:
+        con.execute("PRAGMA foreign_keys=OFF")
+        con.execute(
+            """
+            INSERT INTO task (
+                task_id, action, source_event_date, source_date_basis,
+                candidate_status, task_status, source_evidence_id
+            ) VALUES ('orphan-task', 'Do not surface this', '2026-09-03',
+                      'meeting_date', 'accepted', 'open', 'missing-evidence')
+            """
+        )
+        con.commit()
+        con.execute("PRAGMA foreign_keys=ON")
+        current = current_tasks(con, RUN_DATE)
+    finally:
+        con.close()
+
+    assert current == []
+
+
 def test_future_state_claim_is_ignored_but_explicit_promise_is_preserved(tmp_path):
     con, source_id, evidence_id = _evidence(tmp_path)
     try:
@@ -145,6 +214,31 @@ def test_future_state_claim_is_ignored_but_explicit_promise_is_preserved(tmp_pat
 
     assert [proposal.action for proposal in proposals] == ["prepare the launch brief"]
     assert [row["action"] for row in tasks] == ["prepare the launch brief"]
+
+
+@pytest.mark.parametrize(
+    "claim",
+    ["I will earn a promotion.", "I will advance my career."],
+)
+def test_career_claims_are_ignored_without_persisting_tasks(tmp_path, claim):
+    con, source_id, evidence_id = _evidence(tmp_path)
+    try:
+        proposals = extract_task_proposals(
+            con,
+            claim,
+            source_id=source_id,
+            source_evidence_id=evidence_id,
+            source_event_date="2026-09-20",
+            source_date_basis="event_date",
+            run_date=RUN_DATE,
+            scope="Work",
+        )
+        task_count = con.execute("SELECT COUNT(*) FROM task").fetchone()[0]
+    finally:
+        con.close()
+
+    assert proposals == []
+    assert task_count == 0
 
 
 def test_boundary_old_export_and_missing_dates_are_not_current_tasks(tmp_path):

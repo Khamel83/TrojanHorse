@@ -33,6 +33,11 @@ NON_TASK_CLAIM_PATTERNS = (
         r"a|an|the)\b",
         re.IGNORECASE,
     ),
+    re.compile(r"^(?:earn|receive|secure|land)\s+(?:a|an|the)\s+promotion\b", re.IGNORECASE),
+    re.compile(
+        r"^(?:advance|progress|further)\s+(?:my|your|their|one's)\s+career\b",
+        re.IGNORECASE,
+    ),
 )
 
 

@@ -1242,18 +1242,25 @@ def current_tasks(
     boundary = effective_date - timedelta(days=14)
     return con.execute(
         """
-        SELECT *
-        FROM task
-        WHERE TRIM(action) <> ''
-          AND COALESCE(source_event_date, event_date) IS NOT NULL
-          AND date(COALESCE(source_event_date, event_date)) >= date(?)
-          AND LOWER(TRIM(source_date_basis))
+        SELECT t.*
+        FROM task AS t
+        JOIN evidence_record AS e
+          ON e.evidence_id = t.source_evidence_id
+        JOIN source_version AS v
+          ON v.source_version_id = e.source_version_id
+        JOIN source_record AS s
+          ON s.source_id = v.source_id
+        WHERE TRIM(t.action) <> ''
+          AND COALESCE(t.source_event_date, t.event_date) IS NOT NULL
+          AND date(COALESCE(t.source_event_date, t.event_date)) >= date(?)
+          AND LOWER(TRIM(t.source_date_basis))
               IN ('event', 'event_date', 'meeting', 'meeting_date')
-          AND LOWER(COALESCE(candidate_status, 'candidate'))
+          AND LOWER(COALESCE(s.classification, s.scope, 'Unknown')) = 'work'
+          AND LOWER(COALESCE(t.candidate_status, 'candidate'))
               IN ('accepted', 'approved', 'confirmed', 'current')
-          AND LOWER(COALESCE(task_status, status, 'open'))
+          AND LOWER(COALESCE(t.task_status, t.status, 'open'))
               NOT IN ('completed', 'cancelled', 'dismissed', 'historical')
-        ORDER BY date(COALESCE(source_event_date, event_date)), task_id
+        ORDER BY date(COALESCE(t.source_event_date, t.event_date)), t.task_id
         """,
         (boundary.isoformat(),),
     ).fetchall()
