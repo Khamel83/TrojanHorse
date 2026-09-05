@@ -583,6 +583,23 @@ def test_retry_blocked_engine_preflight_jobs_can_resume(tmp_path: Path):
     assert job["output_path"]
 
 
+def test_quality_accepts_small_timestamp_rounding_inversion(tmp_path: Path):
+    vtt = tmp_path / "rounded.vtt"
+    vtt.write_text(
+        "WEBVTT\n\n"
+        "00:28:43.840 --> 00:28:44.840\nFirst cue\n\n"
+        "00:28:43.800 --> 00:28:45.000\nSecond cue\n",
+        encoding="utf-8",
+    )
+
+    quality = transcription.assess_transcript_quality(
+        vtt, tmp_path / "missing.txt", 1800.0
+    )
+
+    assert quality["quality_status"] == "good"
+    assert quality["timestamp_coverage"] > 0.5
+
+
 def test_historical_job_cannot_send_current_source_bytes_to_engine(tmp_path: Path):
     script = _engine_script(tmp_path)
     input_log = tmp_path / "engine-input.bin"

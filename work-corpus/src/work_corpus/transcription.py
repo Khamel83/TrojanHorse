@@ -30,6 +30,7 @@ _TIMESTAMP_RE = re.compile(
     r"\s*-->\s*"
     r"(?P<end>(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3})"
 )
+_TIMESTAMP_ORDER_TOLERANCE_SECONDS = 0.1
 
 
 def _format_vtt_time(seconds: float) -> str:
@@ -407,9 +408,12 @@ def _parse_output_cues(text: str) -> Tuple[List[Tuple[float, float, str]], bool]
 
     previous = -1.0
     for cue_start, cue_end, _text in cues:
-        if cue_start < previous or cue_end < cue_start:
+        if (
+            cue_start + _TIMESTAMP_ORDER_TOLERANCE_SECONDS < previous
+            or cue_end + _TIMESTAMP_ORDER_TOLERANCE_SECONDS < cue_start
+        ):
             valid = False
-        previous = cue_start
+        previous = max(previous, cue_start)
     return cues, timestamp_seen and valid and bool(cues)
 
 
