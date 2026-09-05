@@ -22,7 +22,11 @@ from .util import (
     scrub_fts_text,
     write_csv,
 )
-from .zoom import FINAL_MEDIA_EXTENSIONS, TERMINAL_QUEUE_STATUSES
+from .zoom import (
+    FINAL_MEDIA_EXTENSIONS,
+    TERMINAL_QUEUE_STATUSES,
+    zoom_meeting_folder,
+)
 
 
 MANIFEST_FIELDS = [
@@ -511,6 +515,14 @@ def _transcription_retry_count(con: sqlite3.Connection) -> Tuple[int, int]:
 
 
 def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
+    dated_folders = {
+        folder
+        for row in con.execute(
+            "SELECT relative_path FROM source_record "
+            "WHERE status='present' AND source_system='zoom'"
+        )
+        if (folder := zoom_meeting_folder(str(row["relative_path"])))
+    }
     group_counts = {
         _safe_text(row["status"]): int(row["count"])
         for row in con.execute(
@@ -554,6 +566,8 @@ def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
                 failure_reasons[(status, _safe_text(row["error"] or "unspecified"))] += 1
     retries, retry_runs = _transcription_retry_count(con)
     return {
+        "dated_folders_observed": len(dated_folders),
+        "tracked_groups": sum(group_counts.values()),
         "group_counts": group_counts,
         "existing_transcripts": group_counts.get("existing_transcript", 0),
         "generated_transcripts": sum(
@@ -778,7 +792,8 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     normalize_errors = normalization["failed"]
     normalize_unsupported = normalization["unsupported"]
     mcp_count = _scalar(con, "SELECT COUNT(*) FROM mcp_item")
-    zoom_total = _scalar(con, "SELECT COUNT(*) FROM meeting_group")
+    zoom_total = zoom["dated_folders_observed"]
+    zoom_tracked_groups = zoom["tracked_groups"]
     zoom_existing = zoom["existing_transcripts"]
     zoom_generated = zoom["generated_transcripts"]
     zoom_missing = zoom["eligible_final_media_without_transcript"]
@@ -799,6 +814,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "normalization_unsupported": normalize_unsupported,
         "mcp_items": mcp_count,
         "zoom_meeting_folders": zoom_total,
+        "zoom_tracked_groups": zoom_tracked_groups,
         "zoom_existing_transcripts": zoom_existing,
         "zoom_generated_transcripts": zoom_generated,
         "zoom_missing_transcripts": zoom_missing,
@@ -997,7 +1013,8 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Substantive source files: **{physical['substantive_files']:,}**; Finder metadata: **{physical['finder_metadata_files']:,}**",
         f"- Normalized documents: **{normalized:,}**",
         f"- Granola/Wispr MCP items: **{mcp_count:,}**",
-        f"- Zoom meeting folders: **{zoom_total:,}**",
+        f"- Zoom dated source folders observed: **{zoom_total:,}**",
+        f"- Zoom groups with tracked media, transcripts, or artifacts: **{zoom_tracked_groups:,}**",
         f"- Existing Zoom transcripts: **{zoom_existing:,}**",
         f"- Locally generated Zoom transcripts: **{zoom_generated:,}**",
         f"- Eligible final Zoom media without a usable transcript: **{zoom_missing:,}**",

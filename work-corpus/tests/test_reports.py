@@ -352,6 +352,8 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
     assert summary["raw_immutability"]["status"] == "passed"
     assert summary["zoom_missing_transcripts"] == 1
     assert summary["zoom_media_without_terminal_status"] == 0
+    assert summary["zoom_meeting_folders"] == 1
+    assert summary["zoom_tracked_groups"] == 2
 
     serialized = json.dumps(summary, ensure_ascii=False)
     assert "secret-value" not in serialized
