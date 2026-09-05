@@ -12,6 +12,7 @@ from .db import connect
 from .inventory import inventory
 from .mcp_ingest import ingest_mcp_sources
 from .normalize import normalize_all
+from .query import search
 from .report import build_report
 from .transcription import transcribe_jobs
 from .util import ensure_dir, now_iso, stable_id
@@ -109,7 +110,19 @@ def _parser() -> argparse.ArgumentParser:
     tx.add_argument("--retry-errors", action="store_true")
 
     sub.add_parser("report", help="Rebuild status reports from SQLite state.")
-    sub.add_parser("query", help="Query local work evidence.")
+    query = sub.add_parser("query", help="Query local work evidence.")
+    query.add_argument("question", nargs="+", help="Question or exact search text.")
+    query.add_argument("--limit", type=int, default=20)
+    query.add_argument(
+        "--no-raw-fallback",
+        action="store_true",
+        help="Do not inspect Work raw files after canonical search misses.",
+    )
+    query.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="Inspect excluded scopes locally and label them excluded_scope.",
+    )
     sub.add_parser("mcp-import", help="Import Granola/Wispr Flow dumps.")
     return parser
 
@@ -152,7 +165,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.command == "report":
             details = build_report(config, con)
         elif args.command == "query":
-            raise RuntimeError("query is reserved for the local query implementation")
+            details = search(
+                con,
+                " ".join(args.question),
+                limit=args.limit,
+                raw_fallback=not args.no_raw_fallback,
+                diagnostic=args.diagnostic,
+            )
         elif args.command == "mcp-import":
             details = ingest_mcp_sources(config, con)
         else:
