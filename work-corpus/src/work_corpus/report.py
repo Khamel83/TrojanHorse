@@ -814,6 +814,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         for status in ("pending", "pending_approval", "queued", "running")
     )
     tx_errors = zoom["transcription_status_counts"].get("failed", 0)
+    tx_partial = zoom["transcription_status_counts"].get("partial", 0)
 
     summary = {
         "generated_at": now_iso(),
@@ -967,6 +968,10 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append(f"{normalize_errors} files produced parsing errors.")
     if tx_errors:
         needs.append(f"{tx_errors} local transcription jobs failed and need review.")
+    if tx_partial:
+        needs.append(
+            f"{tx_partial} local transcription jobs produced quality-limited partial outputs and need review."
+        )
     if duplicates:
         needs.append(f"{_count_phrase(len(duplicates), 'exact duplicate group')} detected among hashed files.")
     if version_families:

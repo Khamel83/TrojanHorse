@@ -436,6 +436,16 @@ def test_report_does_not_count_successful_generated_media_as_missing(
         )
         con.commit()
         summary = build_report(config, con)
+        con.execute(
+            "UPDATE transcription_job SET status='partial', error=? "
+            "WHERE job_id='generated-job'",
+            ("non-empty output has no valid ordered timestamp cues",),
+        )
+        con.commit()
+        build_report(config, con)
+        partial_report_text = (
+            config.corpus_dir / "reports" / "what_we_have_and_need.md"
+        ).read_text(encoding="utf-8")
     finally:
         con.close()
 
@@ -443,3 +453,5 @@ def test_report_does_not_count_successful_generated_media_as_missing(
     assert summary["zoom"]["terminal_local_status_counts"] == {"succeeded": 1}
     assert summary["zoom"]["output_hashes"] == 1
     assert summary["zoom_missing_transcripts"] == 0
+    assert "partial" in partial_report_text
+    assert "quality-limited" in partial_report_text
