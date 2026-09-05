@@ -558,6 +558,10 @@ def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
             and row["media_version_id"]
             and row["media_version_id"] == row["source_version_id"]
             and not row["transcript_source_id"]
+            and not (
+                status in {"succeeded", "partial"}
+                and row["output_sha256"]
+            )
         ):
             eligible.append((row, status))
             if status in TERMINAL_QUEUE_STATUSES:

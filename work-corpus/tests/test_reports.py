@@ -360,3 +360,84 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
     for report_path in (config.corpus_dir / "reports").glob("*"):
         if report_path.is_file():
             assert "secret-value" not in report_path.read_text(encoding="utf-8")
+
+
+def test_report_does_not_count_successful_generated_media_as_missing(
+    tmp_path: Path,
+):
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "generated-report.sqlite")
+    try:
+        con.execute(
+            """
+            INSERT INTO source_root (root_key, relative_path, source_system, precedence)
+            VALUES ('zoom', 'data/Zoom', 'zoom', 50)
+            """
+        )
+        relative_path = "data/Zoom/2026-09-04 09.00.00 Work/audio.m4a"
+        path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"media")
+        source_id = upsert_source_record(
+            con,
+            root_key="zoom",
+            relative_path=relative_path,
+            source_system="zoom",
+            kind="media",
+            scope="Work",
+            sensitivity="internal_review",
+        )
+        digest = hashlib.sha256(b"media").hexdigest()
+        version_id = record_source_version(
+            con,
+            source_id,
+            path.stat().st_size,
+            path.stat().st_mtime_ns,
+            digest,
+        )
+        con.execute(
+            """
+            UPDATE source_record
+            SET absolute_path=?, extension='.m4a', size_bytes=?, mtime_ns=?,
+                content_sha256=?, source_version_id=?, classification='Work',
+                scope='Work', extraction_status='ready'
+            WHERE source_id=?
+            """,
+            (
+                str(path),
+                path.stat().st_size,
+                path.stat().st_mtime_ns,
+                digest,
+                version_id,
+                source_id,
+            ),
+        )
+        con.execute(
+            """
+            INSERT INTO meeting_group (
+                group_id, folder_relative_path, meeting_date, media_source_id,
+                media_version_id, status, transcript_path, updated_at
+            ) VALUES ('generated-group', 'data/Zoom/2026-09-04 09.00.00 Work',
+                      '2026-09-04', ?, ?, 'succeeded', 'corpus/generated.md', ?)
+            """,
+            (source_id, version_id, "2026-09-04T00:00:00Z"),
+        )
+        con.execute(
+            """
+            INSERT INTO transcription_job (
+                job_id, group_id, media_source_id, media_version_id,
+                approval_status, output_stem, status, output_path,
+                output_sha256, completed_at
+            ) VALUES ('generated-job', 'generated-group', ?, ?, 'approved',
+                      'corpus/generated', 'succeeded', 'corpus/generated.md',
+                      ?, '2026-09-04T00:00:00Z')
+            """,
+            (source_id, version_id, "a" * 64),
+        )
+        con.commit()
+        summary = build_report(config, con)
+    finally:
+        con.close()
+
+    assert summary["zoom"]["eligible_final_media_without_transcript"] == 0
+    assert summary["zoom_missing_transcripts"] == 0
