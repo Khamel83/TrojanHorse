@@ -440,4 +440,6 @@ def test_report_does_not_count_successful_generated_media_as_missing(
         con.close()
 
     assert summary["zoom"]["eligible_final_media_without_transcript"] == 0
+    assert summary["zoom"]["terminal_local_status_counts"] == {"succeeded": 1}
+    assert summary["zoom"]["output_hashes"] == 1
     assert summary["zoom_missing_transcripts"] == 0

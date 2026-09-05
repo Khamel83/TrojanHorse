@@ -545,7 +545,8 @@ def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     status_counts: Counter[str] = Counter()
     terminal_counts: Counter[str] = Counter()
     failure_reasons: Counter[Tuple[str, str]] = Counter()
-    eligible = []
+    eligible_media = []
+    missing_transcripts = []
     for row in rows:
         status = _normalised_queue_status(row["status"], row["approval_status"])
         status_counts[status] += 1
@@ -557,16 +558,17 @@ def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
             and row["media_source_id"]
             and row["media_version_id"]
             and row["media_version_id"] == row["source_version_id"]
-            and not row["transcript_source_id"]
-            and not (
-                status in {"succeeded", "partial"}
-                and row["output_sha256"]
-            )
         ):
-            eligible.append((row, status))
+            eligible_media.append((row, status))
+            has_usable_transcript = bool(row["transcript_source_id"]) or (
+                status in {"succeeded", "partial"}
+                and bool(row["output_sha256"])
+            )
+            if not has_usable_transcript:
+                missing_transcripts.append((row, status))
             if status in TERMINAL_QUEUE_STATUSES:
                 terminal_counts[status] += 1
-            if status in {"failed", "blocked", "artifact"}:
+            if not has_usable_transcript and status in {"failed", "blocked", "artifact"}:
                 failure_reasons[(status, _safe_text(row["error"] or "unspecified"))] += 1
     retries, retry_runs = _transcription_retry_count(con)
     return {
@@ -582,14 +584,19 @@ def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "unmatched_transcript_only_groups": group_counts.get("transcript_only", 0),
         "transcription_status_counts": dict(sorted(status_counts.items())),
         "terminal_local_status_counts": dict(sorted(terminal_counts.items())),
-        "eligible_final_media_without_transcript": len(eligible),
+        "eligible_final_media_without_transcript": len(missing_transcripts),
         "eligible_media_without_terminal_status": sum(
-            status not in TERMINAL_QUEUE_STATUSES for _row, status in eligible
+            status not in TERMINAL_QUEUE_STATUSES
+            for _row, status in eligible_media
         ),
-        "attempted": sum(bool(row["started_at"]) for row, _status in eligible),
+        "attempted": sum(
+            bool(row["started_at"]) for row, _status in eligible_media
+        ),
         "retries": retries,
         "retry_runs": retry_runs,
-        "output_hashes": sum(bool(row["output_sha256"]) for row, _status in eligible),
+        "output_hashes": sum(
+            bool(row["output_sha256"]) for row, _status in eligible_media
+        ),
         "failure_reasons": [
             {"status": status, "reason": reason, "count": count}
             for (status, reason), count in sorted(failure_reasons.items())
