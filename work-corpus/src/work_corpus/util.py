@@ -127,6 +127,12 @@ def scrub_derived_text(value: str) -> str:
     return _TOKEN_RE.sub("[REDACTED_SECRET]", text)
 
 
+def scrub_fts_text(value: str) -> str:
+    """Remove all URLs and secret-like values before FTS indexing."""
+    text = scrub_derived_text(value)
+    return _URL_RE.sub("[REDACTED_URL]", text)
+
+
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:

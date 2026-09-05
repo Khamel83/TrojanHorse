@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
 import traceback
 from typing import Any, Dict, Optional
 
@@ -40,7 +41,7 @@ def bootstrap(config: Config) -> None:
 
 
 def _record_start(con, command: str) -> str:
-    run_id = stable_id("run", command, now_iso())
+    run_id = stable_id("run", command, now_iso(), str(time.time_ns()))
     con.execute(
         "INSERT INTO pipeline_run (run_id, command, started_at, status) VALUES (?, ?, ?, 'running')",
         (run_id, command, now_iso()),

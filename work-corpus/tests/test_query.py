@@ -252,6 +252,134 @@ def test_fts_redaction_changes_derived_index_only(tmp_path: Path):
     assert raw_path.read_bytes() == raw_before
 
 
+def test_direct_evidence_write_redacts_fts_before_query_rebuild(tmp_path: Path):
+    con = connect(tmp_path / "direct-fts.sqlite")
+    try:
+        _add_root(con, "direct")
+        source_id = db.upsert_source_record(
+            con,
+            root_key="direct",
+            relative_path="data/work/direct.md",
+            source_system="synthetic",
+            kind="document",
+            scope="Work",
+            sensitivity="internal",
+        )
+        version_id = db.record_source_version(
+            con, source_id, 10, 1, "c" * 64
+        )
+        evidence_id = db.record_evidence(
+            con,
+            version_id,
+            "document",
+            "corpus/direct.md",
+            "d" * 64,
+            "canonical",
+            derived_text="direct-marker https://example.test/plain api_key=secret-value",
+        )
+        indexed = con.execute(
+            "SELECT derived_text FROM derived_text_fts WHERE evidence_id=?",
+            (evidence_id,),
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    assert "https://" not in indexed
+    assert "secret-value" not in indexed
+
+
+def test_unreviewed_relationship_is_not_labeled_canonical(tmp_path: Path):
+    con = connect(tmp_path / "relationship-review.sqlite")
+    try:
+        _source_id, _version_id, evidence_id = _add_source(
+            con,
+            tmp_path,
+            name="relationship.md",
+            scope="Work",
+            text="relationship evidence",
+        )
+        entity_id = create_entity(con, "project", "review-project", "Review Project")
+        con.execute(
+            """
+            INSERT INTO relationship (
+                relationship_id, relationship_type, from_record_type,
+                from_record_id, to_record_type, to_record_id, evidence_id,
+                status, confidence
+            ) VALUES ('review-relationship', 'project_evidence', 'entity', ?,
+                      'evidence', ?, ?, 'proposed', 0.4)
+            """,
+            (entity_id, evidence_id, evidence_id),
+        )
+        con.commit()
+        result = search(con, "Review Project")
+    finally:
+        con.close()
+
+    assert result["results"][0]["label"] == "derived_unreviewed"
+
+
+def test_exact_search_matches_date_observation_and_metadata(tmp_path: Path):
+    con = connect(tmp_path / "date-search.sqlite")
+    try:
+        source_id, _version_id, evidence_id = _add_source(
+            con,
+            tmp_path,
+            name="dated.md",
+            scope="Work",
+            text="date evidence",
+        )
+        con.execute(
+            "UPDATE source_record SET metadata_json=? WHERE source_id=?",
+            (json.dumps({"ticket": "DATE-123"}), source_id),
+        )
+        con.execute(
+            """
+            INSERT INTO date_observation (
+                observation_id, evidence_id, date_value, basis, precision,
+                confidence, created_at
+            ) VALUES ('date-observation', ?, '2026-09-04', 'meeting_date',
+                      'day', 1.0, '2026-09-04T00:00:00Z')
+            """,
+            (evidence_id,),
+        )
+        con.commit()
+        date_result = search(con, "2026-09-04")
+        metadata_result = search(con, "DATE-123")
+    finally:
+        con.close()
+
+    assert date_result["results"][0]["evidence_id"] == evidence_id
+    assert metadata_result["results"][0]["evidence_id"] == evidence_id
+
+
+def test_raw_fallback_requires_current_version_provenance(tmp_path: Path):
+    con = connect(tmp_path / "raw-provenance.sqlite")
+    try:
+        _add_root(con, "unversioned")
+        source_id = db.upsert_source_record(
+            con,
+            root_key="unversioned",
+            relative_path="data/work/unversioned.txt",
+            source_system="synthetic",
+            kind="document",
+            scope="Work",
+            sensitivity="internal",
+        )
+        raw_path = tmp_path / "data/work/unversioned.txt"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_text("unversioned-marker", encoding="utf-8")
+        con.execute(
+            "UPDATE source_record SET absolute_path=?, classification='Work', extraction_status='ready' WHERE source_id=?",
+            (str(raw_path), source_id),
+        )
+        con.commit()
+        result = search(con, "unversioned-marker")
+    finally:
+        con.close()
+
+    assert result["results"][0]["label"] == "missing"
+
+
 def test_exact_fts_relationship_and_provenance_fields(tmp_path: Path):
     con = connect(tmp_path / "search-paths.sqlite")
     try:

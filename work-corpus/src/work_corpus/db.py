@@ -10,6 +10,7 @@ from typing import Any, Iterable, List, Optional, Union
 from .util import (
     ensure_dir,
     now_iso,
+    scrub_fts_text,
     stable_evidence_id,
     stable_source_id,
     stable_source_version_id,
@@ -1172,7 +1173,7 @@ def record_evidence(
         con.execute("DELETE FROM derived_text_fts WHERE evidence_id=?", (evidence_id,))
         con.execute(
             "INSERT INTO derived_text_fts (document_id, evidence_id, derived_text) VALUES (?, ?, ?)",
-            (document_id, evidence_id, derived_text),
+            (document_id, evidence_id, scrub_fts_text(derived_text)),
         )
     return evidence_id
 

@@ -298,9 +298,28 @@ def _work_evidence_rows(
     if exact_question is not None:
         predicates.append(
             "(instr(lower(COALESCE(f.derived_text, '')), lower(?)) > 0 "
-            "OR instr(lower(e.locator), lower(?)) > 0)"
+            "OR instr(lower(e.locator), lower(?)) > 0 "
+            "OR instr(lower(COALESCE(s.date_hint, '')), lower(?)) > 0 "
+            "OR instr(lower(COALESCE(s.metadata_json, '')), lower(?)) > 0 "
+            "OR EXISTS ("
+            "SELECT 1 FROM date_observation d "
+            "WHERE (d.evidence_id=e.evidence_id "
+            "OR d.source_version_id=v.source_version_id) "
+            "AND (instr(lower(d.date_value), lower(?)) > 0 "
+            "OR instr(lower(d.basis), lower(?)) > 0)"
+            ")"
+            ")"
         )
-        parameters.extend([exact_question, exact_question])
+        parameters.extend(
+            [
+                exact_question,
+                exact_question,
+                exact_question,
+                exact_question,
+                exact_question,
+                exact_question,
+            ]
+        )
     if evidence_ids is not None:
         if not evidence_ids:
             return []
@@ -539,6 +558,51 @@ def _relationship_evidence_ids(
     return sorted(evidence_ids)
 
 
+def _relationship_evidence_labels(
+    con: sqlite3.Connection,
+    question: str,
+    evidence_ids: Sequence[str],
+) -> Dict[str, str]:
+    """Return the least-trusted review label for relationship-backed evidence."""
+    if not evidence_ids:
+        return {}
+    entity_ids = _matching_entity_ids(con, question)
+    placeholders = ", ".join("?" for _value in evidence_ids)
+    labels: Dict[str, str] = {str(value): "canonical" for value in evidence_ids}
+    ranks = {"canonical": 0, "derived_unreviewed": 1, "conflict": 2}
+
+    def apply(evidence_id: str, status: Any) -> None:
+        normalized = str(status or "").casefold().strip()
+        if normalized in {"conflict", "conflicted", "disputed"}:
+            label = "conflict"
+        elif normalized in {"confirmed", "accepted", "resolved", "canonical"}:
+            label = "canonical"
+        else:
+            label = "derived_unreviewed"
+        if ranks[label] >= ranks[labels.get(evidence_id, "canonical")]:
+            labels[evidence_id] = label
+
+    for row in con.execute(
+        f"SELECT evidence_id, status FROM relationship WHERE evidence_id IN ({placeholders})",
+        list(evidence_ids),
+    ):
+        apply(str(row["evidence_id"]), row["status"])
+
+    if entity_ids:
+        entity_placeholders = ", ".join("?" for _value in entity_ids)
+        for row in con.execute(
+            f"""
+            SELECT evidence_id, resolution_status
+            FROM entity_mention
+            WHERE entity_id IN ({entity_placeholders})
+              AND evidence_id IN ({placeholders})
+            """,
+            [*entity_ids, *evidence_ids],
+        ):
+            apply(str(row["evidence_id"]), row["resolution_status"])
+    return labels
+
+
 def relationship_search(
     con: sqlite3.Connection,
     question: str,
@@ -547,6 +611,7 @@ def relationship_search(
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
     evidence_ids = _relationship_evidence_ids(con, value)
+    labels = _relationship_evidence_labels(con, value, evidence_ids)
     rows = _fetch_evidence_by_ids(con, evidence_ids, diagnostic=diagnostic)
     return [
         _hit_from_row(
@@ -555,7 +620,7 @@ def relationship_search(
             label_override=(
                 "excluded_scope"
                 if diagnostic and _scope_for_row(row) != DEFAULT_SCOPE
-                else None
+                else labels.get(str(row["evidence_id"]))
             ),
         )
         for row in rows
@@ -581,7 +646,13 @@ def _raw_work_fallback(
     limit: int,
     diagnostic: bool = False,
 ) -> List[Dict[str, Any]]:
-    predicates = ["s.status='present'", "s.absolute_path IS NOT NULL", "s.absolute_path <> ''"]
+    predicates = [
+        "s.status='present'",
+        "s.absolute_path IS NOT NULL",
+        "s.absolute_path <> ''",
+        "s.source_version_id IS NOT NULL",
+        "s.content_sha256 IS NOT NULL",
+    ]
     if not diagnostic:
         predicates.append(_scope_sql())
     rows = con.execute(
@@ -595,9 +666,10 @@ def _raw_work_fallback(
                 WHERE source_version_id=v.source_version_id
                 ORDER BY observation_id LIMIT 1) AS observed_date_basis
         FROM source_record s
-        LEFT JOIN source_version v
+        JOIN source_version v
           ON v.source_version_id=s.source_version_id
          AND v.source_id=s.source_id
+         AND v.content_sha256=s.content_sha256
         WHERE {' AND '.join(predicates)}
         ORDER BY s.relative_path
         """
