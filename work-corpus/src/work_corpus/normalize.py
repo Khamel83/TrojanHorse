@@ -9,6 +9,7 @@ import re
 import sqlite3
 import zipfile
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
@@ -18,7 +19,9 @@ from .db import (
     record_evidence,
     record_review_item,
 )
+from .entities import record_scope_proposal
 from .onenote import convert_one
+from .tasks import extract_task_proposals
 from .util import (
     atomic_write_json,
     atomic_write_text,
@@ -1080,6 +1083,16 @@ def _record_extraction_review(
     )
 
 
+def _task_date_basis(source_date_basis: str) -> str:
+    """Map inventory provenance names to the task date vocabulary."""
+    return {
+        "meeting_folder": "meeting_date",
+        "meeting": "meeting_date",
+        "event": "event_date",
+        "event_date": "event_date",
+    }.get(source_date_basis, source_date_basis)
+
+
 def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
     skip_classifications = {
         str(value).casefold()
@@ -1160,6 +1173,13 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             status="review_required",
             error=error,
         )
+        record_scope_proposal(
+            con,
+            row["source_id"],
+            "Unknown" if not _has_explicit_source_root(row) else (row["classification"] or "Unknown"),
+            sensitivity=row["sensitivity"] or "unknown",
+            reason=error,
+        )
 
     for row in rows:
         source_version_id = row["source_version_id"]
@@ -1228,6 +1248,18 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                         "DELETE FROM derived_text_fts WHERE evidence_id=?",
                         (evidence_id,),
                     )
+                    continue
+                task_proposals = extract_task_proposals(
+                    con,
+                    part_text,
+                    source_id=row["source_id"],
+                    source_evidence_id=evidence_id,
+                    source_event_date=row["date_hint"],
+                    source_date_basis=_task_date_basis(_date_basis),
+                    run_date=date.today(),
+                    scope=row["classification"] or "Unknown",
+                    commit=False,
+                )
             result["normalized"] += 1
         except ExtractionBlocked as exc:
             error = scrub_derived_text(str(exc))

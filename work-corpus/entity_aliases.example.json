@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "description": "Local-only canonical entity dictionary. Keep real names in ignored config.local.json or SQLite review state.",
+  "entities": [],
+  "normalization_rules": []
+}

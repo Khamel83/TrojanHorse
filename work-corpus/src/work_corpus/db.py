@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS entity (
 CREATE TABLE IF NOT EXISTS entity_alias (
     alias_id TEXT PRIMARY KEY,
     entity_id TEXT NOT NULL REFERENCES entity(entity_id) ON DELETE RESTRICT,
+    evidence_id TEXT REFERENCES evidence_record(evidence_id) ON DELETE RESTRICT,
     alias TEXT NOT NULL,
     source_system TEXT,
     valid_from TEXT,
@@ -226,6 +227,7 @@ CREATE TABLE IF NOT EXISTS entity_mention (
     original_mention TEXT NOT NULL,
     location TEXT NOT NULL,
     resolution_status TEXT NOT NULL,
+    rule TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -254,6 +256,7 @@ CREATE TABLE IF NOT EXISTS task (
     candidate_status TEXT NOT NULL DEFAULT 'candidate',
     task_status TEXT NOT NULL DEFAULT 'open',
     source_evidence_id TEXT NOT NULL REFERENCES evidence_record(evidence_id) ON DELETE RESTRICT,
+    source_date_basis TEXT,
     owner TEXT,
     assigner TEXT,
     project_id TEXT,
@@ -271,6 +274,7 @@ CREATE TABLE IF NOT EXISTS task (
 
 CREATE INDEX IF NOT EXISTS idx_task_source_event_date ON task(source_event_date);
 CREATE INDEX IF NOT EXISTS idx_task_candidate_status ON task(candidate_status);
+CREATE INDEX IF NOT EXISTS idx_task_source_date_basis ON task(source_date_basis);
 
 CREATE TABLE IF NOT EXISTS relationship (
     relationship_id TEXT PRIMARY KEY,
@@ -930,7 +934,22 @@ def _migrate_columns(con: sqlite3.Connection) -> None:
             "candidate_status": "TEXT NOT NULL DEFAULT 'candidate'",
             "task_status": "TEXT NOT NULL DEFAULT 'open'",
             "source_evidence_id": "TEXT",
+            "source_date_basis": "TEXT",
             "created_at": "TEXT",
+        },
+    )
+    _add_columns(
+        con,
+        "entity_alias",
+        {
+            "evidence_id": "TEXT REFERENCES evidence_record(evidence_id) ON DELETE RESTRICT",
+        },
+    )
+    _add_columns(
+        con,
+        "entity_mention",
+        {
+            "rule": "TEXT",
         },
     )
     _add_columns(
@@ -1228,6 +1247,8 @@ def current_tasks(
         WHERE TRIM(action) <> ''
           AND COALESCE(source_event_date, event_date) IS NOT NULL
           AND date(COALESCE(source_event_date, event_date)) >= date(?)
+          AND LOWER(COALESCE(source_date_basis, 'event_date'))
+              IN ('event', 'event_date', 'meeting', 'meeting_date')
           AND LOWER(COALESCE(candidate_status, 'candidate'))
               IN ('accepted', 'approved', 'confirmed', 'current')
           AND LOWER(COALESCE(task_status, status, 'open'))
