@@ -350,6 +350,8 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
     assert summary["notion"]["attachment_count"] == 1
     assert summary["onenote"]["files"] == 1
     assert summary["raw_immutability"]["status"] == "passed"
+    assert summary["zoom_missing_transcripts"] == 1
+    assert summary["zoom_media_without_terminal_status"] == 0
 
     serialized = json.dumps(summary, ensure_ascii=False)
     assert "secret-value" not in serialized

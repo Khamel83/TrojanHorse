@@ -781,7 +781,8 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     zoom_total = _scalar(con, "SELECT COUNT(*) FROM meeting_group")
     zoom_existing = zoom["existing_transcripts"]
     zoom_generated = zoom["generated_transcripts"]
-    zoom_missing = zoom["eligible_media_without_terminal_status"]
+    zoom_missing = zoom["eligible_final_media_without_transcript"]
+    zoom_unprocessed = zoom["eligible_media_without_terminal_status"]
     tx_pending = sum(
         zoom["transcription_status_counts"].get(status, 0)
         for status in ("pending", "pending_approval", "queued", "running")
@@ -801,6 +802,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "zoom_existing_transcripts": zoom_existing,
         "zoom_generated_transcripts": zoom_generated,
         "zoom_missing_transcripts": zoom_missing,
+        "zoom_media_without_terminal_status": zoom_unprocessed,
         "transcription_jobs_pending": tx_pending,
         "transcription_jobs_error": tx_errors,
         "exact_duplicate_groups": len(duplicates),
@@ -923,9 +925,9 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append("No durable Granola dump has been identified; MCP access alone is not a raw archive.")
     if not any(row["source_system"] == "wispr_flow" for row in coverage):
         needs.append("No durable Wispr Flow dump has been identified.")
-    if zoom_missing:
+    if zoom_unprocessed:
         needs.append(
-            f"{zoom_missing} eligible Zoom media items still have no terminal local status."
+            f"{zoom_unprocessed} eligible Zoom media items still have no terminal local status."
         )
     blocked_media = zoom["terminal_local_status_counts"].get("blocked", 0)
     if blocked_media:
@@ -998,11 +1000,11 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Zoom meeting folders: **{zoom_total:,}**",
         f"- Existing Zoom transcripts: **{zoom_existing:,}**",
         f"- Locally generated Zoom transcripts: **{zoom_generated:,}**",
-        f"- Zoom folders still missing transcripts: **{zoom_missing:,}**",
+        f"- Eligible final Zoom media without a usable transcript: **{zoom_missing:,}**",
+        f"- Eligible final Zoom media without terminal status: **{zoom_unprocessed:,}**",
         f"- Exact duplicate groups: **{len(duplicates):,}**",
         f"- Likely version families: **{len(version_families):,}**",
         f"- Sensitive-review candidates: **{len(sensitive_review):,}**",
-        f"- Eligible final media without terminal status: **{zoom['eligible_media_without_terminal_status']:,}**",
         f"- Raw immutability: **{raw_immutability.get('status', 'not_recorded')}**",
         "",
         "## Physical and source-root accounting",
