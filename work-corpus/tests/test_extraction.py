@@ -183,6 +183,32 @@ def test_capacities_pointer_only_record_is_missing_without_fetching_signed_url(
     assert "synthetic-signature" not in text
 
 
+def test_capacities_quoted_pointer_metadata_is_missing_without_fetching_payload(
+    tmp_path: Path,
+):
+    config = load_config(tmp_path)
+    path = tmp_path / "capacities-pointer-quoted.md"
+    path.write_text(
+        "---\n"
+        "type: 'File'\n"
+        "media: https://files.example.test/file?sig=secret\n"
+        "---\n"
+        "\nUnavailable locally.\n",
+        encoding="utf-8",
+    )
+    text, _parser = normalize_module.parse_source(
+        path,
+        "document",
+        ".md",
+        config,
+        source_system="capacities",
+        relative_path="data/capacities-pointer-quoted.md",
+    )
+
+    assert "payload_status: missing" in text
+    assert "sig=secret" not in text
+
+
 def test_normalize_records_provenance_evidence_and_scrubs_fts(tmp_path: Path):
     source_path = tmp_path / "data" / "notes" / "Notes" / "work-secure-note.md"
     source_path.parent.mkdir(parents=True)

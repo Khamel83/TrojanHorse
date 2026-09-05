@@ -6,10 +6,23 @@ import json
 from pathlib import Path
 import re
 import sqlite3
+from datetime import date
 from typing import Any, Dict, List, Tuple
 
 from .config import Config
-from .util import atomic_write_json, atomic_write_text, ensure_dir, human_bytes, now_iso, write_csv
+from .db import current_tasks
+from .normalize import _pointer_only
+from .util import (
+    atomic_write_json,
+    atomic_write_text,
+    ensure_dir,
+    human_bytes,
+    now_iso,
+    read_text_guess,
+    scrub_fts_text,
+    write_csv,
+)
+from .zoom import FINAL_MEDIA_EXTENSIONS, TERMINAL_QUEUE_STATUSES
 
 
 MANIFEST_FIELDS = [
@@ -112,6 +125,458 @@ def _count_phrase(count: int, singular: str, plural: str = "") -> str:
 def _scalar(con: sqlite3.Connection, query: str, params: tuple = ()) -> int:
     row = con.execute(query, params).fetchone()
     return int(row[0]) if row and row[0] is not None else 0
+
+
+def _safe_text(value: Any) -> str:
+    """Keep report strings free of URLs and secret-like values."""
+    return scrub_fts_text(str(value or ""))
+
+
+def _read_state_json(config: Config, name: str) -> Dict[str, Any]:
+    path = config.state_dir / name
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _physical_summary(con: sqlite3.Connection) -> Dict[str, int]:
+    rows = con.execute(
+        "SELECT relative_path, status FROM source_record"
+    ).fetchall()
+    present = [row for row in rows if row["status"] == "present"]
+    finder = sum(
+        Path(str(row["relative_path"])).name.casefold() == ".ds_store"
+        for row in present
+    )
+    return {
+        "present_files": len(present),
+        "missing_files": sum(row["status"] == "missing" for row in rows),
+        "finder_metadata_files": finder,
+        "substantive_files": len(present) - finder,
+    }
+
+
+def _source_root_coverage(con: sqlite3.Connection) -> List[Dict[str, Any]]:
+    roots = {
+        row["root_key"]: row
+        for row in con.execute(
+            "SELECT root_key, relative_path, source_system FROM source_root"
+        )
+    }
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for row in con.execute(
+        """
+        SELECT root_key, source_system, relative_path, size_bytes
+        FROM source_record
+        WHERE status='present'
+        ORDER BY root_key, relative_path
+        """
+    ):
+        root_key = str(row["root_key"] or "residual")
+        root = roots.get(root_key)
+        item = grouped.setdefault(
+            root_key,
+            {
+                "root_key": root_key,
+                "root_path": root["relative_path"] if root is not None else "",
+                "source_system": row["source_system"],
+                "files": 0,
+                "substantive_files": 0,
+                "bytes": 0,
+            },
+        )
+        item["files"] += 1
+        if Path(str(row["relative_path"])).name.casefold() != ".ds_store":
+            item["substantive_files"] += 1
+        item["bytes"] += int(row["size_bytes"] or 0)
+
+    for root_key, root in roots.items():
+        if root_key in grouped:
+            continue
+        grouped[root_key] = {
+            "root_key": root_key,
+            "root_path": root["relative_path"],
+            "source_system": root["source_system"],
+            "files": 0,
+            "substantive_files": 0,
+            "bytes": 0,
+        }
+    for item in grouped.values():
+        item["human_size"] = human_bytes(int(item["bytes"]))
+    return [grouped[key] for key in sorted(grouped)]
+
+
+def _discovery_excluded(con: sqlite3.Connection) -> Dict[str, int]:
+    rows = con.execute(
+        """
+        SELECT source_id, source_version_id
+        FROM source_record
+        WHERE status='present'
+          AND (kind='discovery' OR source_system='inventory_discovery')
+        """
+    ).fetchall()
+    source_ids = [str(row["source_id"]) for row in rows]
+    versions = [str(row["source_version_id"]) for row in rows if row["source_version_id"]]
+    if not versions:
+        return {
+            "source_files": len(source_ids),
+            "source_versions": 0,
+            "normalized_documents": 0,
+            "evidence_records": 0,
+        }
+    placeholders = ",".join("?" for _value in versions)
+    normalized = _scalar(
+        con,
+        f"SELECT COUNT(*) FROM normalized_document WHERE source_version_id IN ({placeholders})",
+        tuple(versions),
+    )
+    evidence = _scalar(
+        con,
+        f"SELECT COUNT(*) FROM evidence_record WHERE source_version_id IN ({placeholders})",
+        tuple(versions),
+    )
+    return {
+        "source_files": len(source_ids),
+        "source_versions": len(versions),
+        "normalized_documents": normalized,
+        "evidence_records": evidence,
+    }
+
+
+def _normalization_summary(con: sqlite3.Connection) -> Dict[str, Any]:
+    statuses = {
+        str(row["status"] or "unknown"): int(row["count"])
+        for row in con.execute(
+            "SELECT status, COUNT(*) AS count FROM normalized_document GROUP BY status ORDER BY status"
+        )
+    }
+    return {
+        "total_source_versions": sum(statuses.values()),
+        "by_status": statuses,
+        "normalized": statuses.get("normalized", 0),
+        "unsupported": statuses.get("unsupported", 0),
+        "failed": statuses.get("error", 0),
+        "prior_good_retained": statuses.get("prior_good_retained", 0),
+    }
+
+
+def _onenote_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
+    files = _scalar(
+        con,
+        """
+        SELECT COUNT(*) FROM source_record
+        WHERE status='present' AND source_system='onenote' AND lower(extension)='.one'
+        """,
+    )
+    status_counts = {
+        str(row["status"] or "unknown"): int(row["count"])
+        for row in con.execute(
+            """
+            SELECT n.status, COUNT(*) AS count
+            FROM normalized_document n
+            JOIN source_record s ON s.source_version_id=n.source_version_id
+            WHERE s.source_system='onenote'
+            GROUP BY n.status ORDER BY n.status
+            """
+        )
+    }
+    state = _read_state_json(config, "onenote_acceptance.json")
+    return {
+        "files": files,
+        "parsed_files": status_counts.get("normalized", 0),
+        "pages_extracted": int(state.get("pages_extracted", 0) or 0),
+        "reviewed_expected_pages": int(state.get("reviewed_expected_pages", 295) or 295),
+        "converter_available": bool(state.get("converter_available", False)),
+        "raw_read": bool(state.get("raw_read", False)),
+        "status_counts": status_counts or {
+            str(key): int(value)
+            for key, value in (state.get("status_counts") or {}).items()
+        },
+    }
+
+
+def _capacities_summary(con: sqlite3.Connection) -> Dict[str, Any]:
+    pointer_only = 0
+    for row in con.execute(
+        """
+        SELECT absolute_path, extension
+        FROM source_record
+        WHERE status='present' AND source_system='capacities'
+        """
+    ):
+        extension = str(row["extension"] or "").casefold()
+        if extension not in {".md", ".markdown", ".csv"}:
+            continue
+        try:
+            raw = read_text_guess(Path(str(row["absolute_path"])), max_bytes=20 * 1024 * 1024)
+        except (OSError, UnicodeError, ValueError):
+            continue
+        if extension in {".md", ".markdown"}:
+            is_pointer = _pointer_only(raw)
+        else:
+            is_pointer = bool(
+                re.search(r"(?i)\b(?:file|image|pdf)\b", raw)
+                and re.search(r"(?i)\b(?:url|path|payload)\b", raw)
+            )
+        pointer_only += int(is_pointer)
+    return {
+        "pointer_only_payloads": pointer_only,
+        "signed_urls_fetched": 0,
+    }
+
+
+def _notion_summary(con: sqlite3.Connection) -> Dict[str, Any]:
+    page_count = _scalar(
+        con,
+        """
+        SELECT COUNT(*) FROM source_record
+        WHERE status='present' AND source_system='notion'
+          AND lower(extension) IN ('.html', '.htm')
+        """,
+    )
+    database_count = _scalar(
+        con,
+        """
+        SELECT COUNT(*) FROM source_record
+        WHERE status='present' AND source_system='notion'
+          AND lower(extension)='.csv'
+        """,
+    )
+    attachment_count = _scalar(
+        con,
+        """
+        SELECT COUNT(*) FROM source_record
+        WHERE status='present' AND source_system='notion'
+          AND lower(extension) IN (
+              '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp',
+              '.pptx', '.xlsx', '.docx', '.doc', '.xls', '.ppt'
+          )
+        """,
+    )
+    unresolved = _scalar(
+        con,
+        """
+        SELECT COUNT(*) FROM review_item
+        WHERE status='pending' AND lower(issue_type) LIKE '%notion%relationship%'
+        """,
+    )
+    return {
+        "page_count": page_count,
+        "database_count": database_count,
+        "attachment_count": attachment_count,
+        "unresolved_relationships": unresolved,
+    }
+
+
+def _review_queue_summary(
+    con: sqlite3.Connection,
+    sensitive_review_count: int,
+) -> Dict[str, Any]:
+    by_issue_type = {
+        _safe_text(row["issue_type"]): int(row["count"])
+        for row in con.execute(
+            """
+            SELECT issue_type, COUNT(*) AS count
+            FROM review_item WHERE status='pending'
+            GROUP BY issue_type ORDER BY issue_type
+            """
+        )
+    }
+    scope_pending = sum(
+        count
+        for issue_type, count in by_issue_type.items()
+        if "scope" in issue_type.casefold()
+    )
+    return {
+        "scope": {
+            "pending_review_items": scope_pending,
+            "meeting_groups_needing_review": _scalar(
+                con, "SELECT COUNT(*) FROM meeting_group WHERE status='needs_review'"
+            ),
+        },
+        "sensitivity": {
+            "source_records_for_review": sensitive_review_count,
+        },
+        "pending_by_issue_type": by_issue_type,
+    }
+
+
+def _entity_summary(con: sqlite3.Connection) -> Dict[str, Any]:
+    return {
+        "entities": _scalar(con, "SELECT COUNT(*) FROM entity"),
+        "aliases": _scalar(con, "SELECT COUNT(*) FROM entity_alias"),
+        "unresolved_mentions": _scalar(
+            con,
+            "SELECT COUNT(*) FROM entity_mention WHERE resolution_status NOT IN ('resolved', 'confirmed')",
+        ),
+        "ambiguous_merge_proposals": _scalar(
+            con,
+            "SELECT COUNT(*) FROM review_item WHERE status='pending' AND issue_type='entity_collision'",
+        ),
+    }
+
+
+def _task_summary(con: sqlite3.Connection) -> Dict[str, Any]:
+    total = _scalar(con, "SELECT COUNT(*) FROM task")
+    current = len(current_tasks(con, date.today()))
+    candidate_statuses = {
+        _safe_text(row["candidate_status"] or "unknown"): int(row["count"])
+        for row in con.execute(
+            "SELECT candidate_status, COUNT(*) AS count FROM task GROUP BY candidate_status ORDER BY candidate_status"
+        )
+    }
+    return {
+        "total_candidates": total,
+        "current_candidates": current,
+        "historical_or_review_candidates": max(total - current, 0),
+        "candidate_statuses": candidate_statuses,
+    }
+
+
+def _index_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
+    fts_rows = _scalar(con, "SELECT COUNT(*) FROM derived_text_fts")
+    relationship_rows = _scalar(con, "SELECT COUNT(*) FROM relationship")
+    state = _read_state_json(config, "index_rebuild.json")
+    recorded = "fts_rows" in state and "relationship_rows" in state
+    fresh = bool(
+        recorded
+        and int(state.get("fts_rows", -1)) == fts_rows
+        and int(state.get("relationship_rows", -1)) == relationship_rows
+    )
+    return {
+        "fts": {
+            "rows": fts_rows,
+            "freshness": "fresh" if fresh else ("not_recorded" if not recorded else "stale"),
+        },
+        "relationships": {
+            "rows": relationship_rows,
+            "freshness": "fresh" if fresh else ("not_recorded" if not recorded else "stale"),
+        },
+    }
+
+
+def _raw_immutability_summary(config: Config) -> Dict[str, Any]:
+    state = _read_state_json(config, "raw_immutability.json")
+    if not state:
+        return {"status": "not_recorded"}
+    output: Dict[str, Any] = {
+        "status": _safe_text(state.get("status", "unknown")),
+        "mismatch_count": int(state.get("mismatch_count", 0) or 0),
+    }
+    for key in (
+        "before_files",
+        "after_files",
+        "before_bytes",
+        "after_bytes",
+        "before_stream_sha256",
+        "after_stream_sha256",
+        "compared_at",
+    ):
+        if key in state:
+            output[key] = state[key]
+    return output
+
+
+def _normalised_queue_status(status: Any, approval_status: Any = "") -> str:
+    value = str(status or "")
+    approval = str(approval_status or "")
+    if value == "pending":
+        return "queued" if approval == "approved" else "pending_approval"
+    if value == "needs_review":
+        return "pending_approval"
+    if value == "error":
+        return "failed"
+    if value == "complete":
+        return "succeeded"
+    return value or "unknown"
+
+
+def _transcription_retry_count(con: sqlite3.Connection) -> Tuple[int, int]:
+    total = 0
+    runs = 0
+    for row in con.execute(
+        "SELECT details_json FROM pipeline_run WHERE command='transcribe'"
+    ):
+        try:
+            details = json.loads(row["details_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        value = details.get("retried", 0)
+        if isinstance(value, int) and value > 0:
+            total += value
+            runs += 1
+    return total, runs
+
+
+def _zoom_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
+    group_counts = {
+        _safe_text(row["status"]): int(row["count"])
+        for row in con.execute(
+            "SELECT status, COUNT(*) AS count FROM meeting_group GROUP BY status ORDER BY status"
+        )
+    }
+    rows = con.execute(
+        """
+        SELECT j.status, j.approval_status, j.started_at, j.output_sha256,
+               j.error, j.media_source_id, j.media_version_id,
+               s.extension, s.classification, s.status AS source_status,
+               s.extraction_status, s.source_version_id,
+               g.transcript_source_id
+        FROM transcription_job j
+        LEFT JOIN source_record s ON s.source_id=j.media_source_id
+        LEFT JOIN meeting_group g ON g.group_id=j.group_id
+        ORDER BY j.job_id
+        """
+    ).fetchall()
+    status_counts: Counter[str] = Counter()
+    terminal_counts: Counter[str] = Counter()
+    failure_reasons: Counter[Tuple[str, str]] = Counter()
+    eligible = []
+    for row in rows:
+        status = _normalised_queue_status(row["status"], row["approval_status"])
+        status_counts[status] += 1
+        if (
+            str(row["extension"] or "").casefold() in FINAL_MEDIA_EXTENSIONS
+            and str(row["classification"] or "").casefold() == "work"
+            and row["source_status"] == "present"
+            and row["extraction_status"] == "ready"
+            and row["media_source_id"]
+            and row["media_version_id"]
+            and row["media_version_id"] == row["source_version_id"]
+            and not row["transcript_source_id"]
+        ):
+            eligible.append((row, status))
+            if status in TERMINAL_QUEUE_STATUSES:
+                terminal_counts[status] += 1
+            if status in {"failed", "blocked", "artifact"}:
+                failure_reasons[(status, _safe_text(row["error"] or "unspecified"))] += 1
+    retries, retry_runs = _transcription_retry_count(con)
+    return {
+        "group_counts": group_counts,
+        "existing_transcripts": group_counts.get("existing_transcript", 0),
+        "generated_transcripts": sum(
+            count for status, count in group_counts.items()
+            if status in {"generated_transcript", "succeeded", "partial"}
+        ),
+        "transcript_only_groups": group_counts.get("transcript_only", 0),
+        "unmatched_transcript_only_groups": group_counts.get("transcript_only", 0),
+        "transcription_status_counts": dict(sorted(status_counts.items())),
+        "terminal_local_status_counts": dict(sorted(terminal_counts.items())),
+        "eligible_final_media_without_transcript": len(eligible),
+        "eligible_media_without_terminal_status": sum(
+            status not in TERMINAL_QUEUE_STATUSES for _row, status in eligible
+        ),
+        "attempted": sum(bool(row["started_at"]) for row, _status in eligible),
+        "retries": retries,
+        "retry_runs": retry_runs,
+        "output_hashes": sum(bool(row["output_sha256"]) for row, _status in eligible),
+        "failure_reasons": [
+            {"status": status, "reason": reason, "count": count}
+            for (status, reason), count in sorted(failure_reasons.items())
+        ],
+    }
 
 
 def _coverage(con: sqlite3.Connection) -> List[Dict[str, Any]]:
@@ -293,19 +758,35 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     duplicates = _duplicates(con)
     version_families = _version_families(con)
     sensitive_review = _sensitive_review(con)
+    physical = _physical_summary(con)
+    source_counts_by_root = _source_root_coverage(con)
+    discovery_excluded = _discovery_excluded(con)
+    normalization = _normalization_summary(con)
+    onenote = _onenote_summary(config, con)
+    capacities = _capacities_summary(con)
+    notion = _notion_summary(con)
+    review_queues = _review_queue_summary(con, len(sensitive_review))
+    entities = _entity_summary(con)
+    tasks = _task_summary(con)
+    indexes = _index_summary(config, con)
+    zoom = _zoom_summary(config, con)
+    raw_immutability = _raw_immutability_summary(config)
 
-    source_count = _scalar(con, "SELECT COUNT(*) FROM source_record WHERE status='present'")
+    source_count = physical["present_files"]
     source_bytes = _scalar(con, "SELECT COALESCE(SUM(size_bytes),0) FROM source_record WHERE status='present'")
-    normalized = _scalar(con, "SELECT COUNT(*) FROM normalized_document WHERE status='normalized'")
-    normalize_errors = _scalar(con, "SELECT COUNT(*) FROM normalized_document WHERE status='error'")
-    normalize_unsupported = _scalar(con, "SELECT COUNT(*) FROM normalized_document WHERE status='unsupported'")
+    normalized = normalization["normalized"]
+    normalize_errors = normalization["failed"]
+    normalize_unsupported = normalization["unsupported"]
     mcp_count = _scalar(con, "SELECT COUNT(*) FROM mcp_item")
     zoom_total = _scalar(con, "SELECT COUNT(*) FROM meeting_group")
-    zoom_existing = _scalar(con, "SELECT COUNT(*) FROM meeting_group WHERE status='existing_transcript'")
-    zoom_generated = _scalar(con, "SELECT COUNT(*) FROM meeting_group WHERE status='generated_transcript'")
-    zoom_missing = _scalar(con, "SELECT COUNT(*) FROM meeting_group WHERE status='needs_transcription'")
-    tx_pending = _scalar(con, "SELECT COUNT(*) FROM transcription_job WHERE status='pending'")
-    tx_errors = _scalar(con, "SELECT COUNT(*) FROM transcription_job WHERE status='error'")
+    zoom_existing = zoom["existing_transcripts"]
+    zoom_generated = zoom["generated_transcripts"]
+    zoom_missing = zoom["eligible_media_without_terminal_status"]
+    tx_pending = sum(
+        zoom["transcription_status_counts"].get(status, 0)
+        for status in ("pending", "pending_approval", "queued", "running")
+    )
+    tx_errors = zoom["transcription_status_counts"].get("failed", 0)
 
     summary = {
         "generated_at": now_iso(),
@@ -328,6 +809,19 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "coverage": coverage,
         "mcp_feed_freshness": mcp_freshness,
         "unsupported": unsupported,
+        "physical": physical,
+        "source_counts_by_root": source_counts_by_root,
+        "discovery_excluded": discovery_excluded,
+        "normalization": normalization,
+        "zoom": zoom,
+        "onenote": onenote,
+        "capacities": capacities,
+        "notion": notion,
+        "review_queues": review_queues,
+        "entities": entities,
+        "tasks": tasks,
+        "indexes": indexes,
+        "raw_immutability": raw_immutability,
     }
     atomic_write_json(reports / "status.json", summary)
 
@@ -375,6 +869,46 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
             "sensitivity", "parse_readiness", "career_value", "operations_value",
         ],
     )
+    write_csv(
+        reports / "source_roots.csv",
+        source_counts_by_root,
+        [
+            "root_key", "root_path", "source_system", "files",
+            "substantive_files", "bytes", "human_size",
+        ],
+    )
+    write_csv(
+        reports / "normalization_status.csv",
+        [
+            {"status": status, "count": count}
+            for status, count in normalization["by_status"].items()
+        ],
+        ["status", "count"],
+    )
+    write_csv(
+        reports / "zoom_transcription_status.csv",
+        [
+            {"status": status, "count": count}
+            for status, count in zoom["transcription_status_counts"].items()
+        ],
+        ["status", "count"],
+    )
+    write_csv(
+        reports / "review_queues.csv",
+        [
+            {"issue_type": issue_type, "count": count}
+            for issue_type, count in review_queues["pending_by_issue_type"].items()
+        ],
+        ["issue_type", "count"],
+    )
+    write_csv(
+        reports / "task_candidates.csv",
+        [
+            {"candidate_status": status, "count": count}
+            for status, count in tasks["candidate_statuses"].items()
+        ],
+        ["candidate_status", "count"],
+    )
 
     needs: List[str] = []
     if source_count == 0:
@@ -390,7 +924,14 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     if not any(row["source_system"] == "wispr_flow" for row in coverage):
         needs.append("No durable Wispr Flow dump has been identified.")
     if zoom_missing:
-        needs.append(f"{zoom_missing} Zoom meeting folders still need local transcription.")
+        needs.append(
+            f"{zoom_missing} eligible Zoom media items still have no terminal local status."
+        )
+    blocked_media = zoom["terminal_local_status_counts"].get("blocked", 0)
+    if blocked_media:
+        needs.append(
+            f"{blocked_media} eligible Zoom media items are blocked; a verified local transcription engine is required for successful transcription."
+        )
     if normalize_unsupported:
         needs.append(f"{normalize_unsupported} files require conversion or an optional parser.")
     if normalize_errors:
@@ -403,6 +944,15 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append(f"{_count_phrase(len(version_families), 'likely version family', 'likely version families')} need review; they were not merged.")
     if sensitive_review:
         needs.append(f"{_count_phrase(len(sensitive_review), 'filename/path', 'filenames/paths')} flagged for personal or restricted-content review.")
+    if not onenote["converter_available"] and onenote["files"]:
+        needs.append("The OneNote converter is unavailable; `.one` files remain raw and blocked.")
+    if raw_immutability.get("status") != "passed":
+        needs.append("Raw immutability has not been recorded as passed for the current acceptance run.")
+    if any(
+        section["freshness"] != "fresh"
+        for section in indexes.values()
+    ):
+        needs.append("FTS and relationship index freshness is not yet confirmed by the acceptance run.")
 
     next_steps = []
     missing_note_sources = [
@@ -442,6 +992,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "## Current corpus",
         "",
         f"- Raw source files: **{source_count:,}** ({human_bytes(source_bytes)})",
+        f"- Substantive source files: **{physical['substantive_files']:,}**; Finder metadata: **{physical['finder_metadata_files']:,}**",
         f"- Normalized documents: **{normalized:,}**",
         f"- Granola/Wispr MCP items: **{mcp_count:,}**",
         f"- Zoom meeting folders: **{zoom_total:,}**",
@@ -451,12 +1002,73 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Exact duplicate groups: **{len(duplicates):,}**",
         f"- Likely version families: **{len(version_families):,}**",
         f"- Sensitive-review candidates: **{len(sensitive_review):,}**",
+        f"- Eligible final media without terminal status: **{zoom['eligible_media_without_terminal_status']:,}**",
+        f"- Raw immutability: **{raw_immutability.get('status', 'not_recorded')}**",
+        "",
+        "## Physical and source-root accounting",
+        "",
+        "| Root | Source system | Files | Substantive | Size |",
+        "|---|---|---:|---:|---:|",
+    ]
+    for row in source_counts_by_root:
+        md.append(
+            f"| {row['root_key']} | {row['source_system']} | {row['files']:,} | "
+            f"{row['substantive_files']:,} | {row['human_size']} |"
+        )
+    md.extend([
+        "",
+        "## Discovery and normalization",
+        "",
+        f"Discovery rows excluded from extraction: **{discovery_excluded['source_files']:,}** "
+        f"({discovery_excluded['normalized_documents']:,} normalized, "
+        f"{discovery_excluded['evidence_records']:,} evidence records).",
+        "",
+        "| Normalization status | Count |",
+        "|---|---:|",
+    ])
+    for status, count in normalization["by_status"].items():
+        md.append(f"| {status} | {count:,} |")
+    md.extend([
+        "",
+        "## Zoom coverage run",
+        "",
+        f"Existing transcript groups: **{zoom['existing_transcripts']:,}**; "
+        f"generated transcript groups: **{zoom['generated_transcripts']:,}**; "
+        f"transcript-only groups without a linked media group: **{zoom['unmatched_transcript_only_groups']:,}**.",
+        f"Eligible final media without a usable transcript: **{zoom['eligible_final_media_without_transcript']:,}**; "
+        f"without a terminal status: **{zoom['eligible_media_without_terminal_status']:,}**.",
+        "",
+        "| Transcription status | Count |",
+        "|---|---:|",
+    ])
+    for status, count in zoom["transcription_status_counts"].items():
+        md.append(f"| {status} | {count:,} |")
+    md.extend([
+        "",
+        f"Local attempts: **{zoom['attempted']:,}**; retries recorded from run history: **{zoom['retries']:,}**; "
+        f"output hashes: **{zoom['output_hashes']:,}**.",
+        "",
+        "## Adapter and derived-view status",
+        "",
+        f"- OneNote: {onenote['files']:,} files; {onenote['parsed_files']:,} parsed; "
+        f"{onenote['pages_extracted']:,} pages extracted of {onenote['reviewed_expected_pages']:,} reviewed pages; "
+        f"converter_available={str(onenote['converter_available']).lower()}.",
+        f"- Capacities pointer-only payloads: {capacities['pointer_only_payloads']:,}; signed URLs fetched: {capacities['signed_urls_fetched']:,}.",
+        f"- Notion: {notion['page_count']:,} pages, {notion['database_count']:,} databases, "
+        f"{notion['attachment_count']:,} local attachments, {notion['unresolved_relationships']:,} unresolved relationships.",
+        f"- Review queues: {review_queues['scope']['pending_review_items']:,} scope items and "
+        f"{review_queues['sensitivity']['source_records_for_review']:,} sensitivity candidates.",
+        f"- Entities: {entities['aliases']:,} aliases and {entities['ambiguous_merge_proposals']:,} ambiguous merge proposals.",
+        f"- Tasks: {tasks['current_candidates']:,} current candidates and "
+        f"{tasks['historical_or_review_candidates']:,} historical/review candidates.",
+        f"- Indexes: FTS {indexes['fts']['rows']:,} rows ({indexes['fts']['freshness']}); "
+        f"relationships {indexes['relationships']['rows']:,} rows ({indexes['relationships']['freshness']}).",
         "",
         "## Coverage by source",
         "",
         "| Source | Files | Size | Earliest hint | Latest hint |",
         "|---|---:|---:|---|---|",
-    ]
+    ])
     for row in coverage:
         md.append(
             f"| {row['source_system']} | {row['files']:,} | {row['human_size']} | "
@@ -559,6 +1171,9 @@ th {{ background: #eee; }}
 <thead><tr><th>Source</th><th>Extension</th><th>Status</th><th>Count</th><th>Reason</th></tr></thead>
 <tbody>{unsupported_rows}</tbody>
 </table>
+
+<h2>Acceptance detail</h2>
+<pre>{html.escape(json.dumps(summary, indent=2, ensure_ascii=False, default=str))}</pre>
 
 <div class="notice">
 The raw archive remains authoritative. This report is a mechanical inventory, not a

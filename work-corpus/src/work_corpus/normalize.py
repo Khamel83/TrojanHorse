@@ -584,11 +584,11 @@ def _result(
 def _pointer_only(text: str) -> bool:
     pointer_type = re.search(
         r"(?im)^\s*(?:type|kind|content[_ -]?type)\s*:\s*"
-        r"(?:file|image|pdf)\s*$",
+        r"['\"]?(?:file|image|pdf)['\"]?\s*$",
         text,
     )
     pointer_field = re.search(
-        r"(?im)^\s*(?:url|download[_ -]?url|signed[_ -]?url)\s*:",
+        r"(?im)^\s*(?:url|media|download[_ -]?url|signed[_ -]?url)\s*:",
         text,
     )
     local_payload = re.search(
