@@ -300,11 +300,11 @@ def test_current_tasks_use_run_date_and_event_date(tmp_path):
         ]
         con.executemany(
             """
-            INSERT INTO task (
-                task_id, action, source_event_date, due_date, candidate_status,
-                task_status, source_evidence_id, created_at, updated_at
-            ) VALUES (?, ?, ?, NULL, 'accepted', 'open', ?,
-                      '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z')
+                INSERT INTO task (
+                    task_id, action, source_event_date, source_date_basis, due_date, candidate_status,
+                    task_status, source_evidence_id, created_at, updated_at
+                ) VALUES (?, ?, ?, 'event_date', NULL, 'accepted', 'open', ?,
+                          '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z')
             """,
             [(name, f"Do {name}", event_date, evidence_id) for name, event_date in rows],
         )
