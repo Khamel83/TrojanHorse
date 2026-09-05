@@ -612,8 +612,12 @@ def _write_queue_report(
     con: sqlite3.Connection,
     queue_rows: Sequence[Dict[str, Any]],
 ) -> None:
-    by_key: Dict[Tuple[str, str], Dict[str, Any]] = {
-        (str(row.get("group_id", "")), str(row.get("media_source_id", ""))): dict(row)
+    by_key: Dict[Tuple[str, str, str], Dict[str, Any]] = {
+        (
+            str(row.get("group_id", "")),
+            str(row.get("media_source_id", "")),
+            str(row.get("media_version_id", "")),
+        ): dict(row)
         for row in queue_rows
     }
     for row in con.execute(
@@ -633,7 +637,11 @@ def _write_queue_report(
         """
     ):
         item = dict(row)
-        key = (str(item.get("group_id", "")), str(item.get("media_source_id", "")))
+        key = (
+            str(item.get("group_id", "")),
+            str(item.get("media_source_id", "")),
+            str(item.get("media_version_id", "")),
+        )
         by_key[key] = item
 
     path = config.state_dir / "transcription_queue.csv"

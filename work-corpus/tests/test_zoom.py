@@ -404,3 +404,35 @@ def test_scan_queue_report_contains_all_final_media_and_artifacts(tmp_path: Path
 
     assert len([row for row in rows if row["media_path"].endswith((".mp4", ".m4a"))]) == 2
     assert {row["status"] for row in rows if row["media_path"].endswith((".tmp", ".zoom"))} == {"artifact"}
+
+
+def test_queue_report_preserves_each_media_source_version(tmp_path: Path):
+    config, con = _config_and_db(tmp_path)
+    try:
+        relative_path = "data/Zoom/2026-09-07 Versioned/recording.mp4"
+        _add_source(config, con, relative_path, b"first", kind="media")
+        scan_zoom(config, con)
+        first = con.execute(
+            "SELECT media_version_id FROM transcription_job"
+        ).fetchone()["media_version_id"]
+
+        _add_source(config, con, relative_path, b"second", kind="media")
+        scan_zoom(config, con)
+        rows = list(
+            csv.DictReader(
+                (config.state_dir / "transcription_queue.csv").open(
+                    encoding="utf-8-sig", newline=""
+                )
+            )
+        )
+    finally:
+        con.close()
+
+    version_ids = {
+        row["media_version_id"]
+        for row in rows
+        if row["relative_path"] == relative_path
+    }
+    assert first
+    assert len(version_ids) == 2
+    assert len([row for row in rows if row["relative_path"] == relative_path]) == 2
