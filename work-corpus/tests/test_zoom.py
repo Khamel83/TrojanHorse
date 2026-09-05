@@ -436,3 +436,55 @@ def test_queue_report_preserves_each_media_source_version(tmp_path: Path):
     assert first
     assert len(version_ids) == 2
     assert len([row for row in rows if row["relative_path"] == relative_path]) == 2
+
+
+def test_missing_existing_transcript_requeues_the_same_media_version(
+    tmp_path: Path,
+):
+    config, con = _config_and_db(tmp_path)
+    transcript_path = config.root / (
+        "data/Zoom/2026-09-08 Transcript Recovery/meeting_transcript.vtt"
+    )
+    try:
+        _add_source(
+            config,
+            con,
+            "data/Zoom/2026-09-08 Transcript Recovery/recording.mp4",
+            b"media",
+            kind="media",
+        )
+        scan_zoom(config, con)
+        original = con.execute(
+            "SELECT job_id, media_version_id, status FROM transcription_job"
+        ).fetchone()
+
+        _add_source(
+            config,
+            con,
+            "data/Zoom/2026-09-08 Transcript Recovery/meeting_transcript.vtt",
+            _usable_vtt(),
+            kind="transcript",
+        )
+        scan_zoom(config, con)
+        covered = con.execute(
+            "SELECT status, approval_status FROM transcription_job WHERE job_id=?",
+            (original["job_id"],),
+        ).fetchone()
+        transcript_path.unlink()
+
+        scan_zoom(config, con)
+        requeued = con.execute(
+            "SELECT job_id, media_version_id, status, approval_status "
+            "FROM transcription_job WHERE job_id=?",
+            (original["job_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert original["status"] == "pending_approval"
+    assert covered["status"] == "not_needed"
+    assert covered["approval_status"] == "not_needed"
+    assert requeued["job_id"] == original["job_id"]
+    assert requeued["media_version_id"] == original["media_version_id"]
+    assert requeued["status"] == "pending_approval"
+    assert requeued["approval_status"] == "pending_approval"

@@ -88,10 +88,11 @@ def _engine_available(config: Config, requested: str) -> Tuple[Optional[str], st
         return "faster_whisper", ""
 
     if requested == "openai_whisper":
-        command = _resolved_executable("whisper")
-        if not command:
-            return None, "OpenAI Whisper CLI command 'whisper' not found"
-        return "openai_whisper", ""
+        return None, (
+            "OpenAI Whisper CLI is not allowed for local-only execution because "
+            "its model path may download models; configure a verified local "
+            "engine instead"
+        )
 
     if requested != "auto":
         return None, f"unknown transcription engine: {requested}"
@@ -108,12 +109,10 @@ def _engine_available(config: Config, requested: str) -> Tuple[Optional[str], st
         return "whisper_cpp", ""
     if importlib.util.find_spec("faster_whisper") is not None:
         return "faster_whisper", ""
-    command = _resolved_executable("whisper")
-    if command:
-        return "openai_whisper", ""
     return None, (
         "no configured local transcription engine found. "
-        "Configure a local command or local Whisper model; cloud engines are not supported."
+        "OpenAI Whisper CLI is not allowed because its model path may download "
+        "models; configure a local command or verified local Whisper model."
     )
 
 
@@ -344,7 +343,10 @@ def _run_local_engine(
     if engine == "faster_whisper":
         return _transcribe_faster_whisper(config, media_path, output_stem)
     if engine == "openai_whisper":
-        return _transcribe_openai_whisper(config, media_path, output_stem)
+        raise RuntimeError(
+            "OpenAI Whisper CLI is not allowed for local-only execution because "
+            "its model path may download models"
+        )
     raise RuntimeError(f"unsupported local engine: {engine}")
 
 
@@ -580,6 +582,46 @@ def _path_is_within(path: Path, parent: Path) -> bool:
     return True
 
 
+def _job_version_matches_current_source(
+    job: sqlite3.Row,
+    media_path: Path,
+) -> Tuple[bool, str]:
+    """Prove that the bytes at the current source path are the job's version."""
+    job_version_id = str(job["media_version_id"] or "")
+    if not job_version_id or not job["version_exists"]:
+        return False, "source version is missing from provenance state"
+    if str(job["version_source_id"] or "") != str(job["media_source_id"] or ""):
+        return False, "transcription job source version is bound to another source"
+    if str(job["current_source_version_id"] or "") != job_version_id:
+        return (
+            False,
+            "transcription job targets a historical source version; current "
+            "source bytes are not a matching version",
+        )
+    expected_hash = str(job["version_content_sha256"] or "")
+    if not expected_hash or str(job["current_content_sha256"] or "") != expected_hash:
+        return False, "current source provenance does not match the job version"
+    try:
+        actual_hash = sha256_file(media_path)
+    except (OSError, ValueError) as exc:
+        return False, f"current source bytes could not be verified: {exc}"
+    if actual_hash != expected_hash:
+        return False, "current source bytes do not match the job version"
+    return True, ""
+
+
+def _hold_scope_review_job(con: sqlite3.Connection, job_id: str) -> None:
+    con.execute(
+        """
+        UPDATE transcription_job
+        SET status='pending_approval', approval_status='pending_approval',
+            error=?, completed_at=NULL
+        WHERE job_id=?
+        """,
+        ("Zoom group requires scope review", job_id),
+    )
+
+
 def _result() -> Dict[str, int]:
     return {
         "attempted": 0,
@@ -631,6 +673,14 @@ def transcribe_jobs(
     )
     con.execute("UPDATE transcription_job SET status='failed' WHERE status='error'")
     con.execute("UPDATE transcription_job SET status='succeeded' WHERE status='complete'")
+    con.execute(
+        """
+        UPDATE transcription_job
+        SET status='pending_approval', approval_status='pending_approval',
+            error='Zoom group requires scope review', completed_at=NULL
+        WHERE status='needs_review'
+        """
+    )
     con.commit()
 
     result = _result()
@@ -649,8 +699,13 @@ def transcribe_jobs(
                g.duration_seconds, g.status AS group_status,
                s.absolute_path, s.relative_path, s.date_hint, s.source_id,
                s.status AS source_status, s.extraction_status,
-               s.content_sha256, s.source_version_id, s.classification,
-               s.kind, s.size_bytes, v.source_version_id AS version_exists
+               s.content_sha256, s.source_version_id,
+               s.source_version_id AS current_source_version_id,
+               s.content_sha256 AS current_content_sha256,
+               s.classification, s.kind, s.size_bytes,
+               v.source_version_id AS version_exists,
+               v.source_id AS version_source_id,
+               v.content_sha256 AS version_content_sha256
         FROM transcription_job j
         JOIN meeting_group g ON g.group_id=j.group_id
         JOIN source_record s ON s.source_id=j.media_source_id
@@ -672,10 +727,7 @@ def transcribe_jobs(
     if engine is None:
         for job in jobs:
             if job["group_status"] == "needs_review":
-                con.execute(
-                    "UPDATE transcription_job SET status='needs_review', error=?, completed_at=? WHERE job_id=?",
-                    ("Zoom group requires scope review", now_iso(), job["job_id"]),
-                )
+                _hold_scope_review_job(con, job["job_id"])
                 result["skipped"] += 1
                 con.commit()
                 continue
@@ -700,10 +752,7 @@ def transcribe_jobs(
 
     for job in jobs:
         if job["group_status"] == "needs_review":
-            con.execute(
-                "UPDATE transcription_job SET status='needs_review', error=?, completed_at=? WHERE job_id=?",
-                ("Zoom group requires scope review", now_iso(), job["job_id"]),
-            )
+            _hold_scope_review_job(con, job["job_id"])
             con.commit()
             result["skipped"] += 1
             continue
@@ -729,6 +778,18 @@ def transcribe_jobs(
             _checkpoint(con, job["job_id"], job["media_version_id"], reason_text)
             result["blocked"] += 1
             continue
+        version_matches, version_reason = _job_version_matches_current_source(
+            job, media_path
+        )
+        if not version_matches:
+            con.execute(
+                "UPDATE transcription_job SET status='blocked', error=?, completed_at=? WHERE job_id=?",
+                (version_reason, now_iso(), job["job_id"]),
+            )
+            con.commit()
+            _checkpoint(con, job["job_id"], job["media_version_id"], version_reason)
+            result["blocked"] += 1
+            continue
         if not zoom_source_is_eligible(config, con, job):
             reason_text = "Zoom source version is no longer current and eligible"
             con.execute(
@@ -737,16 +798,6 @@ def transcribe_jobs(
             )
             con.commit()
             _checkpoint(con, job["job_id"], job["media_version_id"], reason_text)
-            result["blocked"] += 1
-            continue
-        if not job["media_version_id"] or not job["version_exists"]:
-            reason_text = "source version is missing from provenance state"
-            con.execute(
-                "UPDATE transcription_job SET status='blocked', error=?, completed_at=? WHERE job_id=?",
-                (reason_text, now_iso(), job["job_id"]),
-            )
-            con.commit()
-            _checkpoint(con, job["job_id"], None, reason_text)
             result["blocked"] += 1
             continue
 

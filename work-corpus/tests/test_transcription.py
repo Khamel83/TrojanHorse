@@ -54,6 +54,8 @@ parser.add_argument('--output-vtt', required=True)
 parser.add_argument('--mode', default='good')
 parser.add_argument('--log', default='')
 parser.add_argument('--marker', default='')
+parser.add_argument('--input', default='')
+parser.add_argument('--input-log', default='')
 args = parser.parse_args()
 
 if args.log:
@@ -65,6 +67,8 @@ if args.mode == 'fail':
 if args.mode == 'flaky' and args.marker and not Path(args.marker).exists():
     Path(args.marker).write_text('first attempt', encoding='utf-8')
     raise SystemExit(17)
+if args.input_log:
+    Path(args.input_log).write_bytes(Path(args.input).read_bytes())
 
 end_time = '00:00:01.000' if args.mode == 'partial' else '00:00:10.000'
 speaker = '' if args.mode == 'partial' else 'Speaker: '
@@ -103,6 +107,19 @@ def _command(
     if marker:
         command.extend(["--marker", str(marker)])
     return command
+
+
+def _recording_command(script: Path, input_log: Path) -> list[str]:
+    return [
+        sys.executable,
+        str(script),
+        "--output-vtt",
+        "{output_vtt}",
+        "--input",
+        "{input}",
+        "--input-log",
+        str(input_log),
+    ]
 
 
 def _config_and_db(tmp_path: Path, command: list[str]):
@@ -496,3 +513,126 @@ def test_missing_local_engine_marks_eligible_items_blocked(tmp_path: Path):
     assert result["blocked"] == 1
     assert job["status"] == "blocked"
     assert "not found" in job["error"].casefold()
+
+
+def test_historical_job_cannot_send_current_source_bytes_to_engine(tmp_path: Path):
+    script = _engine_script(tmp_path)
+    input_log = tmp_path / "engine-input.bin"
+    config, con = _config_and_db(
+        tmp_path, _recording_command(script, input_log)
+    )
+    relative_path = "data/Zoom/2026-09-16 Historical/recording.mp4"
+    try:
+        _add_source(config, con, relative_path, b"historical media")
+        scan_zoom(config, con)
+        transcription.approve_transcription_run(con)
+        historical_job = con.execute(
+            "SELECT job_id, media_version_id FROM transcription_job"
+        ).fetchone()
+
+        _add_source(config, con, relative_path, b"current media")
+        result = transcription.transcribe_jobs(
+            config, con, requested_engine="custom"
+        )
+        job = con.execute(
+            "SELECT status, error FROM transcription_job WHERE job_id=?",
+            (historical_job["job_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert result["attempted"] == 0
+    assert result["blocked"] == 1
+    assert job["status"] == "blocked"
+    assert "version" in job["error"].casefold()
+    assert not input_log.exists()
+
+
+@pytest.mark.parametrize("requested_engine", ["openai_whisper", "auto"])
+def test_openai_whisper_cli_is_not_an_allowed_local_execution_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, requested_engine: str
+):
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.json").write_text(
+        json.dumps({"zoom": {"engine": "openai_whisper"}}),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+
+    monkeypatch.setattr(
+        transcription,
+        "_resolved_executable",
+        lambda value: "/synthetic/whisper" if value == "whisper" else None,
+    )
+    monkeypatch.setattr(transcription.importlib.util, "find_spec", lambda _name: None)
+
+    engine, reason = transcription._engine_available(config, requested_engine)
+
+    assert engine is None
+    assert "openai whisper" in reason.casefold()
+    assert "download" in reason.casefold()
+
+
+def test_scope_review_uses_documented_queue_states_and_resumes_after_correction(
+    tmp_path: Path,
+):
+    script = _engine_script(tmp_path)
+    config, con = _config_and_db(tmp_path, _command(script))
+    try:
+        source_id, _version_id = _add_source(
+            config,
+            con,
+            "data/Zoom/2026-09-17 Scope Review/recording.mp4",
+            b"media",
+        )
+        scan_zoom(config, con)
+        con.execute(
+            "UPDATE source_record SET classification='Personal', scope='Personal' "
+            "WHERE source_id=?",
+            (source_id,),
+        )
+        con.commit()
+
+        scan_zoom(config, con)
+        held = con.execute(
+            "SELECT status, approval_status FROM transcription_job"
+        ).fetchone()
+        group = con.execute("SELECT status FROM meeting_group").fetchone()
+        approved_while_review = transcription.approve_transcription_run(con)
+        held_run = transcription.transcribe_jobs(
+            config, con, requested_engine="custom"
+        )
+        held_after_run = con.execute(
+            "SELECT status, approval_status FROM transcription_job"
+        ).fetchone()
+
+        con.execute(
+            "UPDATE source_record SET classification='Work', scope='Work' "
+            "WHERE source_id=?",
+            (source_id,),
+        )
+        con.commit()
+        scan_zoom(config, con)
+        resumed = con.execute(
+            "SELECT status, approval_status FROM transcription_job"
+        ).fetchone()
+        approved = transcription.approve_transcription_run(con)
+        queued = con.execute(
+            "SELECT status, approval_status FROM transcription_job"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert group["status"] == "needs_review"
+    assert held["status"] == "pending_approval"
+    assert held["approval_status"] == "pending_approval"
+    assert approved_while_review == 1
+    assert held_run["skipped"] == 1
+    assert held_after_run["status"] == "pending_approval"
+    assert held_after_run["approval_status"] == "pending_approval"
+    assert resumed["status"] == "pending_approval"
+    assert resumed["approval_status"] == "pending_approval"
+    assert approved == 1
+    assert queued["status"] == "queued"
+    assert queued["approval_status"] == "approved"

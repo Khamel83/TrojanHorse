@@ -448,6 +448,8 @@ def _output_stem(config: Config, group_id: str, row: sqlite3.Row) -> Path:
 def _legacy_status(status: str, approval_status: str) -> str:
     if status == "pending":
         return "queued" if approval_status == "approved" else "pending_approval"
+    if status == "needs_review":
+        return "pending_approval"
     if status == "error":
         return "failed"
     if status == "complete":
@@ -472,20 +474,47 @@ def _upsert_job(
         (job_id,),
     ).fetchone()
     if existing:
+        raw_existing_status = str(existing["status"])
         existing_status = _legacy_status(
             str(existing["status"]), str(existing["approval_status"] or "")
         )
         if existing_status != existing["status"]:
-            con.execute(
-                "UPDATE transcription_job SET status=? WHERE job_id=?",
-                (existing_status, job_id),
-            )
+            if raw_existing_status == "needs_review":
+                con.execute(
+                    """
+                    UPDATE transcription_job
+                    SET status='pending_approval', approval_status='pending_approval',
+                        error='Zoom group requires scope review', completed_at=NULL
+                    WHERE job_id=?
+                    """,
+                    (job_id,),
+                )
+            else:
+                con.execute(
+                    "UPDATE transcription_job SET status=? WHERE job_id=?",
+                    (existing_status, job_id),
+                )
         effective_status = existing_status
-        effective_approval = str(existing["approval_status"] or "") or (
+        effective_approval = (
+            "pending_approval"
+            if raw_existing_status == "needs_review"
+            else str(existing["approval_status"] or "")
+        ) or (
             "approved"
             if effective_status in {"queued", "running"}
             else "pending_approval"
         )
+        if status == "pending_approval" and effective_status == "not_needed":
+            effective_status = "pending_approval"
+            effective_approval = approval_status or "pending_approval"
+            con.execute(
+                """
+                UPDATE transcription_job
+                SET status=?, approval_status=?, error=NULL, completed_at=NULL
+                WHERE job_id=?
+                """,
+                (effective_status, effective_approval, job_id),
+            )
         if (
             status in {"artifact", "blocked", "not_needed"}
             and effective_status not in TERMINAL_QUEUE_STATUSES
@@ -801,12 +830,13 @@ def scan_zoom(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             con.execute(
                 """
                 UPDATE transcription_job
-                SET status='needs_review', error=?, completed_at=?
-                WHERE group_id=? AND status IN ('pending', 'pending_approval', 'queued', 'running', 'error')
+                SET status='pending_approval', approval_status='pending_approval',
+                    error=?, completed_at=NULL
+                WHERE group_id=?
+                  AND status IN ('pending', 'pending_approval', 'queued', 'running', 'error', 'needs_review')
                 """,
                 (
                     "Zoom group contains a personal or mixed-scope source",
-                    now_iso(),
                     group_id,
                 ),
             )
