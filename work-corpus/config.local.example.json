@@ -17,11 +17,19 @@
   "zoom": {
     "engine": "custom",
     "language": "en",
+    "model": "parakeet-pro:nvidia_parakeet-v3_494MB",
     "custom_command": [
-      "/absolute/path/to/local-transcriber",
-      "--input",
+      "/usr/local/bin/mw",
+      "transcribe",
       "{input}",
-      "--output",
+      "--model",
+      "parakeet-pro:nvidia_parakeet-v3_494MB",
+      "--language",
+      "{language}",
+      "--speakers",
+      "--format",
+      "vtt",
+      "-o",
       "{output_vtt}"
     ]
   },

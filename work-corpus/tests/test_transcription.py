@@ -548,6 +548,41 @@ def test_missing_local_engine_marks_eligible_items_blocked(tmp_path: Path):
     assert "not found" in job["error"].casefold()
 
 
+def test_retry_blocked_engine_preflight_jobs_can_resume(tmp_path: Path):
+    script = _engine_script(tmp_path)
+    missing = tmp_path / "does-not-exist"
+    config, con = _config_and_db(
+        tmp_path,
+        [str(missing), "{input}"],
+    )
+    try:
+        _scan_media(config, con, count=1)
+        first = transcription.transcribe_jobs(
+            config, con, requested_engine="custom", approve_run=True
+        )
+        assert first["blocked"] == 1
+
+        config.payload["zoom"]["custom_command"] = _command(script)
+        resumed = transcription.transcribe_jobs(
+            config,
+            con,
+            requested_engine="custom",
+            retry_blocked=True,
+        )
+        job = con.execute(
+            "SELECT status, error, output_path FROM transcription_job"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert resumed["requeued"] == 1
+    assert resumed["attempted"] == 1
+    assert resumed["succeeded"] == 1
+    assert job["status"] == "succeeded"
+    assert job["error"] is None
+    assert job["output_path"]
+
+
 def test_historical_job_cannot_send_current_source_bytes_to_engine(tmp_path: Path):
     script = _engine_script(tmp_path)
     input_log = tmp_path / "engine-input.bin"

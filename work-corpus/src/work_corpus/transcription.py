@@ -622,6 +622,28 @@ def _hold_scope_review_job(con: sqlite3.Connection, job_id: str) -> None:
     )
 
 
+def requeue_engine_preflight_blocks(con: sqlite3.Connection) -> int:
+    """Requeue jobs blocked only because no local engine was discovered."""
+    cursor = con.execute(
+        """
+        UPDATE transcription_job
+        SET status='queued', approval_status='approved', error=NULL,
+            started_at=NULL, completed_at=NULL
+        WHERE status='blocked'
+          AND approval_status='approved'
+          AND (
+              error LIKE 'no configured local transcription engine found.%'
+              OR error LIKE 'custom transcription command not found:%'
+              OR error = 'whisper.cpp command not found'
+              OR error = 'whisper.cpp model path is not configured or does not exist'
+              OR error = 'Python package faster-whisper is not installed'
+          )
+        """
+    )
+    con.commit()
+    return max(cursor.rowcount, 0)
+
+
 def _result() -> Dict[str, int]:
     return {
         "attempted": 0,
@@ -632,6 +654,7 @@ def _result() -> Dict[str, int]:
         "artifact": 0,
         "skipped": 0,
         "retried": 0,
+        "requeued": 0,
         "pending_approval": 0,
         # Compatibility aliases for callers of the bootstrap command.
         "complete": 0,
@@ -646,6 +669,7 @@ def transcribe_jobs(
     max_files: Optional[int] = None,
     all_jobs: bool = False,
     retry_errors: bool = False,
+    retry_blocked: bool = False,
     approve_run: bool = False,
     approve: Optional[bool] = None,
 ) -> Dict[str, int]:
@@ -654,6 +678,7 @@ def transcribe_jobs(
         approve_run = approve
     if approve_run:
         approve_transcription_run(con)
+    requeued = requeue_engine_preflight_blocks(con) if retry_blocked else 0
 
     # A process restart can safely return an abandoned item to the approved
     # queue. Terminal results are never reset or deleted.
@@ -684,6 +709,7 @@ def transcribe_jobs(
     con.commit()
 
     result = _result()
+    result["requeued"] = requeued
     result["artifact"] = con.execute(
         "SELECT COUNT(*) FROM transcription_job WHERE status='artifact'"
     ).fetchone()[0]
