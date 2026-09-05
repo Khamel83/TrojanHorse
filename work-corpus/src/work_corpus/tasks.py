@@ -26,6 +26,14 @@ EXPLICIT_PATTERNS = (
     re.compile(r"^(?:follow\s*[- ]?up)(?:\s+on|\s+with|\s*[:\-])?\s*(?P<action>.+)$", re.IGNORECASE),
     re.compile(r"^(?:i|we|you)\s+(?:will|'ll|need\s+to|promise\s+to|must)\s+(?P<action>.+)$", re.IGNORECASE),
 )
+NON_TASK_CLAIM_PATTERNS = (
+    re.compile(
+        r"^(?:be|become)\s+(?:promoted|appointed|hired|fired|recognized|"
+        r"awarded|selected|named|responsible|successful|ready|available|"
+        r"a|an|the)\b",
+        re.IGNORECASE,
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -81,7 +89,11 @@ def _explicit_action(sentence: str) -> Optional[str]:
         match = pattern.match(candidate)
         if match:
             action = re.sub(r"\s+", " ", match.group("action").strip(" .;:"))
-            if action and not re.match(r"^(?:maybe|possibly|we should)\b", action, re.IGNORECASE):
+            if (
+                action
+                and not re.match(r"^(?:maybe|possibly|we should)\b", action, re.IGNORECASE)
+                and not any(pattern.match(action) for pattern in NON_TASK_CLAIM_PATTERNS)
+            ):
                 return action
     return None
 

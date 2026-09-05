@@ -1247,7 +1247,7 @@ def current_tasks(
         WHERE TRIM(action) <> ''
           AND COALESCE(source_event_date, event_date) IS NOT NULL
           AND date(COALESCE(source_event_date, event_date)) >= date(?)
-          AND LOWER(COALESCE(source_date_basis, 'event_date'))
+          AND LOWER(TRIM(source_date_basis))
               IN ('event', 'event_date', 'meeting', 'meeting_date')
           AND LOWER(COALESCE(candidate_status, 'candidate'))
               IN ('accepted', 'approved', 'confirmed', 'current')

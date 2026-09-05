@@ -125,6 +125,48 @@ def test_regex_normalization_and_source_specific_alias(tmp_path):
     assert identifier_match.rule == "source_identifier"
 
 
+def test_resolved_mention_records_one_source_relationship_idempotently(tmp_path):
+    con, source_id, evidence_id = _evidence(tmp_path)
+    try:
+        entity_id = create_entity(con, "project", "project-alpha", "Alpha")
+        add_alias(con, entity_id, "Alpha", evidence_id=evidence_id, review_status="valid")
+        assert con.execute("SELECT COUNT(*) FROM relationship").fetchone()[0] == 0
+
+        first = resolve_mention(
+            con,
+            "Alpha",
+            evidence_id=evidence_id,
+            source_id=source_id,
+            location="line:1",
+        )
+        second = resolve_mention(
+            con,
+            "Alpha",
+            evidence_id=evidence_id,
+            source_id=source_id,
+            location="line:1",
+        )
+        relationships = con.execute(
+            """
+            SELECT relationship_id, relationship_type, from_record_id,
+                   to_record_id, evidence_id
+            FROM relationship
+            WHERE from_record_type='entity' AND from_record_id=?
+              AND to_record_type='evidence' AND to_record_id=?
+            """,
+            (entity_id, evidence_id),
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert first.entity_id == entity_id
+    assert second.entity_id == entity_id
+    assert first.mention_id == second.mention_id
+    assert len(relationships) == 1
+    assert relationships[0]["relationship_type"] == "entity_evidence"
+    assert relationships[0]["evidence_id"] == evidence_id
+
+
 def test_frequency_can_select_only_a_valid_name_not_a_frequent_typo(tmp_path):
     con, _source_id, evidence_id = _evidence(tmp_path)
     try:

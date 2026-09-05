@@ -346,6 +346,48 @@ def _record_mention(
     return mention_id
 
 
+def _record_entity_evidence_relationship(
+    con: sqlite3.Connection,
+    *,
+    entity_id: str,
+    evidence_id: Optional[str],
+    confidence: float,
+) -> None:
+    if not evidence_id:
+        return
+    relationship_id = stable_id(
+        "relationship",
+        "entity_evidence",
+        entity_id,
+        evidence_id,
+    )
+    con.execute(
+        """
+        INSERT INTO relationship (
+            relationship_id, relationship_type, from_record_type, from_record_id,
+            to_record_type, to_record_id, evidence_id, status, confidence, created_at
+        ) VALUES (?, 'entity_evidence', 'entity', ?, 'evidence', ?, ?, 'confirmed', ?, ?)
+        ON CONFLICT(relationship_id) DO UPDATE SET
+            relationship_type=excluded.relationship_type,
+            from_record_type=excluded.from_record_type,
+            from_record_id=excluded.from_record_id,
+            to_record_type=excluded.to_record_type,
+            to_record_id=excluded.to_record_id,
+            evidence_id=excluded.evidence_id,
+            status=excluded.status,
+            confidence=excluded.confidence
+        """,
+        (
+            relationship_id,
+            entity_id,
+            evidence_id,
+            evidence_id,
+            confidence,
+            now_iso(),
+        ),
+    )
+
+
 def resolve_mention(
     con: sqlite3.Connection,
     mention: str,
@@ -397,6 +439,12 @@ def resolve_mention(
             entity_id=entity_id,
             status="resolved",
             rule=match_rule,
+        )
+        _record_entity_evidence_relationship(
+            con,
+            entity_id=entity_id,
+            evidence_id=evidence_id,
+            confidence=confidence,
         )
         return EntityMatch(
             entity_id=entity_id,

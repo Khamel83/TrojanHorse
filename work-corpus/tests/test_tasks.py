@@ -104,6 +104,49 @@ def test_future_event_is_current_and_has_deterministic_task_id(tmp_path):
     assert [row["task_id"] for row in current] == [first[0].task_id]
 
 
+def test_current_tasks_fail_closed_without_an_explicit_date_basis(tmp_path):
+    con, _source_id, evidence_id = _evidence(tmp_path)
+    try:
+        con.executemany(
+            """
+            INSERT INTO task (
+                task_id, action, event_date, candidate_status, task_status,
+                source_evidence_id, source_date_basis
+            ) VALUES (?, ?, ?, 'accepted', 'open', ?, ?)
+            """,
+            [
+                ("legacy-null-basis", "Do not surface null basis", "2026-09-03", evidence_id, None),
+                ("legacy-empty-basis", "Do not surface empty basis", "2026-09-03", evidence_id, ""),
+            ],
+        )
+        current = current_tasks(con, RUN_DATE)
+    finally:
+        con.close()
+
+    assert current == []
+
+
+def test_future_state_claim_is_ignored_but_explicit_promise_is_preserved(tmp_path):
+    con, source_id, evidence_id = _evidence(tmp_path)
+    try:
+        proposals = extract_task_proposals(
+            con,
+            "I will be promoted next year. I will prepare the launch brief.",
+            source_id=source_id,
+            source_evidence_id=evidence_id,
+            source_event_date="2026-09-20",
+            source_date_basis="event_date",
+            run_date=RUN_DATE,
+            scope="Work",
+        )
+        tasks = con.execute("SELECT action FROM task").fetchall()
+    finally:
+        con.close()
+
+    assert [proposal.action for proposal in proposals] == ["prepare the launch brief"]
+    assert [row["action"] for row in tasks] == ["prepare the launch brief"]
+
+
 def test_boundary_old_export_and_missing_dates_are_not_current_tasks(tmp_path):
     cases = [
         ("2026-08-21", "meeting_date", "accepted", True),
