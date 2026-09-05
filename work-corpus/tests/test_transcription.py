@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from work_corpus import cli
 from work_corpus import transcription
 from work_corpus.config import ConfigurationError, load_config
 from work_corpus.db import connect, record_source_version, upsert_source_record
@@ -199,6 +200,38 @@ def _scan_media(config, con, count: int = 2):
             f"media-{index}".encode(),
         )
     scan_zoom(config, con)
+
+
+def test_transcribe_cli_forwards_explicit_approval_without_local_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    calls = []
+
+    monkeypatch.setattr(cli, "scan_zoom", lambda *_args: {})
+    monkeypatch.setattr(cli, "build_report", lambda *_args: {})
+
+    def fake_transcribe_jobs(_config, _con, **kwargs):
+        calls.append(kwargs)
+        return {
+            "attempted": 0,
+            "pending_approval": 0 if kwargs.get("approve_run", False) else 1,
+        }
+
+    monkeypatch.setattr(cli, "transcribe_jobs", fake_transcribe_jobs)
+
+    default_root = tmp_path / "default"
+    approved_root = tmp_path / "approved"
+    assert cli.main(["--root", str(default_root), "transcribe"]) == 0
+    assert (
+        cli.main(
+            ["--root", str(approved_root), "transcribe", "--approve-run"]
+        )
+        == 0
+    )
+
+    assert [call["approve_run"] for call in calls] == [False, True]
+    assert not (default_root / "data").exists()
+    assert not (approved_root / "data").exists()
 
 
 def test_run_approval_and_checkpoint_resume_are_sequential(tmp_path: Path):

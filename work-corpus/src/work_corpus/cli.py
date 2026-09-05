@@ -108,6 +108,11 @@ def _parser() -> argparse.ArgumentParser:
     tx.add_argument("--max-files", type=int, default=None)
     tx.add_argument("--all", action="store_true", help="Process all pending jobs.")
     tx.add_argument("--retry-errors", action="store_true")
+    tx.add_argument(
+        "--approve-run",
+        action="store_true",
+        help="Approve the complete pending local transcription run.",
+    )
 
     sub.add_parser("report", help="Rebuild status reports from SQLite state.")
     query = sub.add_parser("query", help="Query local work evidence.")
@@ -159,6 +164,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 max_files=args.max_files,
                 all_jobs=args.all,
                 retry_errors=args.retry_errors,
+                approve_run=args.approve_run,
             )
             scan_zoom(config, con)
             details["report"] = build_report(config, con)
