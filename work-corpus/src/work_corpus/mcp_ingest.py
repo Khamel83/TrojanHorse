@@ -21,6 +21,7 @@ from .util import (
     provenance_header,
     read_text_guess,
     scrub_derived_text,
+    scrub_fts_text,
     sha256_text,
     stable_id,
     write_csv,
@@ -188,7 +189,9 @@ def _item_id(
 ) -> str:
     if external_record_id:
         return stable_id("mcp-item", provider, external_record_id)
-    return stable_id("mcp-item", provider, source_version_id, index, response_sha256)
+    # The ordinal plus response hash is stable across overlapping snapshots.
+    # The source version remains provenance on the first evidence record.
+    return stable_id("mcp-item", provider, index, response_sha256)
 
 
 def _record_review(
@@ -257,6 +260,23 @@ def _advance_checkpoint(
     )
 
 
+def _fail_checkpoint(
+    con: sqlite3.Connection,
+    *,
+    checkpoint_id: str,
+    reason: str,
+) -> None:
+    """Retain the last cursor while marking a partial snapshot as failed."""
+    con.execute(
+        """
+        UPDATE ingestion_checkpoint
+        SET error=?, updated_at=?
+        WHERE checkpoint_id=?
+        """,
+        (scrub_derived_text(reason), now_iso(), checkpoint_id),
+    )
+
+
 def _normalized_output(
     config: Config,
     *,
@@ -290,6 +310,58 @@ def _persist_record(
         record.index,
         response_sha256,
     )
+    existing = con.execute(
+        """
+        SELECT original_response_sha256, normalized_evidence_id
+        FROM mcp_item
+        WHERE item_id=?
+        """,
+        (item_id,),
+    ).fetchone()
+    safe_fields = {
+        key: (
+            scrub_fts_text(str(value))
+            if value not in (None, "")
+            else value
+        )
+        for key, value in fields.items()
+    }
+    if (
+        existing
+        and existing["original_response_sha256"] == response_sha256
+        and existing["normalized_evidence_id"]
+        and con.execute(
+            "SELECT 1 FROM evidence_record WHERE evidence_id=?",
+            (existing["normalized_evidence_id"],),
+        ).fetchone()
+    ):
+        # Reuse the canonical evidence unit for an identical item found in an
+        # overlapping snapshot. The raw snapshot remains in source/version
+        # history, while mcp_item points to one derived evidence record.
+        con.execute(
+            """
+            UPDATE mcp_item
+            SET source_id=?, provider=?, external_record_id=?, capture_date=?,
+                event_date=?, retrieval_date=?, original_response_sha256=?,
+                normalized_evidence_id=?, checkpoint_id=?, updated_at=?
+            WHERE item_id=?
+            """,
+            (
+                row["source_id"],
+                provider,
+                safe_fields["external_record_id"],
+                safe_fields["capture_date"],
+                safe_fields["event_date"],
+                safe_fields["retrieval_date"],
+                response_sha256,
+                existing["normalized_evidence_id"],
+                checkpoint_id,
+                now_iso(),
+                item_id,
+            ),
+        )
+        return item_id, str(existing["normalized_evidence_id"])
+
     locator = f"mcp:item:{item_id}"
     output = _normalized_output(
         config,
@@ -297,9 +369,9 @@ def _persist_record(
         item_id=item_id,
         source_version_id=source_version_id,
     )
-    source_date = fields["event_date"] or fields["capture_date"]
-    date_basis = "event_date" if fields["event_date"] else (
-        "capture_date" if fields["capture_date"] else "not_observed"
+    source_date = safe_fields["event_date"] or safe_fields["capture_date"]
+    date_basis = "event_date" if safe_fields["event_date"] else (
+        "capture_date" if safe_fields["capture_date"] else "not_observed"
     )
     header = provenance_header(
         {
@@ -320,17 +392,17 @@ def _persist_record(
     body = "\n".join(
         [
             header.rstrip(),
-            f"# {fields['title']}",
+            f"# {safe_fields['title']}",
             "",
             f"- Provider: {provider}",
-            f"- External record ID: {fields['external_record_id'] or ''}",
-            f"- Capture date: {fields['capture_date'] or ''}",
-            f"- Event date: {fields['event_date'] or ''}",
-            f"- Retrieval date: {fields['retrieval_date'] or ''}",
+            f"- External record ID: {safe_fields['external_record_id'] or ''}",
+            f"- Capture date: {safe_fields['capture_date'] or ''}",
+            f"- Event date: {safe_fields['event_date'] or ''}",
+            f"- Retrieval date: {safe_fields['retrieval_date'] or ''}",
             "",
             "## Content",
             "",
-            scrub_derived_text(str(fields["content"] or "")).strip(),
+            scrub_fts_text(str(safe_fields["content"] or "")).strip(),
             "",
         ]
     )
@@ -368,10 +440,10 @@ def _persist_record(
             item_id,
             row["source_id"],
             provider,
-            fields["external_record_id"],
-            fields["capture_date"],
-            fields["event_date"],
-            fields["retrieval_date"],
+            safe_fields["external_record_id"],
+            safe_fields["capture_date"],
+            safe_fields["event_date"],
+            safe_fields["retrieval_date"],
             response_sha256,
             evidence_id,
             checkpoint_id,
@@ -441,6 +513,7 @@ def ingest_mcp_sources(config: Config, con: sqlite3.Connection) -> Dict[str, Any
         "checkpoints": 0,
     }
     errors: List[str] = []
+    failed_checkpoints: set[str] = set()
 
     for row in _source_rows(con):
         provider = str(row["source_system"])
@@ -466,6 +539,12 @@ def ingest_mcp_sources(config: Config, con: sqlite3.Connection) -> Dict[str, Any
             result["malformed"] += 1
             result["errors"] += 1
             errors.append(f"{row['relative_path']}: {malformed.reason}")
+            failed_checkpoints.add(checkpoint_id)
+            _fail_checkpoint(
+                con,
+                checkpoint_id=checkpoint_id,
+                reason=f"{row['relative_path']}: {malformed.reason}",
+            )
             result["source_files"] += 1
             continue
         path = Path(str(row["absolute_path"]))
@@ -474,6 +553,7 @@ def ingest_mcp_sources(config: Config, con: sqlite3.Connection) -> Dict[str, Any
         except Exception as exc:
             malformed = [MalformedRecord(0, f"snapshot read failed: {type(exc).__name__}: {exc}")]
             records = []
+        source_errors: List[str] = []
         for item in malformed:
             _record_review(
                 con,
@@ -483,7 +563,9 @@ def ingest_mcp_sources(config: Config, con: sqlite3.Connection) -> Dict[str, Any
                 malformed=item,
             )
             result["malformed"] += 1
-            errors.append(f"{row['relative_path']} record {item.index}: {item.reason}")
+            message = f"record {item.index}: {item.reason}"
+            source_errors.append(message)
+            errors.append(f"{row['relative_path']} {message}")
 
         processed = 0
         for record in records:
@@ -521,9 +603,19 @@ def ingest_mcp_sources(config: Config, con: sqlite3.Connection) -> Dict[str, Any
                     malformed=MalformedRecord(record.index, reason, record.line_number),
                 )
                 result["errors"] += 1
-                errors.append(f"{row['relative_path']} record {record.index}: {reason}")
+                message = f"record {record.index}: {reason}"
+                source_errors.append(message)
+                errors.append(f"{row['relative_path']} {message}")
 
-        if records:
+        if source_errors:
+            failed_checkpoints.add(checkpoint_id)
+            _fail_checkpoint(
+                con,
+                checkpoint_id=checkpoint_id,
+                reason=f"{row['relative_path']}: snapshot not fully processed; "
+                + "; ".join(source_errors),
+            )
+        elif records and checkpoint_id not in failed_checkpoints:
             last = records[-1]
             unique_count = con.execute(
                 "SELECT COUNT(*) FROM mcp_item WHERE checkpoint_id=?",

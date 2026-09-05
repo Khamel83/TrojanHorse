@@ -120,6 +120,123 @@ def test_external_id_is_idempotent_and_event_date_is_preserved(tmp_path: Path):
     ]
 
 
+def test_overlapping_snapshot_reuses_evidence_for_same_response(tmp_path: Path):
+    payload = json.dumps(
+        {
+            "items": [
+                {
+                    "id": "overlap-1",
+                    "title": "Repeated capture",
+                    "content": "The same item is present in both snapshots.",
+                }
+            ]
+        }
+    )
+    config, con, _source_id, _version_id = _source(
+        tmp_path, "granola", "first.json", payload
+    )
+    second_path = tmp_path / "data/mcp/granola/second.json"
+    second_path.write_text(payload, encoding="utf-8")
+    second_source_id = upsert_source_record(
+        con,
+        root_key="mcp_granola",
+        relative_path="data/mcp/granola/second.json",
+        source_system="granola",
+        kind="mcp",
+        scope="Work",
+        sensitivity="internal_review",
+    )
+    second_bytes = payload.encode("utf-8")
+    record_source_version(
+        con,
+        second_source_id,
+        len(second_bytes),
+        second_path.stat().st_mtime_ns,
+        hashlib.sha256(second_bytes).hexdigest(),
+    )
+    con.execute(
+        """
+        UPDATE source_record
+        SET absolute_path=?, extension=?, classification='Work', scope='Work',
+            extraction_status='ready'
+        WHERE source_id=?
+        """,
+        (str(second_path), second_path.suffix.lower(), second_source_id),
+    )
+    con.commit()
+    try:
+        first = ingest_mcp_sources(config, con)
+        first_evidence = con.execute(
+            "SELECT normalized_evidence_id FROM mcp_item"
+        ).fetchone()[0]
+        second = ingest_mcp_sources(config, con)
+        item_count = con.execute("SELECT COUNT(*) FROM mcp_item").fetchone()[0]
+        evidence_count = con.execute(
+            "SELECT COUNT(*) FROM evidence_record"
+        ).fetchone()[0]
+        second_evidence = con.execute(
+            "SELECT normalized_evidence_id FROM mcp_item"
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    assert first["items"] == 2
+    assert second["items"] == 2
+    assert item_count == 1
+    assert evidence_count == 1
+    assert second_evidence == first_evidence
+
+
+def test_mcp_derived_metadata_is_scrubbed(tmp_path: Path):
+    payload = json.dumps(
+        {
+            "items": [
+                {
+                    "id": "safe-id",
+                    "title": "token: title-secret",
+                    "content": "A local note.",
+                }
+            ]
+        }
+    )
+    config, con, _source_id, _version_id = _source(
+        tmp_path, "granola", "snapshot.json", payload
+    )
+    try:
+        ingest_mcp_sources(config, con)
+        evidence_path = Path(
+            con.execute(
+                "SELECT derived_text_path FROM evidence_record"
+            ).fetchone()[0]
+        )
+        derived = evidence_path.read_text(encoding="utf-8")
+    finally:
+        con.close()
+
+    assert "title-secret" not in derived
+    assert "[REDACTED_SECRET]" in derived
+
+
+def test_malformed_snapshot_does_not_advance_checkpoint(tmp_path: Path):
+    payload = '''{"id":"valid","content":"ok"}
+not-json
+'''
+    config, con, _source_id, _version_id = _source(
+        tmp_path, "granola", "snapshot.jsonl", payload
+    )
+    try:
+        ingest_mcp_sources(config, con)
+        checkpoint = con.execute(
+            "SELECT cursor, last_successful_retrieval, error FROM ingestion_checkpoint"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert checkpoint["cursor"] is None
+    assert checkpoint["last_successful_retrieval"] is None
+    assert checkpoint["error"]
+
+
 def test_missing_external_ids_use_content_hash_fallback_without_duplicates(tmp_path: Path):
     payload = json.dumps(
         [
