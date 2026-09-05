@@ -17,7 +17,7 @@ from .util import (
 )
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 SCHEMA = r"""
@@ -336,13 +336,7 @@ CREATE TABLE IF NOT EXISTS mcp_item (
     original_response_sha256 TEXT,
     normalized_evidence_id TEXT REFERENCES evidence_record(evidence_id) ON DELETE RESTRICT,
     checkpoint_id TEXT REFERENCES ingestion_checkpoint(checkpoint_id) ON DELETE RESTRICT,
-    updated_at TEXT NOT NULL,
-    -- Transitional local-snapshot fields; Task 8 removes these after its adapter migration.
-    external_id TEXT,
-    title TEXT,
-    normalized_path TEXT,
-    source_uri TEXT,
-    fetched_at TEXT
+    updated_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_mcp_provider_date ON mcp_item(provider, event_date);
@@ -963,12 +957,90 @@ def _migrate_columns(con: sqlite3.Connection) -> None:
             "original_response_sha256": "TEXT",
             "normalized_evidence_id": "TEXT",
             "checkpoint_id": "TEXT",
-            "external_id": "TEXT",
-            "title": "TEXT",
-            "normalized_path": "TEXT",
-            "source_uri": "TEXT",
-            "fetched_at": "TEXT",
         },
+    )
+
+
+def _migrate_mcp_items(con: sqlite3.Connection) -> None:
+    """Rebuild the MCP table without the bootstrap-only columns."""
+    if not _table_exists(con, "mcp_item"):
+        return
+    columns = {
+        row[1] for row in con.execute('PRAGMA table_info("mcp_item")')
+    }
+    canonical = {
+        "item_id",
+        "source_id",
+        "provider",
+        "external_record_id",
+        "capture_date",
+        "event_date",
+        "retrieval_date",
+        "original_response_sha256",
+        "normalized_evidence_id",
+        "checkpoint_id",
+        "updated_at",
+    }
+    transitional = columns - canonical
+    if not transitional:
+        return
+
+    con.execute("DROP TABLE IF EXISTS mcp_item__migration_new")
+    con.execute(
+        """
+        CREATE TABLE mcp_item__migration_new (
+            item_id TEXT PRIMARY KEY,
+            source_id TEXT NOT NULL REFERENCES source_record(source_id) ON DELETE RESTRICT,
+            provider TEXT NOT NULL,
+            external_record_id TEXT,
+            capture_date TEXT,
+            event_date TEXT,
+            retrieval_date TEXT,
+            original_response_sha256 TEXT,
+            normalized_evidence_id TEXT REFERENCES evidence_record(evidence_id) ON DELETE RESTRICT,
+            checkpoint_id TEXT REFERENCES ingestion_checkpoint(checkpoint_id) ON DELETE RESTRICT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    old_columns = columns
+    external_expr = "COALESCE(external_record_id, external_id)" if "external_id" in old_columns else "external_record_id"
+    retrieval_expr = "COALESCE(retrieval_date, fetched_at)" if "fetched_at" in old_columns else "retrieval_date"
+    rows = con.execute(
+        f"""
+        SELECT item_id, source_id, provider, {external_expr} AS external_record_id,
+               capture_date, event_date, {retrieval_expr} AS retrieval_date,
+               original_response_sha256, normalized_evidence_id, checkpoint_id,
+               updated_at
+        FROM mcp_item
+        """
+    ).fetchall()
+    for row in rows:
+        if not row["source_id"] or not con.execute(
+            "SELECT 1 FROM source_record WHERE source_id=?", (row["source_id"],)
+        ).fetchone():
+            raise RuntimeError(
+                "MCP migration found an item without a valid source parent; "
+                "database preserved"
+            )
+        if not row["provider"]:
+            raise RuntimeError(
+                "MCP migration found an item without a provider; database preserved"
+            )
+        con.execute(
+            """
+            INSERT INTO mcp_item__migration_new (
+                item_id, source_id, provider, external_record_id, capture_date,
+                event_date, retrieval_date, original_response_sha256,
+                normalized_evidence_id, checkpoint_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            tuple(row),
+        )
+    con.execute("DROP TABLE mcp_item")
+    con.execute("ALTER TABLE mcp_item__migration_new RENAME TO mcp_item")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mcp_provider_date ON mcp_item(provider, event_date)"
     )
 
 
@@ -995,6 +1067,7 @@ def connect(
         # them to be disabled while a legacy table is rebuilt, so switch them
         # off explicitly for that bounded migration step.
         con.execute("PRAGMA foreign_keys=OFF")
+        _migrate_mcp_items(con)
         _migrate_source_foreign_keys(con)
         _backfill_source_versions(con)
         _migrate_normalized_documents(con)

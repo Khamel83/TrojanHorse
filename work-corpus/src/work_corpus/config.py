@@ -53,6 +53,16 @@ EXPLICIT_SOURCE_ROOTS: Dict[str, Dict[str, Any]] = {
         "source_system": "onenote",
         "precedence": 40,
     },
+    "mcp_granola": {
+        "path": "data/mcp/granola",
+        "source_system": "granola",
+        "precedence": 45,
+    },
+    "mcp_wispr_flow": {
+        "path": "data/mcp/wispr_flow",
+        "source_system": "wispr_flow",
+        "precedence": 46,
+    },
     "zoom": {
         "path": "data/Zoom",
         "source_system": "zoom",
@@ -102,6 +112,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "mcp": {
         "granola_inbox": "data/mcp/granola",
         "wispr_flow_inbox": "data/mcp/wispr_flow",
+        "supported_providers": ["granola", "wispr_flow"],
     },
 }
 

@@ -152,6 +152,31 @@ def _coverage(con: sqlite3.Connection) -> List[Dict[str, Any]]:
     return rows
 
 
+def _mcp_freshness(con: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """Report retrieval freshness without treating unknown dates as current."""
+    output: List[Dict[str, Any]] = []
+    for row in con.execute(
+        """
+        SELECT provider, COUNT(*) AS item_count,
+               COUNT(retrieval_date) AS known_retrieval_dates,
+               MAX(retrieval_date) AS latest_retrieval_date
+        FROM mcp_item
+        GROUP BY provider
+        ORDER BY provider
+        """
+    ):
+        output.append(
+            {
+                "provider": row["provider"],
+                "item_count": row["item_count"],
+                "known_retrieval_dates": row["known_retrieval_dates"],
+                "latest_retrieval_date": row["latest_retrieval_date"] or "",
+                "freshness": "unknown" if not row["known_retrieval_dates"] else "known",
+            }
+        )
+    return output
+
+
 def _unsupported(con: sqlite3.Connection) -> List[Dict[str, Any]]:
     rows = []
     for row in con.execute(
@@ -262,6 +287,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     config.assert_derived_path(reports)
     reports = ensure_dir(reports)
     coverage = _coverage(con)
+    mcp_freshness = _mcp_freshness(con)
     unsupported = _unsupported(con)
     largest = _largest(con)
     duplicates = _duplicates(con)
@@ -300,6 +326,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "likely_version_families": len(version_families),
         "sensitive_review_candidates": len(sensitive_review),
         "coverage": coverage,
+        "mcp_feed_freshness": mcp_freshness,
         "unsupported": unsupported,
     }
     atomic_write_json(reports / "status.json", summary)
@@ -313,6 +340,17 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         reports / "unsupported_and_errors.csv",
         unsupported,
         ["source_system", "extension", "status", "error", "count"],
+    )
+    write_csv(
+        reports / "mcp_feed_freshness.csv",
+        mcp_freshness,
+        [
+            "provider",
+            "item_count",
+            "known_retrieval_dates",
+            "latest_retrieval_date",
+            "freshness",
+        ],
     )
     write_csv(
         reports / "largest_files.csv",
@@ -423,6 +461,19 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         md.append(
             f"| {row['source_system']} | {row['files']:,} | {row['human_size']} | "
             f"{row['earliest_date_hint']} | {row['latest_date_hint']} |"
+        )
+    md.extend([
+        "",
+        "## Wispr Flow and Granola freshness",
+        "",
+        "| Provider | Items | Known retrieval dates | Latest retrieval | Freshness |",
+        "|---|---:|---:|---|---|",
+    ])
+    for row in mcp_freshness:
+        md.append(
+            f"| {row['provider']} | {row['item_count']:,} | "
+            f"{row['known_retrieval_dates']:,} | {row['latest_retrieval_date']} | "
+            f"{row['freshness']} |"
         )
     md.extend(["", "## Gaps and unresolved items", ""])
     md.extend(f"- {item}" for item in needs or ["No mechanical gaps detected."])
