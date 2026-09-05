@@ -12,9 +12,30 @@ local-only work corpus described in `CONTEXT.md`.
   formal records.
 - [x] Committed the design specification and Antigravity adversarial review.
 - [x] Committed the implementation plan and Gemini 3.1 Pro review.
-- [ ] Promote the reviewed bootstrap scaffold into the root `work-corpus/`
-  package.
-- [ ] Implement and verify the corpus in the order defined by the plan.
+- [x] Promote the reviewed bootstrap scaffold into the root `work-corpus/`
+  package (`fb67385`; Task 0 review approved).
+- [x] Establish the immutable local boundary and package entry point
+  (`a6fe51f`, `df5b3c5`, `4edaa06`; Task 1 review approved).
+- [x] Build the immutable source manifest, source-version ledger, scope gates,
+  Zoom meeting grouping, legacy migration retention, and derived-path boundary
+  (`a115057` through `add7e97`; Task 2 package suite: 56 passed).
+- [x] Define the provenance-first SQLite schema, deterministic evidence/review
+  APIs, FTS table, current-task boundary, and safe legacy migration
+  (`37e50d6`, `bf3b7a6`, `800ad7c`, `6773540`; Task 3 review approved).
+- [x] Run the full local extraction in the order defined by the amended plan:
+  315 source versions normalized, 418 scope-review records retained, 1
+  optional parser case unsupported, and 0 parsing errors.
+- [x] Run the complete Zoom coverage pass: 4 existing media-bearing transcript
+  groups linked, 68 transcript-only groups kept separate, 231 eligible media
+  items terminally `blocked`, 114 raw artifacts visible, and 0 eligible media
+  without a terminal status.
+- [x] Run the 29-file OneNote acceptance pass. The converter is unavailable,
+  so 29 files are `blocked` and 0 pages were extracted; the reviewed expected
+  result is 295 pages.
+- [x] Rebuild and verify FTS and relationship indexes, run the seven-category
+  Work-scoped query suite, and confirm the real current-task view has 0 rows.
+- [x] Compare the raw corpus before and after acceptance: 1,414 files and
+  58,965,738,600 bytes match with zero path, size, mtime, or hash mismatches.
 
 Current authoritative documents:
 
@@ -23,8 +44,16 @@ Current authoritative documents:
 - `docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md`
 - `01_INVENTORY/coverage_and_gaps.md`
 
-The project has not started corpus implementation. Do not run the old Atlas
-bridge against `data/`.
+Tasks 0–9 are mechanically accepted. The remaining operational gates are a
+local OneNote converter and a verified local transcription engine. Do not run
+the old Atlas bridge against `data/`.
+
+Acceptance artifacts:
+
+- `work-corpus/corpus/reports/status.json`
+- `work-corpus/corpus/reports/what_we_have_and_need.md`
+- `work-corpus/state/transcription_queue.csv`
+- `work-corpus/state/raw_immutability.json`
 
 ---
 

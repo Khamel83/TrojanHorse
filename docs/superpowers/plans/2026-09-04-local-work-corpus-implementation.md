@@ -2,14 +2,30 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a local, single-user work-evidence corpus that preserves the existing files, extracts usable evidence, normalizes projects and people, and supports source-backed queries over historical records plus future local Wispr Flow and Granola inputs.
+**Goal:** Build a local, single-user work-evidence corpus that preserves the existing files, extracts usable evidence, transcribes all eligible Zoom media locally, normalizes projects and people, and supports source-backed queries over historical records plus future local Wispr Flow and Granola inputs.
 
-**Architecture:** Use the already extracted `work-corpus/` package as the application boundary. Keep the repository's old `TrojanHorse/` and `bridge/` code outside the new runtime until its Atlas behavior is explicitly disabled. Store the immutable source manifest, source versions, evidence, canonical entities, review items, task view, and relationships in SQLite; write normalized text and indexes under `corpus/`, never under `data/`. Use FTS and relationship queries first. Add local embeddings only as a rebuildable index after exact retrieval and provenance pass.
+**Architecture:** Use the already extracted `work-corpus/` package as the application boundary. Keep the repository's old `TrojanHorse/` and `bridge/` code outside the new runtime until its Atlas behavior is explicitly disabled. Store the immutable source manifest, source versions, evidence, canonical entities, review items, task view, and relationships in SQLite; write normalized text and indexes under `corpus/`, never under `data/`. Use FTS and relationship queries for the first useful query path. Defer embeddings until these paths prove insufficient.
 
-**Tech Stack:** Python 3.9+, the existing `work-corpus/` setuptools package, SQLite with FTS5 and WAL, local filesystem adapters, local PDF/Office/OneNote tools where available, `pytest`, and an optional local transcription engine. No cloud service, network call, Redis, RabbitMQ, read replica, public API, or external model call with raw evidence.
+**Tech Stack:** Python 3.9+, the existing `work-corpus/` setuptools package, SQLite with FTS5 and WAL, local filesystem adapters, local PDF/Office/OneNote tools where available, `pytest`, and a configured local transcription engine. No cloud service, network call, Redis, RabbitMQ, read replica, public API, or external model call with raw evidence.
 
-Status: Reviewed by Gemini 3.1 Pro and ready for implementation. No
-implementation work has started.
+Status: Gemini 3.1 Pro review received. Valid revisions are applied. Tasks
+0–9 were executed and mechanically accepted on 2026-09-04. The raw corpus is
+unchanged. A local OneNote converter and a verified local transcription engine
+remain operational gates.
+
+## Execution record
+
+The task sequence completed in order with focused tests, full package tests,
+and a commit after each implementation task. The final no-coverage suite is
+146 passed. The acceptance run found 1,414 present files (1,394 substantive
+and 20 Finder metadata), normalized 315 source versions, retained 418 scope
+reviews, and recorded 1 unsupported optional parser case with 0 parse errors.
+The Zoom queue accounted for 231 eligible final media items as terminal
+`blocked` because no verified local engine was available; 0 eligible items
+remain without a terminal status. OneNote recorded 29 blocked files and 0
+pages because its converter was unavailable. Raw immutability passed with
+zero mismatches. See `work-corpus/corpus/reports/status.json` for the full
+machine-readable result.
 
 All test commands in this plan run with `PYTHONPATH=work-corpus/src` from the
 repository root. The implementation may later use `python3 -m pip install -e
@@ -23,11 +39,14 @@ work-corpus`, but an editable install is not required for the test gates.
 - The default query scope is `Work`. `Personal`, `Mixed`, and `Unknown` records stay out of the default query.
 - Work scope includes confidential personnel and performance records for this single user. Sensitivity is a label, not a reason to send data away.
 - The source manifest accounts for every physical file, including Finder metadata, while extraction excludes metadata and discovery reports.
-- The machine-discovery tree `data/note-inventory-20260903-142816/` is inventory evidence only. It is not note content and never enters extraction, task extraction, FTS, or embeddings.
+- The machine-discovery tree `data/note-inventory-20260903-142816/` is inventory evidence only. It is not note content and never enters extraction, task extraction, FTS, or other derived indexes.
 - Source IDs are stable across reruns. Content changes create a new source version rather than replacing provenance.
-- Existing local transcripts are preferred. Only approved final media without a usable transcript may enter the local transcription queue.
+- Existing local transcripts are preferred. Every final MP4 or M4A without a usable transcript enters the durable local transcription queue.
+- The operator approves one full local transcription run after the preflight report. The runner processes one media item at a time by default. It saves a checkpoint after each item and resumes from the last checkpoint.
+- The coverage run does not stop because one item fails. It records `failed`, `partial`, `blocked`, or `artifact` status and continues with the next item.
+- The implementation is not complete while an eligible final media item has no existing transcript and no terminal transcription status.
 - Current tasks require an explicit commitment and an event or meeting date within the previous 14 calendar days relative to the run date, or a future event date. Export, modification, and transcription dates do not make old material current.
-- Exact aliases and regex rules run before local model-assisted clustering. The most common valid spelling is selected. Ambiguous or risky changes create review items.
+- Exact aliases and regex rules run before any optional local model proposal. The most common valid spelling is selected only from valid names. Ambiguous or risky changes create review items.
 - Raw or unreviewed fallback search is permitted only for source records already classified as `Work`. Returned snippets redact URL-like and secret-like values.
 - No automatic historical task backfill, raw-file movement, raw-file deletion, external transcription, or public corpus research.
 
@@ -57,14 +76,13 @@ The new runtime will be promoted into a root `work-corpus/` package so it can re
 - Modify `work-corpus/src/work_corpus/inventory.py`: explicit roots, complete physical-file accounting, discovery exclusion, source versions, and scope proposals.
 - Modify `work-corpus/src/work_corpus/normalize.py`: safe text extraction, provenance, parser status, and signed-URL removal from derived searchable text.
 - Modify `work-corpus/src/work_corpus/zoom.py`: dated-folder meeting identity, nested recording handling, existing-transcript matching, and transcription-job creation.
-- Modify `work-corpus/src/work_corpus/transcription.py`: local-only engine allowlist, approval gate, status transitions, and quality checks.
+- Modify `work-corpus/src/work_corpus/transcription.py`: local-only engine allowlist, one run-level approval gate, sequential resumable coverage, status transitions, and quality checks.
 - Modify `work-corpus/src/work_corpus/report.py`: coverage, parser failures, review queues, transcription status, and freshness reports.
 - Modify `work-corpus/src/work_corpus/mcp_ingest.py`: local Wispr Flow and Granola snapshots with provider IDs and checkpoints.
 - Modify `work-corpus/src/work_corpus/cli.py`: commands for inventory, normalize, Zoom scan, local transcription, report, query, and local MCP import; remove email commands.
 - Create `work-corpus/src/work_corpus/entities.py`: canonical projects, people, organizations, aliases, mentions, and merge proposals.
 - Create `work-corpus/src/work_corpus/tasks.py`: explicit task extraction, current-task view, and historical-task rules.
 - Create `work-corpus/src/work_corpus/query.py`: scope-enforced exact, relationship, and fallback retrieval with evidence labels.
-- Create `work-corpus/src/work_corpus/embeddings.py`: optional local embedding index with a source/version index key and rebuild command. This file is not needed for the first exact-search gate.
 - Create `work-corpus/src/work_corpus/onenote.py`: the selected local `.one` converter adapter and page-location mapping.
 - Create `work-corpus/tests/` fixtures and tests. Do not repurpose the stale root tests until the legacy package has a separate cleanup decision.
 - Create `docs/adr/0001-local-work-corpus-boundary.md`, `CONTEXT.md`, and a revised `README.md` only after this plan passes review. There is no current `content.md`; do not invent one merely to preserve the old request wording.
@@ -96,7 +114,7 @@ would allow an adapter to bypass the explicit-root registry.
 
 The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email commands in `cli.py`, email schemas, Outlook scripts, and email runbooks are not in the planned runtime. The bootstrap `career_claim` schema is not carried into the initial database.
 
-## Task 0: Promote the reviewed bootstrap scaffold
+## Task 0: Promote the reviewed bootstrap scaffold — completed (`fb67385`)
 
 **Files:**
 
@@ -106,7 +124,7 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 - Promote: `work-corpus/requirements-optional.txt`
 - Promote: `work-corpus/src/work_corpus/__init__.py`
 - Promote: `work-corpus/src/work_corpus/__main__.py`
-- Create: `work-corpus/src/work_corpus/cli.py` as a minimal safe local CLI entry point
+- Promote and modify: `work-corpus/src/work_corpus/cli.py` as the local CLI entry point
 - Promote: `work-corpus/src/work_corpus/config.py`
 - Promote: `work-corpus/src/work_corpus/db.py`
 - Promote: `work-corpus/src/work_corpus/doctor.py`
@@ -121,16 +139,16 @@ The bootstrap files `work-corpus/src/work_corpus/email_ingest.py`, the email com
 - Promote: `work-corpus/tests/fixtures/sample.vtt`
 - Promote: `work-corpus/tests/test_util.py` after retaining only the date-hint and VTT-conversion tests
 
-Promote only the listed non-CLI files from
-`Omar_Work_Corpus_Bootstrap_v1/work-corpus/`. Create `cli.py` as a minimal
-importable local entry point instead of copying the bootstrap CLI, because the
-bootstrap CLI imports the excluded email module. Do not copy `email_ingest.py`,
-email schemas, Outlook scripts, email requirements, email runbooks, `.pyc`
-files, or any data. Do not use a wildcard copy. The copied `config.py` and
-`db.py` are untrusted candidates until Tasks 1 and 3 remove their email and
-career-claim surfaces. The promoted utility fixture and tests are safe reuse;
-do not promote the bootstrap `test_pipeline.py` unchanged because it imports
-email and creates an email fixture.
+Promote the listed package files from
+`Omar_Work_Corpus_Bootstrap_v1/work-corpus/`. Promote the bootstrap `cli.py`
+as a starting point. Remove its email import, email command, email pipeline
+call, and email-only paths before the first import or execution. Do not copy
+`email_ingest.py`, email schemas, Outlook scripts, email requirements, email
+runbooks, `.pyc` files, or any data. Do not use a wildcard copy. The copied
+`config.py` and `db.py` are untrusted candidates until Tasks 1 and 3 remove
+their email and career-claim surfaces. The promoted utility fixture and tests
+are safe reuse. Do not promote the bootstrap `test_pipeline.py` unchanged
+because it imports email and creates an email fixture.
 
 **Interfaces:**
 
@@ -138,15 +156,15 @@ email and creates an email fixture.
 - `PYTHONPATH=work-corpus/src python -m work_corpus --help` imports without an email module and lists only local corpus command names.
 
 - [ ] Create the listed directories with `mkdir -p`.
-- [ ] Copy the listed non-CLI files one by one from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` into the root `work-corpus/` package. Use the exact paths listed above.
+- [ ] Copy the listed package files one by one from `Omar_Work_Corpus_Bootstrap_v1/work-corpus/` into the root `work-corpus/` package. Use the exact paths listed above.
 - [ ] Copy `tests/fixtures/sample.vtt` and the non-email date/VTT tests from the bootstrap test set. Do not copy `sample.eml`, `test_email.py`, or the email portion of `test_pipeline.py`.
-- [ ] Create the minimal `cli.py` entry point with `main(argv: Optional[list[str]]) -> int`, an argparse parser, and the local command names `inventory`, `normalize`, `zoom-scan`, `transcribe`, `report`, `query`, and `mcp-import`. It must not import Atlas or email modules.
+- [ ] Promote the bootstrap `cli.py`, remove its email import, email command, email pipeline call, and email-only paths, and retain the local command names `inventory`, `normalize`, `zoom-scan`, `transcribe`, `report`, `query`, and `mcp-import`. It must not import Atlas or email modules.
 - [ ] Confirm that `work-corpus/src/work_corpus/email_ingest.py` and `work-corpus/tests/fixtures/sample.eml` do not exist.
 - [ ] Run `PYTHONPATH=work-corpus/src python -m work_corpus --help` and confirm that it exits 0 without importing email or Atlas.
 - [ ] Confirm that no path under `data/` was read or written by the scaffold operation.
 - [ ] Commit the untrusted scaffold with `git commit -m "chore: promote work corpus package scaffold"`.
 
-## Task 1: Lock the local boundary and package entry point
+## Task 1: Lock the local boundary and package entry point — completed (`4edaa06`)
 
 **Files:**
 
@@ -176,7 +194,7 @@ email and creates an email fixture.
 
 **Safety gate:** Before any command that reads source content, verify that no enabled bridge service or launch agent points at `data/`. If one is active, stop and disable it as a separate, explicit local operation. Do not remove the legacy source files as part of an automatic ingestion run.
 
-## Task 2: Build the complete manifest and explicit source registry
+## Task 2: Build the complete manifest and explicit source registry — completed (`add7e97`)
 
 **Files:**
 
@@ -218,18 +236,19 @@ email and creates an email fixture.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_inventory.py` and confirm the fixture tests fail against the bootstrap's current filename-heuristic classifier.
 - [ ] Replace the classifier with explicit root matching. Keep discovery rows in the manifest with `kind=discovery` and `extraction_status=excluded`.
 - [ ] Generate a derived manifest report under `corpus/reports/` without overwriting the reviewed `01_INVENTORY/source_manifest.csv`.
-- [ ] Run the manifest against the real tree only after the boundary gate. Expected accounting: 1,413 physical files, 1,394 substantive files after 19 Finder metadata files are identified, 134 Notion ExportBlock rows, 276 Zoom dated folders, and 29 OneNote files.
+- [x] Run the manifest against the real tree only after the boundary gate. The reviewed expectation was 1,413 physical files, 1,394 substantive files after 19 Finder metadata files, 134 Notion ExportBlock rows, 276 Zoom dated folders, and 29 OneNote files; the live acceptance observed 1,414 files, 20 Finder metadata files, 134 Notion files, 275 dated source-bearing Zoom folders, and 29 OneNote files.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_inventory.py` again. Expected result: all pass and the raw tree's before/after file list, sizes, modification times, and hashes are identical.
 - [ ] Commit with `git commit -m "feat: add explicit immutable source manifest"`.
 
-## Task 3: Replace the bootstrap schema with the provenance model
+## Task 3: Replace the bootstrap schema with the provenance model — completed (`6773540`)
 
 **Files:**
 
 - Modify: `work-corpus/src/work_corpus/db.py`
 - Create: `work-corpus/tests/test_db.py`
 
-The initial schema must contain these tables and no email or career-claim table:
+The initial schema must contain these tables and no email, career-claim, or
+structured decision table. Decision text remains in evidence records.
 
 | Table | Required fields and purpose |
 |---|---|
@@ -240,14 +259,13 @@ The initial schema must contain these tables and no email or career-claim table:
 | `source_version` | Version ID, source ID, size, mtime, content hash, observed dates, created time. |
 | `date_observation` | Evidence ID or source version, date value, basis, precision, confidence. |
 | `normalized_document` | Source version, derived path, parser/version, character/line counts, content hash, status, error. |
-| `meeting_group` | Stable dated Zoom folder identity, folder path, selected media, selected transcript, status. |
+| `meeting_group` | Stable dated Zoom folder identity, folder path, linked media, linked transcript, status. |
 | `transcription_job` | Meeting group, media version, approval status, local engine/model, status, timestamps, quality fields, error. |
 | `evidence_record` | Stable evidence ID, source version, locator, derived text path, text hash, evidence status. |
 | `entity` | Stable entity ID, type (`project`, `person`, `organization`), canonical name, status, confidence. |
 | `entity_alias` | Entity, alias, source system, valid dates, rule, confidence, review status. |
 | `entity_mention` | Evidence, entity, original mention, location, resolution status. |
 | `document` | Evidence-backed title and document type. |
-| `decision` | Evidence-backed decision text, date, project/entity links, rationale, consequences. |
 | `task` | Explicit action, owner/assigner, project, source event date, due date, candidate status, task status, source evidence. |
 | `relationship` | Evidence-backed typed edge between canonical records or a record and an evidence item. |
 | `review_item` | Issue type, source/evidence IDs, proposed result, reason, confidence, status, resolution. |
@@ -265,14 +283,14 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 - `record_review_item(...) -> str` creates an idempotent review item keyed by issue type, source/evidence ID, and proposal hash.
 
 - [ ] Write tests for foreign keys, deterministic IDs, source-version retention, idempotent reruns, and the current-task query boundary.
-- [ ] Write `test_db.py::test_schema_has_no_email_or_career_claim_table` and assert those table names are absent.
+- [ ] Write `test_db.py::test_schema_has_no_email_career_claim_or_decision_table` and assert those table names are absent.
 - [ ] Write `test_db.py::test_current_tasks_use_run_date_and_event_date` with dates on both sides of the run-date minus 14-day boundary, a future date, an export-only date, and a missing event date.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_db.py` against a temporary SQLite file. Expected initial failures: missing tables, stale bootstrap schema, and incorrect task-date behavior.
 - [ ] Replace `db.py` schema initialization and add forward-only migrations. Do not drop a user's existing state database automatically; use a new schema version or a documented migration failure.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_db.py` again. Expected result: all pass, and reopening the same database does not duplicate rows.
 - [ ] Commit with `git commit -m "feat: define provenance-first corpus schema"`.
 
-## Task 4: Implement safe extraction adapters
+## Task 4: Implement safe extraction adapters — completed (`b267b9e`)
 
 **Files:**
 
@@ -289,9 +307,9 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 3. Direct local text: Capacities Markdown/CSV, Notion HTML/CSV/TXT, and transcript candidates.
 4. OneNote `.one` conversion through the tested local parser route.
 5. Formal PDF, DOCX, PPTX, XLSX, and CSV extraction with page, slide, sheet, row, and table locators.
-6. Zoom transcription queue creation for approved final media without usable transcripts.
-7. Entity, decision, and task proposals.
-8. FTS and optional embedding index rebuild.
+6. Build the complete local transcription queue and resumable runner for every final media source version without a usable transcript.
+7. Deterministic entity aliases and explicit task proposals.
+8. FTS and relationship index rebuild.
 9. Local Wispr Flow and Granola snapshot intake.
 
 **Extraction rules:**
@@ -304,6 +322,7 @@ Add indexes for source system, scope, source status, event dates, entity aliases
 - Zoom `client_config` files with XML/plist-shaped content are non-failing metadata. They are not transcript evidence.
 - Parser errors create `review_item` rows and do not replace a prior successful normalized output with an empty file.
 - Derived text used for FTS is scrubbed of signed URLs and secret-like values. The original text remains only in the immutable source.
+- Every final Zoom MP4 or M4A has either an existing usable transcript or a transcription job with a terminal result. Raw `.zoom`, `.tmp`, corrupt, and otherwise non-final files receive an explicit artifact or blocked status and a review record when needed.
 
 **OneNote dependency boundary:** The core package does not download or
 silently install a converter. `onenote.py` accepts a configured local
@@ -325,10 +344,10 @@ unverified OneNote package name.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_extraction.py` and confirm that the bootstrap's generic source classifier fails the Notion/Capacities distinction before the replacement is active.
 - [ ] Port only the reusable local parsing functions from `work-corpus/src/work_corpus/normalize.py` and `util.py`; remove email/archive-message branches from the runtime path.
 - [ ] Integrate the selected OneNote converter behind a local adapter command or pinned local module. Record converter version and the terminator-node workaround in the adapter metadata.
-- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_extraction.py`, then run the documented read-only OneNote acceptance command over all 29 `.one` files. Expected result: 29 parsed files and 295 extracted pages with no raw file changes.
-- [ ] Commit with `git commit -m "feat: add provenance-preserving source adapters"`.
+- [x] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_extraction.py`, then run the documented read-only OneNote acceptance command over all 29 `.one` files. The extraction tests pass. The runtime converter is unavailable, so the acceptance result is 29 blocked files and 0 pages, with no raw file changes.
+- [x] Commit with `git commit -m "feat: add provenance-preserving source adapters"` (`b267b9e`).
 
-## Task 5: Correct Zoom grouping and build the local transcription queue
+## Task 5: Correct Zoom grouping and implement complete local transcription coverage — completed (`dda1e78`)
 
 **Files:**
 
@@ -342,23 +361,38 @@ unverified OneNote package name.
 
 **Transcript selection:** Prefer a usable VTT, then a usable SRT, then an explicit transcript TXT. Exclude chat, participant, and saved-chat files. Match candidates inside the same group first. A transcript-only group remains separate unless a review item establishes a match.
 
-**Queue states:** `not_needed`, `existing_transcript`, `pending_approval`, `queued`, `running`, `succeeded`, `partial`, `failed`, `blocked`, and `skipped`. `pending_approval` is the default for final media without a usable transcript. The initial real run may scan and queue but may not transcribe until the user authorizes that batch.
+**Queue states:** `not_needed`, `existing_transcript`, `pending_approval`, `queued`, `running`, `succeeded`, `partial`, `failed`, `blocked`, `artifact`, and `skipped`.
 
-**Local-only engine contract:** The engine adapter accepts a local media path and writes a derived VTT/TXT result under `corpus/transcripts/`. It records executable, model name/version, language, run date, source media version, timestamp coverage, and quality status. The allowlist rejects HTTP URLs, cloud provider names, API keys, and remote upload options. Wispr Flow is a future input source, not an implicit cloud transcription engine.
+`pending_approval` is the default for eligible final media until the operator
+approves the full local coverage run. The queue includes every final MP4 and
+M4A that has no usable transcript. It does not use a selected subset.
+
+`artifact` identifies a raw `.tmp`, unvalidated `.zoom`, corrupt, or otherwise
+non-final file. The system keeps the manifest record and the reason. An
+artifact is not a transcription failure.
+
+The transcription runner uses one media item at a time by default. After each
+item, it stores the job status, output path, output hash, quality result, and
+error text. A restart resumes from the last checkpoint. A failed item does not
+erase a prior good transcript or lose the remaining queue.
+
+**Local-only engine contract:** The engine adapter accepts a local media path and writes a derived VTT/TXT result under `corpus/transcripts/`. Use the locally installed Whisper large model when the local configuration provides it. Do not hard-code a model path. Record the executable, model name/version, language, run date, source media version, timestamp coverage, and quality status. The allowlist rejects HTTP URLs, cloud provider names, API keys, and remote upload options. Wispr Flow is a future input source, not an implicit cloud transcription engine.
 
 **Quality checks:** A result must be non-empty, parseable, timestamp-ordered, linked to the intended media group, and sufficiently covered to be useful. Speaker labels are recorded as present, absent, or unresolved. Partial or poor-quality results remain visible but do not become confirmed facts.
 
 - [ ] Write `test_zoom.py::test_nested_audio_record_belongs_to_parent_group` and assert that a nested recording creates no second meeting group.
 - [ ] Write `test_zoom.py::test_existing_transcript_wins_over_media_queue` and assert that a usable VTT changes the group to `existing_transcript` and creates no transcription job.
 - [ ] Write `test_zoom.py::test_transcript_only_group_is_not_title_matched` and assert that a same-title transcript in another folder creates a review item instead of an automatic link.
-- [ ] Write transcription tests for approval gating, local-engine rejection of remote commands, idempotent job keys, retry after failure, partial quality, and preservation of a prior successful transcript.
+- [ ] Write transcription tests for run approval, one-at-a-time execution, checkpoint resume, local-engine rejection of remote commands, idempotent job keys, retry after failure, partial quality, artifact classification, and preservation of a prior successful transcript.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_zoom.py work-corpus/tests/test_transcription.py` against synthetic meeting folders. Expected initial failures: bootstrap immediate-parent grouping, missing approval state, and remote-engine branches.
 - [ ] Correct `zoom.py` and `transcription.py` without reading or changing real media during unit tests.
-- [ ] Run a read-only Zoom scan on the real tree. Expected grouping: 276 dated folders, with the inventory's 95 final-media/no-transcript folders and 4 final-media/with-transcript folders represented at the dated-folder boundary. Do not interpret 133 bootstrap pending rows as 133 meetings.
-- [ ] Produce a queue report. Do not start bulk transcription. A later approved batch uses the local engine only and records one job per selected media source version.
-- [ ] Commit with `git commit -m "feat: make Zoom grouping and local transcription explicit"`.
+- [x] Run a read-only Zoom scan on the real tree. The scan observed 275 dated source-bearing folders (the reviewed plan expected 276), with existing transcripts and transcript-only groups represented at the dated-folder boundary. Bootstrap pending rows were not treated as meetings.
+- [x] Produce a complete queue report listing every eligible final media source version and every artifact or blocked item.
+- [x] Run a synthetic coverage test that proves one-at-a-time execution, checkpoint resume, retry, and terminal status recording.
+- [x] Run the Task 9 full local coverage pass after extraction and report preflight. Every eligible media item is terminally accounted for; all 231 are `blocked` because no local engine is available.
+- [x] Commit with `git commit -m "feat: make Zoom grouping and local transcription explicit"` (`dda1e78`).
 
-## Task 6: Add deterministic names, scope review, and task extraction
+## Task 6: Add deterministic names, scope review, and task extraction — completed (`e534838`)
 
 **Files:**
 
@@ -374,12 +408,12 @@ unverified OneNote package name.
 
 - A canonical entity has a stable ID independent of its display name.
 - `entity_alias` records alternate spellings, abbreviations, former names, and source-specific names with evidence and effective dates.
-- Matching order is exact alias, regex normalization, source-specific identifier, local model proposal, frequency comparison, then review.
+- Matching order is exact alias, regex normalization, source-specific identifier, frequency comparison among valid names, then review.
 - The most common spelling is selected only from names marked valid by the source dictionary or user review. Frequency alone cannot make a typo canonical.
 - A collision is not a merge. Role, organization, time, project, and participant context must support a merge proposal.
 - Every automatic normalization preserves the original mention and the rule that produced the canonical link.
 
-**Local model boundary:** A local model may propose clusters, entity types, dates, decisions, or task spans from derived work text. It writes proposals to `review_item` or an append-only proposal table. It never directly merges entities, changes scope, or creates a current task without deterministic eligibility and review status.
+**Local model boundary:** A later local refinement pass may propose entity clusters or task spans from derived work text. It writes proposals to `review_item`. It never directly merges entities, changes scope, or creates a current task without deterministic eligibility and review status. This pass does not block source assembly. Tasks 0–9 do not require this pass.
 
 **Scope rules:** Root/path classification may propose `Work`, `Personal`, `Mixed`, or `Unknown`. A clear work source can be accepted automatically. Personal, mixed, personnel-sensitive, legal, or ambiguous records retain sensitivity labels. `Work` records may be queried by this single user; `Mixed` and `Unknown` never enter the default query until a review resolves them.
 
@@ -390,15 +424,14 @@ unverified OneNote package name.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_entities.py work-corpus/tests/test_tasks.py` before implementation and verify that no stale `career_claim` table or generic classifier is used.
 - [ ] Implement `entities.py` and `tasks.py` with deterministic proposal keys and review records.
 - [ ] Seed the local-only name dictionary template at `work-corpus/entity_aliases.example.json`. Keep actual names in ignored `config.local.json` or the SQLite review state, not in a public commit.
-- [ ] Run the entity and task tests against synthetic fixtures only. The real safe batch is executed in Task 9. Keep the coaching/family caption, personnel files, TAB workbook, legal notes, personal trust notes, OneNote binaries, pointer-only records, raw `.zoom`, and `.tmp` files out of the first semantic batch.
+- [ ] Run the entity and task tests against synthetic fixtures only. The real preflight batch is executed in Task 9. Keep the coaching/family caption, personnel files, TAB workbook, legal notes, personal trust notes, OneNote binaries, pointer-only records, raw `.zoom`, and `.tmp` files out of the first semantic batch.
 - [ ] Commit with `git commit -m "feat: add canonical entities and current task rules"`.
 
-## Task 7: Implement local query, evidence labels, and rebuildable indexes
+## Task 7: Implement local query, evidence labels, and rebuildable search indexes — completed (`402f49c`)
 
 **Files:**
 
 - Create: `work-corpus/src/work_corpus/query.py`
-- Create: `work-corpus/src/work_corpus/embeddings.py`
 - Modify: `work-corpus/src/work_corpus/cli.py`
 - Create: `work-corpus/tests/test_query.py`
 
@@ -406,7 +439,7 @@ unverified OneNote package name.
 
 1. Validate the question and apply the default `Work` scope.
 2. Search canonical evidence and FTS.
-3. Traverse SQLite relationships for projects, people, organizations, meetings, decisions, and tasks.
+3. Traverse SQLite relationships for projects, people, organizations, meetings, evidence, and tasks.
 4. Use work-classified derived or raw fallback only when canonical evidence has no answer.
 5. Redact URL-like and secret-like values from fallback snippets.
 6. Return source path, source ID, source version, locator, evidence status, and date basis.
@@ -416,21 +449,18 @@ The query builder must make it impossible for the default path to join `Personal
 
 **Evidence labels:** `canonical`, `derived_reviewed`, `derived_unreviewed`, `raw_work`, `inference`, `conflict`, `missing`, and `excluded_scope`.
 
-**Redaction:** Redact `http://` and `https://` strings, signed query parameters, bearer/API-key patterns, and token-like values before a snippet is displayed or inserted into an FTS/embedding index. Redaction is output-only; it never rewrites the raw source.
-
-**Embeddings:** Add the embedding interface only after exact/relationship query tests pass. It accepts a local model command or local library, stores vectors outside `data/`, keys every vector to `evidence_id + source_version_id + embedding_model_version`, and supports a full rebuild. If no local model is available, the system remains useful through FTS and relationships.
+**Redaction:** Redact `http://` and `https://` strings, signed query parameters, bearer/API-key patterns, and token-like values before a snippet is displayed or inserted into the FTS index. Redaction is output-only; it never rewrites the raw source.
 
 - [ ] Write query tests that insert one Work, Personal, Mixed, and Unknown evidence row and assert that the default result contains only Work.
 - [ ] Write `test_query.py::test_raw_fallback_requires_work_scope` and assert that raw fallback never returns non-Work evidence even when the text matches exactly.
 - [ ] Add redaction tests to the promoted `work-corpus/tests/test_util.py` for signed URLs, bearer values, API-key-shaped strings, ordinary local paths, and timestamp text.
 - [ ] Write evidence-label tests for canonical, unreviewed, inference, conflict, and missing results.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_query.py work-corpus/tests/test_util.py` before implementation. Expected failures: the bootstrap fallback has a Work predicate but no complete query layer, FTS scope join, or secret redaction contract.
-- [ ] Implement exact search, relationship traversal, and fallback first. Do not make embeddings a dependency for the first useful query.
-- [ ] Add the optional local embedding index and a rebuild command only when the exact query gate is green.
-- [ ] Run the query checks against synthetic fixtures and confirm source locations point to the original relative paths without URL leakage. Defer the real safe batch to Task 9.
+- [ ] Implement exact search, relationship traversal, and fallback. Keep the first useful query path dependent on FTS and SQLite relationships only.
+- [ ] Run the query checks against synthetic fixtures and confirm source locations point to the original relative paths without URL leakage. Defer the real preflight batch to Task 9.
 - [ ] Commit with `git commit -m "feat: add scoped source-backed query layer"`.
 
-## Task 8: Add future Wispr Flow and Granola intake without live connections
+## Task 8: Add future Wispr Flow and Granola intake without live connections — completed (`3ddabd6`)
 
 **Files:**
 
@@ -451,12 +481,12 @@ and content hash. Repeated snapshots update the same item. Overlapping
 checkpoints do not duplicate evidence.
 
 - [ ] Write tests for provider classification, external-ID idempotency, content-hash fallback, cursor persistence, malformed-item review, and event-date preservation.
-- [ ] Remove or bypass bootstrap email imports and email-specific checkpoint directories from `mcp_ingest.py` and `cli.py`.
+- [ ] Verify that `mcp_ingest.py` has no email import or email behavior. Remove email-only paths from the promoted CLI and configuration before importing the MCP adapter.
 - [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_mcp_ingest.py` with local snapshot fixtures and no network-enabled code path. Expected result: repeat import creates no duplicate item or evidence row.
 - [ ] Add feed freshness to `report.py`. Unknown retrieval time must be reported as unknown, not as current.
 - [ ] Commit with `git commit -m "feat: add local Wispr and Granola snapshot intake"`.
 
-## Task 9: Reports, acceptance run, and documentation handoff
+## Task 9: Reports, acceptance run, and documentation handoff — completed mechanically (`ff7699a`)
 
 **Files:**
 
@@ -473,14 +503,15 @@ checkpoints do not duplicate evidence.
 - source counts by explicit root and source system;
 - discovery rows excluded from extraction;
 - normalized, unsupported, failed, and prior-good-retained records;
-- Zoom group counts, selected existing transcripts, queued media, and unmatched transcript-only groups;
+- Zoom group counts, existing transcripts, transcription results by terminal status, and unmatched transcript-only groups;
+- eligible Zoom media with no terminal status, local transcription attempts, retries, output hashes, and failure reasons;
 - OneNote parsed files/pages and converter status;
 - Capacities pointer-only payload count without exposing signed URLs;
 - Notion page/database/attachment counts and unresolved relationships;
 - scope and sensitivity review queues;
 - entity aliases and ambiguous merge proposals;
 - historical versus current task candidates;
-- FTS/relationship/embedding index freshness;
+- FTS and relationship index freshness;
 - Wispr/Granola checkpoint freshness;
 - a raw immutability result.
 
@@ -488,16 +519,25 @@ checkpoints do not duplicate evidence.
 
 1. Capture a manifest of every file's relative path, size, mtime, and hash.
 2. Run `work-corpus` inventory and compare its counts to `01_INVENTORY/`.
-3. Run only the safe semantic batch: three clearly work-labeled Zoom VTTs and five clearly work-labeled Capacities Markdown notes.
+3. Run only the safe preflight batch: three clearly work-labeled Zoom VTTs and five clearly work-labeled Capacities Markdown notes.
 4. Verify source IDs, source versions, evidence locators, scope, and task candidates.
 5. Verify no current task is created from an old note, export-only date, or missing event date.
-6. Run the 29-file OneNote read-only acceptance pass and record 295 pages.
-7. Run Zoom grouping and existing-transcript matching without bulk transcription.
-8. Run the full local extraction only after the safe batch report is reviewed.
-9. Transcribe selected final media only after a separate user approval, using a local engine.
-10. Rebuild FTS and, if available, embeddings from SQLite evidence records.
-11. Run a query suite for work history, project changes, decisions, people, current tasks, conflicts, and evidence locations.
-12. Re-run every command and confirm idempotency and raw immutability.
+6. Run the 29-file OneNote read-only acceptance pass and record its actual
+   converter result. The reviewed expectation is 295 pages; the current run
+   fails closed with 29 blocked files and 0 pages because no converter is
+   installed.
+7. Run Zoom grouping and existing-transcript matching.
+8. Run the full local extraction for every readable source. Exclude only discovery evidence and source payloads that the inventory marks as missing.
+9. Build the complete Zoom transcription queue. Include every final MP4 or M4A without a usable transcript.
+10. Approve one full local transcription run. Process one media item at a time with a resumable checkpoint after each item.
+11. Continue until every eligible media item has an existing transcript or a terminal local status. Keep failed, partial, blocked, and artifact items in the report.
+12. Rebuild FTS and relationship indexes from SQLite evidence records.
+13. Run a query suite for work history, project changes, decision evidence, people, current tasks, conflicts, and evidence locations.
+14. Re-run every command and confirm idempotency and raw immutability.
+
+The full local coverage pass is complete when the report shows zero eligible
+Zoom media items without a terminal status. A failed or blocked item counts as
+accounted for. It does not count as successfully transcribed.
 
 **Documentation handoff after Gemini review:**
 
@@ -507,37 +547,40 @@ checkpoints do not duplicate evidence.
 - `progress.md` is marked as historical bridge context and replaced with current corpus milestones.
 - `TODO.md` receives the final reviewed implementation checklist. It must not claim tasks are complete before their verification gates pass.
 
-- [ ] Write report tests using only synthetic database rows. Assert that all report categories are present and sensitive values are not printed.
-- [ ] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_reports.py` and then `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests`.
-- [ ] Run `git diff --check` and a placeholder scan over the plan and docs.
-- [ ] Compare raw-file snapshots before and after the acceptance run. Expected result: identical paths, sizes, modification times, and hashes.
-- [ ] Record every unresolved item in `review_item` or the report. Do not hide parser failures or convert uncertainty into a successful status.
-- [ ] After this plan is reviewed and approved, write the ADR, `CONTEXT.md`, revised README/progress, and final `TODO.md`.
-- [ ] Commit the documentation handoff separately with `git commit -m "docs: document local work corpus implementation"`.
+- [x] Write report tests using only synthetic database rows. Assert that all report categories are present and sensitive values are not printed.
+- [x] Run `PYTHONPATH=work-corpus/src pytest -q work-corpus/tests/test_reports.py` and the complete package suite; the final no-coverage suite is 146 passed.
+- [x] Run `git diff --check` and a placeholder scan over the plan and docs.
+- [x] Compare raw-file snapshots before and after the acceptance run. Paths, sizes, modification times, and hashes are identical: 1,414 files, 58,965,738,600 bytes, zero mismatches.
+- [x] Record every unresolved item in `review_item` or the report. Parser, scope, task-date, sensitivity, unsupported-parser, blocked-engine, missing-converter, and missing-MCP states remain visible.
+- [x] Confirm that the full local coverage pass has zero eligible Zoom media items without a terminal status.
+- [x] Verify that the ADR, `CONTEXT.md`, README, progress log, and `TODO.md` match the executed behavior. Update only changed wording.
+- [x] Commit the documentation handoff separately with `git commit -m "docs: document local work corpus implementation"`.
 
 ## Genuine blockers and resolved assumptions
 
 ### Resolved from the current inventory
 
 - Notion is present and is separate from Capacities. The 134 ExportBlock rows are labeled Notion in the reviewed manifest.
-- OneNote access is resolved for extraction: the local test parsed all 29 `.one` files and rendered 295 pages. Integration and semantic review remain implementation work.
+- The reviewed OneNote parser fixture recorded 295 pages for 29 `.one` files.
+  The current runtime has no converter, so the acceptance pass fails closed
+  with 29 blocked files and 0 pages.
 - The Zoom meeting boundary is the dated folder directly below `data/Zoom/`; nested `Audio Record` folders are not meetings.
-- Existing transcripts are the first transcription source. The missing-transcript media queue is a later local operation.
+- Existing transcripts are the first transcription source. The complete missing-transcript media queue is a required local operation.
 - The raw data has no email corpus, and email remains out of scope.
 - The repository's old Atlas bridge is not a usable corpus foundation and must not receive the data root.
 
 ### Operational gates, not design blockers
 
-- A local transcription executable and model path must be available before any media is transcribed. The design supports a configured local command; it does not assume a particular engine.
+- A local transcription executable and model path must be available before the media coverage run. The design supports a configured local command and does not assume a particular engine. If the engine is unavailable, the run records `blocked` items and remains incomplete. It never switches to a cloud engine.
 - The OneNote converter must be available on the machine at implementation time. The selected route and version must be recorded in adapter metadata.
 - Work/personal/mixed classification and ambiguous entity merges require user review. This is expected review work, not a reason to send data to a service.
 - No current Wispr Flow or Granola export is present in this snapshot. The local snapshot adapter can be tested with synthetic fixtures and activated when a user-authorized export exists.
 
 ## Final TODO
 
-- [ ] Review this plan against `docs/superpowers/specs/2026-09-04-local-work-corpus-design.md` and the Antigravity review.
-- [ ] Have Gemini 3.1 Pro adversarially review this plan without access to `data/` or raw exports.
-- [ ] Apply only valid simplification, boundary, provenance, and repository-fit findings from that review.
-- [ ] Write the final ADR, `CONTEXT.md`, updated README/progress, and reviewed `TODO.md`.
-- [ ] Implement Tasks 1–9 in order with a test gate and commit after each task.
-- [ ] Keep the full corpus extraction, bulk local transcription, embeddings, and future Wispr/Granola intake behind explicit local review gates.
+- [x] Re-review this amended plan against `docs/superpowers/specs/2026-09-04-local-work-corpus-design.md` and the Antigravity review.
+- [x] Have Gemini 3.1 Pro adversarially review the amended plan without access to `data/` or raw exports.
+- [x] Apply only valid simplification, boundary, provenance, and repository-fit findings from that review.
+- [x] Verify the updated ADR, `CONTEXT.md`, progress log, and `TODO.md` after the review.
+- [x] Implement Tasks 1–9 in order with a test gate and commit after each task.
+- [x] Keep full source extraction and full local transcription coverage behind the run-level review gate. Defer embeddings and future Wispr/Granola intake.

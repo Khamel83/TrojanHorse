@@ -1,9 +1,14 @@
 # Local Work Corpus Design
 
-Status: Approved; implementation plan reviewed; implementation not started
+Status: Approved and amended for complete local transcription coverage;
+Gemini review revisions applied; Tasks 0–9 mechanically accepted on
+2026-09-04. OneNote conversion and successful local transcription remain
+operational gates.
 
 Review record: Antigravity/Gemini 3.8 Flash adversarial review is recorded in
 `docs/superpowers/reviews/2026-09-04-local-work-corpus-antigravity-review.md`.
+The complete-coverage amendment review is recorded in
+`docs/superpowers/reviews/2026-09-04-local-work-corpus-coverage-gemini-review.md`.
 The implementation plan is recorded in
 `docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md` and
 was reviewed by Gemini 3.1 Pro.
@@ -70,7 +75,7 @@ The system keeps raw files in place. Derived output uses separate paths.
 The source manifest includes discovery evidence such as
 `data/note-inventory-20260903-142816/` so that the physical-file accounting is
 complete. Discovery reports are not note or document evidence. They are
-excluded from source extraction, task extraction, and embedding indexes.
+excluded from source extraction, task extraction, and derived search indexes.
 
 ### 2. Extraction layer
 
@@ -84,7 +89,7 @@ The first source adapters are:
 
 | Source | Current evidence | Extraction behavior |
 |---|---|---|
-| Zoom | 276 dated meeting folders; MP4, M4A, VTT, TXT, `.zoom`, and `.tmp` files | Treat the dated folder as the meeting. Link existing captions first. Transcribe approved final media locally when no usable transcript exists. Hold `.tmp` and unvalidated `.zoom` parts. Treat XML/plist-shaped `client_config` files as non-failing metadata, not transcript evidence. |
+| Zoom | 276 dated meeting folders; MP4, M4A, VTT, TXT, `.zoom`, and `.tmp` files | Treat the dated folder as the meeting. Link existing captions first. Run every final media file without a usable transcript through the local coverage queue. Hold `.tmp` and unvalidated `.zoom` parts as artifacts. Treat XML/plist-shaped `client_config` files as non-failing metadata, not transcript evidence. |
 | Capacities | 421 Markdown records, 3 category CSV files, and a matching ZIP | Parse Markdown and CSV records. Preserve pointer-only attachment records. Do not fetch signed URLs. |
 | Notion | `LifeOS` ExportBlock with HTML, database CSV files, transcripts, and attachments | Parse HTML and CSV database exports. Link local attachments. Preserve page and database identity. |
 | OneNote | 29 `.one` section files | Use the tested local parser route. Write Markdown or HTML as derived output. Keep the `.one` files as source evidence. |
@@ -93,6 +98,10 @@ The first source adapters are:
 | Granola | No export in the current snapshot | Accept future user-authorized local records or MCP responses as incremental source records. |
 
 The Notion ExportBlock and Capacities export are separate source systems. The source registry must identify them by explicit root path, not by filename heuristics.
+
+The reviewed inventory expected 276 dated Zoom folders. The acceptance scan
+observed 275 dated source-bearing folders; this observed count is preserved in
+the reports rather than changing raw data or inventing a missing folder.
 
 ### 3. Canonical evidence layer
 
@@ -106,13 +115,15 @@ Core records are:
 - `project`
 - `person`
 - `organization`
-- `decision`
 - `task`
 - `evidence_record`
 - `review_item`
 - `relationship`
 
 Every canonical record has a stable ID and links to one or more source records.
+
+Decision text remains in evidence records during initial assembly. A separate
+structured decision view can be added after source coverage is complete.
 
 The canonical layer distinguishes:
 
@@ -128,10 +139,12 @@ The canonical layer distinguishes:
 The query layer uses three local retrieval methods:
 
 1. Exact search for names, dates, identifiers, and terms.
-2. Local embeddings for meaning-based search.
-3. Relationship traversal for projects, people, organizations, meetings, decisions, and tasks.
+2. Relationship traversal for projects, people, organizations, meetings,
+   evidence, and tasks.
 
-The canonical evidence layer is the source of truth. Search indexes and embeddings are rebuildable outputs.
+The canonical evidence layer is the source of truth. FTS and relationship
+indexes are rebuildable outputs. Embeddings are deferred until these paths
+prove insufficient.
 
 Career evidence is a derived query view over source-backed documents,
 projects, decisions, outcomes, and tasks. The initial implementation does not
@@ -158,11 +171,13 @@ The naming pipeline applies rules in this order:
 1. Exact alias matches.
 2. Regex and spelling normalization.
 3. Source-specific identifiers.
-4. Model grouping of similar names.
-5. Selection of the most common valid spelling.
-6. Review of ambiguous matches.
+4. Selection of the most common valid spelling among valid names.
+5. Review of ambiguous matches.
 
 The system preserves every original mention. A frequent typo does not become canonical when a valid name is available.
+
+A later local refinement pass may propose groups of similar names. The pass
+does not block corpus assembly or change canonical data without review.
 
 The system must keep two people separate when names collide. It uses role, organization, dates, meeting participants, and source context to disambiguate them.
 
@@ -196,7 +211,41 @@ Wispr Flow and Granola can create current task candidates from new records. Clea
 
 The system prefers existing local VTT and TXT transcripts over new transcription.
 
-When no usable transcript exists, the system may process approved final MP4 or M4A media with a local transcription tool.
+The current acceptance run linked 4 existing media-bearing transcript groups
+and kept 68 transcript-only groups separate. It accounted for 231 eligible
+final media items with terminal `blocked` status because no verified local
+engine was available. A blocked item is accounted for, but it is not a
+successful transcription.
+
+When no usable transcript exists, every final MP4 or M4A enters the local
+transcription queue. The operator approves one full local coverage run after
+the preflight report. The runner processes one media item at a time.
+
+The default engine is the locally installed Whisper large model when the local
+configuration provides it. The system records the exact executable and model
+version. It does not hard-code a model path.
+
+The runner saves a checkpoint after each item. A restart resumes from the last
+checkpoint. One failed item does not stop the remaining queue. The runner
+records the failure and continues.
+
+The queue uses these statuses:
+
+- `existing_transcript`: a usable local transcript covers the media or meeting.
+- `pending_approval`: the item waits for the one full-run approval.
+- `queued`: the item waits for the local runner.
+- `running`: the local runner processes the item.
+- `succeeded`: the local result passes quality checks.
+- `partial`: the result exists but has incomplete coverage or quality.
+- `failed`: the local engine cannot produce a usable result.
+- `blocked`: the local engine or required input is not available.
+- `artifact`: the file is a raw `.tmp`, unvalidated `.zoom`, corrupt, or other
+  non-final artifact.
+- `skipped`: the operator records a deliberate skip and its reason.
+
+The coverage run is complete when every eligible final media item has an
+existing transcript or a terminal status. A terminal failure or artifact is
+accounted for. It is not a successful transcription.
 
 Each derived transcript stores:
 
@@ -330,7 +379,9 @@ The design is complete when the system can demonstrate:
 - All readable Notion and Capacities records have derived source records.
 - Zoom folders produce one meeting group per dated folder.
 - Existing transcripts link before new transcription runs.
-- Missing Zoom transcripts have a local queue with status.
+- Every eligible final Zoom media item has an existing transcript or a
+  terminal local transcription status.
+- Raw Zoom artifacts and failed or blocked media remain visible with reasons.
 - Projects, people, and organizations have canonical records and aliases.
 - Former project names remain linked to one project.
 - Dates retain their source basis.
@@ -339,7 +390,7 @@ The design is complete when the system can demonstrate:
   task records.
 - Personal and mixed records stay outside the default work query.
 - Duplicate and conflict relationships remain visible.
-- Exact search, local embeddings, and relationship search return source-backed candidates.
+- Exact search and relationship search return source-backed candidates.
 - Query answers cite source paths and distinguish fact from inference.
 - Wispr Flow and Granola inputs can enter the corpus without duplicate records.
 - A rebuild can recreate derived records and indexes from raw evidence.
@@ -355,5 +406,8 @@ The design is complete when the system can demonstrate:
 - Automatic backfill of historical tasks.
 - Automatic deletion or movement of raw evidence.
 - A separate graph database before the SQLite relationship view proves insufficient.
+- An embedding index before exact search and SQLite relationships prove
+  insufficient.
+- Structured decision extraction before source coverage is complete.
 - A first-class `career_claim` table or polished career document generator
   before the evidence layer is stable.
