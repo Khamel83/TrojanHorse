@@ -244,7 +244,7 @@ def test_normalize_records_provenance_evidence_and_scrubs_fts(tmp_path: Path):
     assert result["normalized"] == 1
     assert normalized["status"] == "normalized"
     assert normalized["parser"] == "capacities_markdown:v1"
-    assert normalized["parser_version"] == "v1"
+    assert normalized["parser_version"] == "v2"
     assert len(evidence) == 1
     assert evidence[0]["locator"] == "document"
     output = Path(normalized["normalized_path"]).read_text(encoding="utf-8")

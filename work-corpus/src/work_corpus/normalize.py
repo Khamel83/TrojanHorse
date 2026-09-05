@@ -38,7 +38,9 @@ from .util import (
 )
 
 
-PARSER_VERSION = "v1"
+# Bumped after broadening pointer-only Capacities metadata detection. Existing
+# derived files must be rebuilt instead of being treated as unchanged.
+PARSER_VERSION = "v2"
 TIMESTAMP_LINE = re.compile(
     r"^\s*(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}\s*-->"
     r"\s*(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}"
