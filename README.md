@@ -1,9 +1,8 @@
 # TrojanHorse: Local Work Corpus
 
-> Current status: Tasks 0–9 are implemented and mechanically accepted. The raw
-> corpus passed immutability verification. OneNote conversion and successful
-> local Zoom transcription are blocked because the required local tools are not
-> installed.
+> Current status: The local corpus is operational. All currently parseable
+> sources are normalized; Zoom and OneNote processing completed with local
+> tools. Granola detail and transcript capture continues incrementally.
 
 The current project is a private, local, single-user work-evidence corpus. It
 is separate from Atlas and does not include email. The raw `data/` tree stays
@@ -16,14 +15,16 @@ authoritative project documents:
 - [Inventory and gaps](01_INVENTORY/coverage_and_gaps.md)
 - [Source access matrix](01_INVENTORY/source_access_matrix.md)
 - [Boundary ADR](docs/adr/0001-local-work-corpus-boundary.md)
+- [Current operational status](docs/LOCAL_WORK_CORPUS_STATUS.md)
 
 ## Current local corpus workflow
 
 The active runtime is the `work-corpus/` package. It inventories the raw tree,
 writes provenance-backed derived records outside `data/`, keeps Work scope
 enforced in queries, and records review or blocked states instead of hiding
-uncertainty. It does not read email, call Atlas, use cloud transcription, or
-connect to live Wispr Flow or Granola services.
+uncertainty. It does not read email, call Atlas, or use cloud transcription.
+User-authorized Granola and Wispr Flow responses are captured locally before
+import and are not written back to their providers.
 
 Run from the repository root:
 
@@ -34,6 +35,7 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . zoom-scan
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . transcribe --approve-run --all
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . report
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . query "project changes"
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . mcp-import
 ```
 
 The current acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
@@ -41,13 +43,12 @@ The current acceptance artifacts are [the JSON status report](work-corpus/corpus
 [the transcription queue](work-corpus/state/transcription_queue.csv), and
 [the raw immutability result](work-corpus/state/raw_immutability.json).
 
-The acceptance scan observed 1,414 files (1,394 substantive and 20 Finder
-metadata), 315 normalized source versions, 4 existing media-bearing Zoom
-transcript groups, 68 transcript-only groups, and 231 eligible media items
-with terminal `blocked` status. A local engine is required before those 231
-items can become successful or partial transcripts. The OneNote pass recorded
-29 blocked files and 0 extracted pages because its converter is unavailable.
-The reviewed 295-page expectation remains an explicit operational gate.
+The current local run observes 2,718 source files (55.3 GB), 1,693 normalized
+source versions, 231 Zoom groups with 230 successful and 1 partial local
+transcription result, and all 29 OneNote files with 295 extracted pages.
+Granola has 559 listed meetings; its local detail/transcript capture proceeds
+in five-record background batches. See [the current status document](docs/LOCAL_WORK_CORPUS_STATUS.md)
+for the exact remaining gaps.
 
 The repository also contains an older vault/RAG processor and Atlas bridge
 description below. That material is historical and is not an instruction to

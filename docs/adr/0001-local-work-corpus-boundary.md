@@ -1,7 +1,7 @@
 # ADR 0001: Local Work Corpus Boundary
 
-- Status: Accepted
-- Date: 2026-09-04
+- Status: Accepted; operational evidence amended 2026-09-06
+- Date: 2026-09-04; evidence update 2026-09-06
 - Scope: private, single-user work corpus
 
 ## Context
@@ -47,13 +47,15 @@ package.
 
 ## Implementation evidence
 
-The 2026-09-04 acceptance run preserved the boundary: the raw corpus had
-1,414 files and 58,965,738,600 bytes before and after the run, with zero
-path, size, modification-time, or content-hash mismatches. The local runtime
-recorded 231 eligible Zoom media items as terminal `blocked` because no
-verified local transcription engine was available, and it recorded all 29
-OneNote files as `blocked` because no local converter was available. No cloud,
-email, Atlas, or live MCP path was used.
+The original 2026-09-04 acceptance run preserved the boundary: its raw corpus
+had 1,414 files and 58,965,738,600 bytes before and after the run, with zero
+path, size, modification-time, or content-hash mismatches. That snapshot's
+Zoom and OneNote tool gaps were later resolved locally. The current run
+contains 2,718 inventoried files and 1,693 normalized source versions; 230
+Zoom groups succeeded, one remains partial because of genuinely quiet audio,
+and all 29 OneNote files produced 295 extracted pages. Granola responses are
+now captured locally before import. Raw data remains outside Git and is not
+rewritten.
 
 ## Consequences
 
@@ -62,11 +64,13 @@ Embeddings are optional and can be rebuilt. Every answer can point to a source
 path and locator. Parsing failures and uncertainty remain visible in review
 queues.
 
-The first run uses a conservative preflight scope review. It then performs
-full local extraction and full eligible Zoom transcription coverage. Some Zoom
-media can fail or remain an artifact. Some Capacities attachment payloads are
-absent. OneNote conversion depends on a configured local parser. These are
-visible processing states, not reasons to use a cloud service.
+The runtime performs complete local extraction when configured, including
+records with provisional scope labels; review queues remain for interpretation
+and canonicalization. Some Capacities pointer records are not yet mapped
+one-to-one to local payload paths, although all locally available payload bytes
+are preserved and normalized. Zoom artifacts and the one quiet partial remain
+visible. These are explicit processing states, not reasons to use a cloud
+service.
 
 The old root package and Atlas bridge remain historical code until a separate
 cleanup decision. The new runtime does not import them.

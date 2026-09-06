@@ -20,9 +20,9 @@ from .util import (
 )
 
 
-ADAPTER_VERSION = "v1"
+ADAPTER_VERSION = "v2"
 PARSER_NAME = "onenote_exporter:v1"
-TERMINATOR_NODE_WORKAROUND = "tolerant-binary-terminator-v1"
+TERMINATOR_NODE_WORKAROUND = "tolerant-binary-terminator-v2"
 
 
 @dataclass(frozen=True)

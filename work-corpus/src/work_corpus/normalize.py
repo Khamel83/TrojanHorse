@@ -1096,6 +1096,13 @@ def _task_date_basis(source_date_basis: str) -> str:
 
 
 def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
+    include_unclassified_sources = bool(
+        config.get(
+            "normalization",
+            "include_unclassified_sources",
+            False,
+        )
+    )
     skip_classifications = {
         str(value).casefold()
         for value in config.get(
@@ -1105,6 +1112,11 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         )
         if str(value).strip()
     }
+    if include_unclassified_sources:
+        # The caller has explicitly asked for a complete local corpus. Keep
+        # every parseable source, regardless of the inventory's provisional
+        # scope label or whether its path matched a configured root.
+        skip_classifications = set()
 
     mark_noncurrent_normalized_documents_retained(
         con,
@@ -1136,21 +1148,32 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ORDER BY s.source_system, s.relative_path
         """
     ).fetchall()
-    approved_root = [row for row in eligible if _has_explicit_source_root(row)]
-    unapproved_root = [row for row in eligible if not _has_explicit_source_root(row)]
+    if include_unclassified_sources:
+        approved_root = eligible
+        unapproved_root = []
+    else:
+        approved_root = [row for row in eligible if _has_explicit_source_root(row)]
+        unapproved_root = [row for row in eligible if not _has_explicit_source_root(row)]
     rows = [
         row
         for row in approved_root
         if (row["classification"] or "Unknown").casefold() not in skip_classifications
     ]
-    review_rows = [
-        row
-        for row in approved_root + unapproved_root
-        if (
-            not _has_explicit_source_root(row)
-            or (row["classification"] or "Unknown").casefold() in skip_classifications
-        )
-    ]
+    if include_unclassified_sources:
+        review_rows = [
+            row
+            for row in eligible
+            if (row["classification"] or "Unknown").casefold() in skip_classifications
+        ]
+    else:
+        review_rows = [
+            row
+            for row in approved_root + unapproved_root
+            if (
+                not _has_explicit_source_root(row)
+                or (row["classification"] or "Unknown").casefold() in skip_classifications
+            )
+        ]
 
     result = {
         "normalized": 0,

@@ -256,6 +256,45 @@ def test_residual_work_proposal_requires_explicit_root_before_normalization(
     assert normalized["normalized_path"] is None
 
 
+def test_include_all_sources_normalizes_residual_and_non_work_records(
+    tmp_path: Path,
+):
+    source_path = tmp_path / "data" / "residual" / "personal-note.md"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("# Synthetic personal note\n", encoding="utf-8")
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "normalization": {
+                    "include_unclassified_sources": True,
+                    "skip_classifications": ["Personal", "Unknown"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "include-all.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        source, _ = _row(con, "data/residual/personal-note.md")
+        result = normalize_all(config, con)
+        normalized = con.execute(
+            "SELECT status, normalized_path FROM normalized_document WHERE source_id=?",
+            (source["source_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert source["classification"] == "Personal"
+    assert result["normalized"] == 1
+    assert result["review_required"] == 0
+    assert normalized["status"] == "normalized"
+    assert normalized["normalized_path"]
+
+
 def test_source_and_version_identity_rules(tmp_path: Path):
     root = _prepare_tree(tmp_path)
     config = load_config(root)
@@ -438,15 +477,14 @@ def test_default_normalization_fails_closed_for_canonical_non_work_scopes(
     "config_name",
     ["config.json", "config.local.example.json"],
 )
-def test_shipped_config_keeps_canonical_non_work_scopes_fail_closed(
+def test_shipped_config_includes_all_local_source_records(
     config_name: str,
 ):
     config_path = Path(__file__).parents[1] / config_name
     payload = json.loads(config_path.read_text(encoding="utf-8"))
 
-    assert {"Personal", "Mixed", "Unknown"} <= set(
-        payload["normalization"]["skip_classifications"]
-    )
+    assert payload["normalization"]["include_unclassified_sources"] is True
+    assert payload["normalization"]["skip_classifications"] == []
 
 
 def test_zoom_personal_indicator_precedes_trusted_work_source(tmp_path: Path):
@@ -787,6 +825,39 @@ def test_ineligible_rescan_retires_prior_normalized_output(tmp_path: Path):
         "errors": 0,
     }
     assert active_after_normalize == 0
+
+
+def test_unchanged_zoom_media_keeps_known_version_when_rescan_skips_hash(
+    tmp_path: Path,
+):
+    relative_path = "data/Zoom/2025-01-01 Meeting/audio.m4a"
+    media_path = tmp_path / relative_path
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"stable media fixture")
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "media-version-preservation.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        initial_source, _ = _row(con, relative_path)
+        initial_version_id = initial_source["source_version_id"]
+        initial_hash = initial_source["content_sha256"]
+
+        config_dir = tmp_path / "work-corpus"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.json").write_text(
+            json.dumps({"inventory": {"hash_files_up_to_mb": 0}}),
+            encoding="utf-8",
+        )
+        low_hash_config = load_config(tmp_path)
+        inventory_module.inventory(low_hash_config, con)
+        current_source, _ = _row(con, relative_path)
+    finally:
+        con.close()
+
+    assert initial_version_id
+    assert initial_hash
+    assert current_source["source_version_id"] == initial_version_id
+    assert current_source["content_sha256"] == initial_hash
 
 
 def test_normalization_excludes_non_evidence_and_unhashed_inventory_rows(

@@ -287,11 +287,18 @@ def _onenote_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         )
     }
     state = _read_state_json(config, "onenote_acceptance.json")
+    expected_raw = state.get("reviewed_expected_pages")
+    expected_pages = (
+        int(expected_raw)
+        if isinstance(expected_raw, (int, float, str)) and str(expected_raw).strip()
+        else None
+    )
     return {
         "files": files,
         "parsed_files": status_counts.get("normalized", 0),
         "pages_extracted": int(state.get("pages_extracted", 0) or 0),
-        "reviewed_expected_pages": int(state.get("reviewed_expected_pages", 295) or 295),
+        "reviewed_expected_pages": expected_pages,
+        "page_count_basis": str(state.get("page_count_basis") or "not_recorded"),
         "converter_available": bool(state.get("converter_available", False)),
         "raw_read": bool(state.get("raw_read", False)),
         "status_counts": status_counts or {
@@ -1085,8 +1092,17 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "",
         "## Adapter and derived-view status",
         "",
+        "",
+    ])
+    onenote_page_expectation = (
+        f"{onenote['pages_extracted']:,} pages extracted of "
+        f"{onenote['reviewed_expected_pages']:,} reviewed pages"
+        if onenote["reviewed_expected_pages"] is not None
+        else f"{onenote['pages_extracted']:,} pages extracted"
+    )
+    md.extend([
         f"- OneNote: {onenote['files']:,} files; {onenote['parsed_files']:,} parsed; "
-        f"{onenote['pages_extracted']:,} pages extracted of {onenote['reviewed_expected_pages']:,} reviewed pages; "
+        f"{onenote_page_expectation}; page_count_basis={onenote['page_count_basis']}; "
         f"converter_available={str(onenote['converter_available']).lower()}.",
         f"- Capacities pointer-only payloads: {capacities['pointer_only_payloads']:,}; signed URLs fetched: {capacities['signed_urls_fetched']:,}.",
         f"- Notion: {notion['page_count']:,} pages, {notion['database_count']:,} databases, "

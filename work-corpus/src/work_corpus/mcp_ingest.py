@@ -289,6 +289,20 @@ def _normalized_output(
     return output
 
 
+def _derived_content_length(con: sqlite3.Connection, evidence_id: str) -> int:
+    row = con.execute(
+        "SELECT derived_text FROM derived_text_fts WHERE evidence_id=?",
+        (evidence_id,),
+    ).fetchone()
+    if not row or not row[0]:
+        return 0
+    text = str(row[0])
+    marker = "\n## Content\n\n"
+    if marker in text:
+        text = text.split(marker, 1)[1]
+    return len(text.strip())
+
+
 def _persist_record(
     config: Config,
     con: sqlite3.Connection,
@@ -311,11 +325,7 @@ def _persist_record(
         response_sha256,
     )
     existing = con.execute(
-        """
-        SELECT original_response_sha256, normalized_evidence_id
-        FROM mcp_item
-        WHERE item_id=?
-        """,
+        "SELECT * FROM mcp_item WHERE item_id=?",
         (item_id,),
     ).fetchone()
     safe_fields = {
@@ -326,6 +336,37 @@ def _persist_record(
         )
         for key, value in fields.items()
     }
+    if (
+        existing
+        and existing["normalized_evidence_id"]
+        and con.execute(
+            "SELECT 1 FROM evidence_record WHERE evidence_id=?",
+            (existing["normalized_evidence_id"],),
+        ).fetchone()
+        and _derived_content_length(con, str(existing["normalized_evidence_id"]))
+        > len(str(safe_fields["content"] or "").strip())
+    ):
+        # An overlapping listing or metadata snapshot must not replace a
+        # transcript/summary already captured from a richer response. Keep
+        # the canonical evidence and merge only previously missing dates.
+        con.execute(
+            """
+            UPDATE mcp_item
+            SET capture_date=COALESCE(capture_date, ?),
+                event_date=COALESCE(event_date, ?),
+                retrieval_date=COALESCE(retrieval_date, ?),
+                updated_at=?
+            WHERE item_id=?
+            """,
+            (
+                safe_fields["capture_date"],
+                safe_fields["event_date"],
+                safe_fields["retrieval_date"],
+                now_iso(),
+                item_id,
+            ),
+        )
+        return item_id, str(existing["normalized_evidence_id"])
     if (
         existing
         and existing["original_response_sha256"] == response_sha256

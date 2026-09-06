@@ -353,12 +353,32 @@ def _extraction_status(
     kind: str,
     content_hash: str,
     archive_matches_extracted_root: bool,
+    *,
+    extension: str = "",
+    local_converter_available: bool = False,
 ) -> str:
     if kind in {"metadata", "discovery"} or archive_matches_extracted_root:
         return "excluded"
+    if (
+        kind == "archive"
+        and extension.casefold() == ".one"
+        and local_converter_available
+    ):
+        return "ready" if content_hash else "inventory_only"
     if kind == "archive":
         return "archive_only_inventory" if content_hash else "inventory_only"
     return "ready" if content_hash else "inventory_only"
+
+
+def _onenote_converter_available(config: Config, extension: str, source_system: str) -> bool:
+    if source_system != "onenote" or extension.casefold() != ".one":
+        return False
+    try:
+        from .onenote import configured_converter
+
+        return configured_converter(config) is not None
+    except Exception:
+        return False
 
 
 def _source_rows(con: sqlite3.Connection) -> List[Dict[str, object]]:
@@ -737,6 +757,25 @@ def inventory(
                 errors.append(f"hash {path}: {exc}")
 
         source_id = stable_source_id(source_root_key, relative_path)
+        if not content_hash and source_system == "zoom" and kind == "media":
+            # Large Zoom media is intentionally not rehashed on every scan.
+            # Preserve a previously verified version when its size and mtime
+            # still match, so transcription jobs remain bound to current bytes.
+            prior_media = con.execute(
+                """
+                SELECT source_version_id, content_sha256, size_bytes, mtime_ns
+                FROM source_version
+                WHERE source_id=? AND size_bytes=? AND mtime_ns=?
+                ORDER BY last_seen DESC, source_version_id
+                LIMIT 1
+                """,
+                (source_id, stat.st_size, stat.st_mtime_ns),
+            ).fetchone()
+            if (
+                prior_media
+                and prior_media["content_sha256"]
+            ):
+                content_hash = str(prior_media["content_sha256"])
         source_version_id = stable_source_version_id(source_id, content_hash)
         scope = classify_scope(relative_path, source_system)
         archive_metadata: Dict[str, object] = {}
@@ -753,10 +792,17 @@ def inventory(
                 errors.append(archive_error)
             archive_members_listed += len(archive_member_rows)
 
+        local_converter_available = _onenote_converter_available(
+            config,
+            extension,
+            source_system,
+        )
         extraction_status = _extraction_status(
             kind,
             content_hash,
             bool(archive_metadata.get("archive_matches_extracted_root")),
+            extension=extension,
+            local_converter_available=local_converter_available,
         )
         parse_readiness = (
             "excluded"
@@ -802,6 +848,7 @@ def inventory(
             "scope_reason": scope.reason,
             "source_date_basis": date_basis,
             "extraction_status": extraction_status,
+            "local_converter_available": local_converter_available,
             **archive_metadata,
         }
 

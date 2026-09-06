@@ -187,6 +187,81 @@ def test_overlapping_snapshot_reuses_evidence_for_same_response(tmp_path: Path):
     assert second_evidence == first_evidence
 
 
+def test_thinner_overlapping_snapshot_does_not_replace_richer_content(tmp_path: Path):
+    rich_payload = json.dumps(
+        {
+            "items": [
+                {
+                    "id": "merge-1",
+                    "title": "Recorded meeting",
+                    "event_date": "2026-09-03T10:00:00Z",
+                    "retrieval_date": "2026-09-06",
+                    "transcript": "Long transcript content. " * 100,
+                }
+            ]
+        }
+    )
+    config, con, rich_source_id, _version_id = _source(
+        tmp_path, "granola", "a-rich.json", rich_payload
+    )
+    thin_payload = json.dumps(
+        {
+            "items": [
+                {
+                    "id": "merge-1",
+                    "title": "Recorded meeting",
+                    "event_date": "2026-09-03T10:00:00Z",
+                    "summary": "Short listing metadata.",
+                }
+            ]
+        }
+    )
+    thin_path = tmp_path / "data/mcp/granola/z-thin.json"
+    thin_path.write_text(thin_payload, encoding="utf-8")
+    thin_source_id = upsert_source_record(
+        con,
+        root_key="mcp_granola",
+        relative_path="data/mcp/granola/z-thin.json",
+        source_system="granola",
+        kind="mcp",
+        scope="Work",
+        sensitivity="internal_review",
+    )
+    thin_bytes = thin_payload.encode("utf-8")
+    record_source_version(
+        con,
+        thin_source_id,
+        len(thin_bytes),
+        thin_path.stat().st_mtime_ns,
+        hashlib.sha256(thin_bytes).hexdigest(),
+    )
+    con.execute(
+        """
+        UPDATE source_record
+        SET absolute_path=?, extension=?, classification='Work', scope='Work',
+            extraction_status='ready'
+        WHERE source_id=?
+        """,
+        (str(thin_path), thin_path.suffix.lower(), thin_source_id),
+    )
+    con.commit()
+    try:
+        result = ingest_mcp_sources(config, con)
+        item = con.execute("SELECT * FROM mcp_item").fetchone()
+        derived = con.execute(
+            "SELECT derived_text FROM derived_text_fts WHERE evidence_id=?",
+            (item["normalized_evidence_id"],),
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    assert result["items"] == 2
+    assert item["source_id"] == rich_source_id
+    assert item["retrieval_date"] == "2026-09-06"
+    assert "Long transcript content." in derived
+    assert "Short listing metadata." not in derived
+
+
 def test_mcp_derived_metadata_is_scrubbed(tmp_path: Path):
     payload = json.dumps(
         {

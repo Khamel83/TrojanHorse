@@ -8,12 +8,16 @@
 
 **Tech Stack:** Python 3.9+, the existing `work-corpus/` setuptools package, SQLite with FTS5 and WAL, local filesystem adapters, local PDF/Office/OneNote tools where available, `pytest`, and a configured local transcription engine. No cloud service, network call, Redis, RabbitMQ, read replica, public API, or external model call with raw evidence.
 
-Status: Gemini 3.1 Pro review received. Valid revisions are applied. Tasks
-0–9 were executed and mechanically accepted on 2026-09-04. The raw corpus is
-unchanged. A local OneNote converter and a verified local transcription engine
-remain operational gates.
+Status: The reviewed implementation sequence was executed. The original
+2026-09-04 acceptance record below is historical. Current operational evidence
+is in `docs/LOCAL_WORK_CORPUS_STATUS.md`: local OneNote conversion and local
+transcription are operational, complete-source normalization is enabled, and
+Granola capture continues in bounded background batches.
 
-## Execution record
+## Historical execution record
+
+The counts in the following paragraph describe the pre-tool-installation
+acceptance snapshot. They are retained as audit history, not as current status.
 
 The task sequence completed in order with focused tests, full package tests,
 and a commit after each implementation task. The final no-coverage suite is

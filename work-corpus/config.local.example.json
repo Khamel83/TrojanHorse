@@ -5,13 +5,8 @@
     "hash_files_up_to_mb": 32
   },
   "normalization": {
-    "skip_classifications": [
-      "Personal",
-      "Mixed",
-      "Unknown",
-      "potential_personal",
-      "mixed_or_review"
-    ],
+    "include_unclassified_sources": true,
+    "skip_classifications": [],
     "max_table_rows": 100000
   },
   "zoom": {
@@ -31,6 +26,16 @@
       "vtt",
       "-o",
       "{output_vtt}"
+    ]
+  },
+  "onenote": {
+    "converter_root": "/path/to/onenote-exporter",
+    "converter_version": "onenote-exporter@local-with-pyonenote-terminator-256",
+    "converter_command": [
+      "/path/to/onenote-exporter-venv/bin/python",
+      "/path/to/TrojanHorse/work-corpus/scripts/onenote_export_one.py",
+      "{input}",
+      "{output}"
     ]
   },
   "source_roots": {

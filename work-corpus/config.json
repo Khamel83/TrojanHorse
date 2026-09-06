@@ -10,6 +10,16 @@
     "notes_notion": "data/notes/notion",
     "notes_capacities": "data/notes/capacities",
     "notes_other": "data/notes/other",
+    "capacities_icloud_20250920": {
+      "path": "data/notes/Capacities iCloud 2025-09-20",
+      "source_system": "capacities",
+      "precedence": 32
+    },
+    "capacities_icloud_20250806": {
+      "path": "data/notes/Capacities iCloud 2025-08-06",
+      "source_system": "capacities",
+      "precedence": 33
+    },
     "mcp_granola": "data/mcp/granola",
     "mcp_wispr_flow": "data/mcp/wispr_flow"
   },
@@ -32,19 +42,14 @@
     "max_archive_entries_to_list": 100000
   },
   "normalization": {
+    "include_unclassified_sources": true,
     "max_text_file_mb": 200,
     "max_table_rows": 100000,
     "extract_pdf_when_pypdf_available": true,
     "extract_docx_when_available": true,
     "extract_pptx_when_available": true,
     "extract_xlsx_when_available": true,
-    "skip_classifications": [
-      "Personal",
-      "Mixed",
-      "Unknown",
-      "potential_personal",
-      "mixed_or_review"
-    ]
+    "skip_classifications": []
   },
   "zoom": {
     "language": "en",

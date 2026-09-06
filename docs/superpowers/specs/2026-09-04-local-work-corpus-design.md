@@ -1,9 +1,9 @@
 # Local Work Corpus Design
 
-Status: Approved and amended for complete local transcription coverage;
-Gemini review revisions applied; Tasks 0–9 mechanically accepted on
-2026-09-04. OneNote conversion and successful local transcription remain
-operational gates.
+Status: Approved and operationally amended 2026-09-06 for complete local
+source ingestion and local transcription coverage. The original 2026-09-04
+acceptance snapshot is historical; see
+`docs/LOCAL_WORK_CORPUS_STATUS.md` for current counts and gaps.
 
 Review record: Antigravity/Gemini 3.8 Flash adversarial review is recorded in
 `docs/superpowers/reviews/2026-09-04-local-work-corpus-antigravity-review.md`.
@@ -90,12 +90,12 @@ The first source adapters are:
 | Source | Current evidence | Extraction behavior |
 |---|---|---|
 | Zoom | 276 dated meeting folders; MP4, M4A, VTT, TXT, `.zoom`, and `.tmp` files | Treat the dated folder as the meeting. Link existing captions first. Run every final media file without a usable transcript through the local coverage queue. Hold `.tmp` and unvalidated `.zoom` parts as artifacts. Treat XML/plist-shaped `client_config` files as non-failing metadata, not transcript evidence. |
-| Capacities | 421 Markdown records, 3 category CSV files, and a matching ZIP | Parse Markdown and CSV records. Preserve pointer-only attachment records. Do not fetch signed URLs. |
+| Capacities | 1,722 local files across the original export and two asset-inclusive iCloud snapshots; 451 payload files | Parse all locally available Markdown, CSV, text, email, office, PDF, and image payloads. Preserve pointer metadata. Do not fetch signed URLs. |
 | Notion | `LifeOS` ExportBlock with HTML, database CSV files, transcripts, and attachments | Parse HTML and CSV database exports. Link local attachments. Preserve page and database identity. |
-| OneNote | 29 `.one` section files | Use the tested local parser route. Write Markdown or HTML as derived output. Keep the `.one` files as source evidence. |
+| OneNote | 29 `.one` section files; 295 pages extracted | Use the tested local parser route. Write Markdown as derived output. Keep the `.one` files as source evidence. |
 | Formal records | PDF, DOCX, PPTX, XLSX, and CSV files | Extract text, pages, slides, tables, and sheet information. Preserve document locations. |
-| Wispr Flow | No export in the current snapshot | Accept future user-authorized local records as incremental source records. |
-| Granola | No export in the current snapshot | Accept future user-authorized local records or MCP responses as incremental source records. |
+| Wispr Flow | 13 locally captured records | Import local snapshots and retain unknown retrieval-date freshness. |
+| Granola | 559 listed meetings; 69 detailed summaries and 19 transcripts captured so far | Fetch details and transcripts incrementally in five-record batches. Preserve raw responses, merge by provider ID, and record unavailable IDs without dropping them. |
 
 The Notion ExportBlock and Capacities export are separate source systems. The source registry must identify them by explicit root path, not by filename heuristics.
 
@@ -211,11 +211,10 @@ Wispr Flow and Granola can create current task candidates from new records. Clea
 
 The system prefers existing local VTT and TXT transcripts over new transcription.
 
-The current acceptance run linked 4 existing media-bearing transcript groups
-and kept 68 transcript-only groups separate. It accounted for 231 eligible
-final media items with terminal `blocked` status because no verified local
-engine was available. A blocked item is accounted for, but it is not a
-successful transcription.
+The current run accounts for 231 tracked Zoom groups. It has 230 successful
+local transcription results, one quality-limited partial result for genuinely
+quiet audio, and terminal artifact results for non-final media. No eligible
+final media item is blocked or pending.
 
 When no usable transcript exists, every final MP4 or M4A enters the local
 transcription queue. The operator approves one full local coverage run after
@@ -337,7 +336,9 @@ tasks. It must label the result as raw or unreviewed evidence.
 
 ## Wispr Flow and Granola
 
-Wispr Flow and Granola are the present and future input streams.
+Wispr Flow and Granola are local input streams. Granola detail and transcript
+retrieval is currently continued by a bounded Codex heartbeat; the heartbeat
+does not write back to Granola.
 
 Each input keeps:
 

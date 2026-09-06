@@ -1,8 +1,14 @@
 # Local Work Corpus Context
 
-Status: Tasks 0–9 implemented and mechanically accepted on 2026-09-04.
-The raw corpus is unchanged. OneNote conversion and successful local Zoom
-transcription remain blocked by unavailable local tools.
+Status: Current operational state recorded on 2026-09-06. All currently
+parseable sources are normalized. OneNote conversion and local Zoom coverage
+are operational. Granola detail/transcript capture continues in bounded
+five-record background batches.
+
+The detailed live counts and remaining gaps are maintained in
+[LOCAL_WORK_CORPUS_STATUS.md](docs/LOCAL_WORK_CORPUS_STATUS.md). The older
+2026-09-04 acceptance numbers below are historical and must not be read as the
+current runtime state.
 
 This project is a private, local, single-user work-evidence corpus. It is
 separate from Atlas. It does not read or write email.
@@ -45,9 +51,13 @@ The views share source IDs and provenance. They are not separate databases.
 - `data/notes/Notes/`: Capacities Markdown and category export.
 - `data/notes/40b7a161-92e3-450d-8dab-c2bb4a080adf_ExportBlock-7045c812-ccf8-4b28-b774-5502ee6696b2/`:
   Notion ExportBlock with LifeOS databases and local attachments.
-- `data/notes/Backup/`: 29 OneNote section files. The reviewed parser fixture
-  recorded 295 pages, but the current runtime acceptance found no converter and
-  therefore blocked all 29 files before raw reads.
+- `data/notes/Backup/`: 29 OneNote section files. The local converter now
+  extracts and normalizes all 295 observed pages while preserving the `.one`
+  files as raw evidence.
+- `data/notes/Capacities iCloud 2025-09-20/` and
+  `data/notes/Capacities iCloud 2025-08-06/`: additional local Capacities
+  snapshots containing payload-bearing files. They are preserved as source
+  snapshots and are included in the current inventory.
 - Formal local records: PDFs, Office files, tables, and related work
   documents identified by the inventory.
 - `data/note-inventory-20260903-142816/`: machine-discovery evidence only. It
@@ -59,7 +69,7 @@ found 1,414 present files, including 20 Finder metadata files, and
 physical file is the unclassified `data/.DS_Store` that was present in the
 live tree and is preserved.
 
-## Current acceptance
+## Historical acceptance snapshot
 
 - 315 source versions normalized; 418 remain in scope review; 1 optional
   parser case is unsupported; 0 parsing errors were recorded.
@@ -76,7 +86,7 @@ live tree and is preserved.
   passed with 1,414 files, 58,965,738,600 bytes, and zero mismatches.
 
 See the generated [status report](work-corpus/corpus/reports/status.html) and
-[acceptance summary](work-corpus/corpus/reports/what_we_have_and_need.md).
+the [current operational status](docs/LOCAL_WORK_CORPUS_STATUS.md).
 
 ## Rules
 
@@ -99,8 +109,9 @@ See the generated [status report](work-corpus/corpus/reports/status.html) and
 - The coverage run processes one eligible media item at a time. It saves a
   checkpoint after each item and resumes after interruption.
 - When a verified local Whisper or equivalent engine is configured, the run
-  records its exact executable and model version. The current machine has no
-  verified local engine, so 231 eligible items are visibly `blocked`.
+  records its exact executable and model version. The current machine uses
+  local MacWhisper/MLX Whisper paths; 230 eligible groups succeeded and one
+  remains partial because the recording is genuinely quiet.
 - Every final Zoom media item has an existing transcript or a terminal local
   status. Failed, partial, blocked, and artifact items remain visible.
 - Existing raw files stay in place. The system never moves, deletes, or
@@ -120,4 +131,5 @@ See the generated [status report](work-corpus/corpus/reports/status.html) and
    complete before its verification gate passes.
 
 There is no current `content.md` in this repository. `CONTEXT.md`, the design
-specification, the ADR, and the README carry the current project context.
+specification, the ADR, the README, and
+`docs/LOCAL_WORK_CORPUS_STATUS.md` carry the current project context.
