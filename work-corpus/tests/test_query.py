@@ -8,6 +8,7 @@ from typing import Optional
 import pytest
 
 from work_corpus import db
+import work_corpus.query as query_module
 from work_corpus.db import connect
 from work_corpus.entities import create_entity
 from work_corpus.query import diagnostic_search, search
@@ -286,6 +287,66 @@ def test_direct_evidence_write_redacts_fts_before_query_rebuild(tmp_path: Path):
 
     assert "https://" not in indexed
     assert "secret-value" not in indexed
+
+
+def test_query_rebuild_only_scrubs_rows_with_sensitive_markers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    con = connect(tmp_path / "fts-candidate-filter.sqlite")
+    try:
+        con.execute(
+            "INSERT INTO derived_text_fts (document_id, evidence_id, derived_text) "
+            "VALUES (?, ?, ?)",
+            ("safe-document", "safe-evidence", "ordinary work evidence"),
+        )
+        con.execute(
+            "INSERT INTO derived_text_fts (document_id, evidence_id, derived_text) "
+            "VALUES (?, ?, ?)",
+            ("secret-document", "secret-evidence", "api_key=secret-value"),
+        )
+        con.commit()
+        seen = []
+
+        def fake_redact(value: str) -> str:
+            seen.append(value)
+            return value
+
+        monkeypatch.setattr(query_module, "redact_snippet", fake_redact)
+        query_module.rebuild_search_index(con)
+    finally:
+        con.close()
+
+    assert seen == ["api_key=secret-value"]
+
+
+def test_search_applies_limit_before_materializing_common_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    con = connect(tmp_path / "bounded-search.sqlite")
+    try:
+        for index in range(12):
+            _add_source(
+                con,
+                tmp_path,
+                name=f"common-{index}.md",
+                scope="Work",
+                text="common-search-marker work evidence",
+                root_key=f"common-{index}",
+            )
+        seen_match_types = []
+        original_hit_from_row = query_module._hit_from_row
+
+        def wrapped_hit_from_row(row, *, match_type, **kwargs):
+            seen_match_types.append(match_type)
+            return original_hit_from_row(row, match_type=match_type, **kwargs)
+
+        monkeypatch.setattr(query_module, "_hit_from_row", wrapped_hit_from_row)
+        result = search(con, "common-search-marker", limit=3, raw_fallback=False)
+    finally:
+        con.close()
+
+    assert result["result_count"] == 3
+    assert len(seen_match_types) <= 6
 
 
 def test_unreviewed_relationship_is_not_labeled_canonical(tmp_path: Path):

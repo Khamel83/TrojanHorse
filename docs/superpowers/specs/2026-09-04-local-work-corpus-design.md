@@ -113,7 +113,7 @@ The first source adapters are:
 | OneNote | 29 `.one` section files; 295 pages extracted | Use the tested local parser route. Write Markdown as derived output. Keep the `.one` files as source evidence. |
 | Formal records | PDF, DOCX, PPTX, XLSX, and CSV files | Extract text, pages, slides, tables, and sheet information. Preserve document locations. |
 | Wispr Flow | 13 locally captured records | Import local snapshots and retain unknown retrieval-date freshness. |
-| Granola | 559 listed meetings; the current checkpoint has 166 distinct detail captures, 161 detailed summaries, and 157 transcripts | Fetch up to ten detail IDs per pass, then retrieve one transcript per ID. Preserve raw responses, merge by provider ID, and record unavailable IDs without dropping them. After an explicit rate-limit outcome, use a five-ID recovery pass and return to ten after a clean pass. |
+| Granola | REST archive has 559 unique API notes, 559 summaries, and 557 transcripts; the MCP shadow checkpoint has 559 UUID-listed meetings with 186 detail captures, 181 detailed summaries, and 177 transcripts | Use the read-only REST API for the one-time archive: list up to 30 notes per opaque-cursor page, fetch each note, and use the paginated transcript endpoint for oversized responses. Preserve raw responses and searchable derived records. Retain the MCP connector's up-to-ten detail IDs, serialized transcript calls, and five-ID rate-limit recovery as an optional shadow refresh path. |
 
 The Notion ExportBlock and Capacities export are separate source systems. The source registry must identify them by explicit root path, not by filename heuristics.
 
@@ -354,12 +354,17 @@ tasks. It must label the result as raw or unreviewed evidence.
 
 ## Wispr Flow and Granola
 
-Wispr Flow and Granola are local input streams. Granola detail and transcript
-retrieval is continued by a bounded Codex heartbeat; the heartbeat does not
-write back to Granola. The connector accepts up to ten meeting IDs for one
-detail request, while transcript retrieval accepts one meeting ID per request.
-The heartbeat therefore uses up to ten IDs per clean pass, serializes transcript
-requests, and falls back to five IDs after an explicit rate-limit outcome.
+Wispr Flow and Granola are local input streams. The one-time Granola archive
+uses the read-only REST API and does not write back to Granola. The API lists up
+to 30 notes per opaque-cursor page. Each note is fetched with its transcript;
+oversized transcripts use the paginated transcript endpoint. API IDs use
+`not_...` and are reported separately from MCP UUID IDs.
+
+The optional MCP shadow path does not write back to Granola. It accepts up to
+ten meeting IDs for one detail request, while transcript retrieval accepts one
+meeting ID per request. A clean shadow pass therefore uses up to ten IDs,
+serializes transcript requests, and falls back to five IDs after an explicit
+rate-limit outcome.
 
 The persisted Granola progress checkpoint is a derived reconciliation of the
 latest inventory, raw captures, imported evidence, and searchable evidence. It

@@ -10,13 +10,14 @@ from typing import Any, Dict, Optional
 
 from .config import Config, load_config
 from .db import connect
+from .granola_progress import write_granola_progress
 from .inventory import inventory
 from .mcp_ingest import ingest_mcp_sources
 from .normalize import normalize_all
-from .query import search
+from .query import rebuild_search_index, search
 from .report import build_report
 from .transcription import transcribe_jobs
-from .util import ensure_dir, now_iso, stable_id
+from .util import atomic_write_json, ensure_dir, now_iso, stable_id
 from .zoom import scan_zoom
 
 
@@ -60,6 +61,23 @@ def _record_end(con, run_id: str, status: str, details: Dict[str, Any]) -> None:
         (now_iso(), status, json.dumps(details, ensure_ascii=False), run_id),
     )
     con.commit()
+
+
+def _record_index_checkpoint(config: Config, con) -> Dict[str, Any]:
+    """Scrub existing FTS rows and record the current derived index counts."""
+    scrubbed_rows = rebuild_search_index(con)
+    state = {
+        "fts_rows": int(con.execute("SELECT COUNT(*) FROM derived_text_fts").fetchone()[0]),
+        "relationship_rows": int(con.execute("SELECT COUNT(*) FROM relationship").fetchone()[0]),
+        "scrubbed_rows": int(scrubbed_rows),
+        "verified_at": now_iso(),
+        "fts_api": "work_corpus.query.rebuild_search_index",
+        "relationship_api": "work_corpus.entities (no corpus-wide relationship rebuild requested)",
+    }
+    path = config.state_dir / "index_rebuild.json"
+    config.assert_derived_path(path)
+    atomic_write_json(path, state)
+    return state
 
 
 def run_pipeline(config: Config, con, full_hash: bool = False) -> Dict[str, Any]:
@@ -135,6 +153,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Inspect excluded scopes locally and label them excluded_scope.",
     )
     sub.add_parser("mcp-import", help="Import Granola/Wispr Flow dumps.")
+    sub.add_parser(
+        "granola-progress",
+        help="Reconcile exact Granola capture, import, and search progress.",
+    )
     return parser
 
 
@@ -187,6 +209,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
         elif args.command == "mcp-import":
             details = ingest_mcp_sources(config, con)
+        elif args.command == "granola-progress":
+            details = write_granola_progress(config, con)
+            details["index_verification"] = _record_index_checkpoint(config, con)
         else:
             parser.error(f"unknown command: {args.command}")
 

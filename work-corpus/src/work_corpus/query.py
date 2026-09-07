@@ -56,6 +56,22 @@ _TOKEN_RE = re.compile(
     r"\b(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|"
     r"AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|sk-[A-Za-z0-9_-]{20,})\b"
 )
+_REBUILD_CANDIDATE_LIKE = (
+    "%http%",
+    "%api%key%",
+    "%secret%",
+    "%token%",
+    "%credential%",
+    "%password%",
+    "%passwd%",
+    "%bearer%",
+    "%authorization%",
+    "%private%key%",
+    "%akia%",
+    "%asia%",
+    "%sk-%",
+    "%eyj%",
+)
 
 
 class QueryValidationError(ValueError):
@@ -119,8 +135,14 @@ def rebuild_search_index(con: sqlite3.Connection) -> int:
     The FTS table is derived state.  This function never reads or writes the
     immutable raw source records, and it is safe to run repeatedly.
     """
+    predicates = " OR ".join(
+        "lower(COALESCE(derived_text, '')) LIKE ?"
+        for _term in _REBUILD_CANDIDATE_LIKE
+    )
     rows = con.execute(
-        "SELECT rowid, derived_text FROM derived_text_fts ORDER BY rowid"
+        "SELECT rowid, derived_text FROM derived_text_fts "
+        f"WHERE {predicates} ORDER BY rowid",
+        _REBUILD_CANDIDATE_LIKE,
     ).fetchall()
     changed = 0
     for row in rows:
@@ -290,6 +312,7 @@ def _work_evidence_rows(
     fts_query: Optional[str] = None,
     evidence_ids: Optional[Sequence[str]] = None,
     diagnostic: bool = False,
+    limit: Optional[int] = None,
 ) -> List[sqlite3.Row]:
     predicates: List[str] = []
     parameters: List[Any] = []
@@ -297,7 +320,10 @@ def _work_evidence_rows(
         predicates.append(_scope_sql())
     if exact_question is not None:
         predicates.append(
-            "(instr(lower(COALESCE(f.derived_text, '')), lower(?)) > 0 "
+            "(e.evidence_id IN ("
+            "SELECT exact_fts.evidence_id FROM derived_text_fts exact_fts "
+            "WHERE instr(lower(COALESCE(exact_fts.derived_text, '')), lower(?)) > 0"
+            ") "
             "OR instr(lower(e.locator), lower(?)) > 0 "
             "OR instr(lower(COALESCE(s.date_hint, '')), lower(?)) > 0 "
             "OR instr(lower(COALESCE(s.metadata_json, '')), lower(?)) > 0 "
@@ -339,12 +365,32 @@ def _work_evidence_rows(
         parameters.append(fts_query)
 
     where = " AND ".join(predicates) or "1=1"
-    sql = f"""
-        {_evidence_select()}
-        LEFT JOIN derived_text_fts f ON f.evidence_id=e.evidence_id
-        WHERE {where}
-        ORDER BY s.relative_path, e.locator, e.evidence_id
-    """
+    if limit is None:
+        sql = f"""
+            {_evidence_select()}
+            LEFT JOIN derived_text_fts f ON f.evidence_id=e.evidence_id
+            WHERE {where}
+            ORDER BY s.relative_path, e.locator, e.evidence_id
+        """
+    else:
+        sql = f"""
+            WITH candidates AS (
+                SELECT DISTINCT e.evidence_id AS evidence_id,
+                                s.relative_path AS source_path,
+                                e.locator AS locator
+                FROM evidence_record e
+                JOIN source_version v ON v.source_version_id=e.source_version_id
+                JOIN source_record s ON s.source_id=v.source_id
+                WHERE {where}
+                ORDER BY source_path, locator, evidence_id
+                LIMIT ?
+            )
+            {_evidence_select()}
+            LEFT JOIN derived_text_fts f ON f.evidence_id=e.evidence_id
+            JOIN candidates c ON c.evidence_id=e.evidence_id
+            ORDER BY s.relative_path, e.locator, e.evidence_id
+        """
+        parameters.append(limit)
     try:
         return con.execute(sql, parameters).fetchall()
     except sqlite3.OperationalError as exc:
@@ -360,12 +406,14 @@ def _fetch_evidence_by_ids(
     evidence_ids: Iterable[str],
     *,
     diagnostic: bool = False,
+    limit: Optional[int] = None,
 ) -> List[sqlite3.Row]:
     unique = sorted({str(value) for value in evidence_ids if value})
     return _work_evidence_rows(
         con,
         evidence_ids=unique,
         diagnostic=diagnostic,
+        limit=limit,
     )
 
 
@@ -374,12 +422,14 @@ def exact_search(
     question: str,
     *,
     diagnostic: bool = False,
+    limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
     rows = _work_evidence_rows(
         con,
         exact_question=value,
         diagnostic=diagnostic,
+        limit=limit,
     )
     return [
         _hit_from_row(
@@ -400,6 +450,7 @@ def fts_search(
     question: str,
     *,
     diagnostic: bool = False,
+    limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
     query_expression = _fts_query(value)
@@ -409,6 +460,7 @@ def fts_search(
         con,
         fts_query=query_expression,
         diagnostic=diagnostic,
+        limit=limit,
     )
     return [
         _hit_from_row(
@@ -608,11 +660,14 @@ def relationship_search(
     question: str,
     *,
     diagnostic: bool = False,
+    limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
     evidence_ids = _relationship_evidence_ids(con, value)
     labels = _relationship_evidence_labels(con, value, evidence_ids)
-    rows = _fetch_evidence_by_ids(con, evidence_ids, diagnostic=diagnostic)
+    rows = _fetch_evidence_by_ids(
+        con, evidence_ids, diagnostic=diagnostic, limit=limit
+    )
     return [
         _hit_from_row(
             dict(row),
@@ -798,9 +853,11 @@ def search(
     rebuild_search_index(con)
 
     hits: List[Dict[str, Any]] = []
-    hits.extend(exact_search(con, value, diagnostic=diagnostic))
-    hits.extend(fts_search(con, value, diagnostic=diagnostic))
-    hits.extend(relationship_search(con, value, diagnostic=diagnostic))
+    hits.extend(exact_search(con, value, diagnostic=diagnostic, limit=limit))
+    hits.extend(fts_search(con, value, diagnostic=diagnostic, limit=limit))
+    hits.extend(
+        relationship_search(con, value, diagnostic=diagnostic, limit=limit)
+    )
     hits = _deduplicate_hits(hits)
 
     source_answer = any(hit["label"] in _SOURCE_FACT_LABELS for hit in hits)

@@ -22,3 +22,23 @@ entry points are supplied as implementation starting points, with signatures to
 be checked. User confirmed ingestion/search first, then evidence organization.
 TODO.md was finalized after this verdict. Implementation and acceptance remain
 unchecked work for the clean Luna session.
+
+## Execution amendment
+
+During execution on 2026-09-06, the connected Granola tool contract was
+verified: detail retrieval accepts up to ten meeting IDs and transcript
+retrieval accepts one ID per call. The user approved replacing the reviewed
+five-ID clean-pass cap with up to ten IDs, serialized transcripts, and a
+five-ID recovery pass after an explicit rate limit. The review's ordered
+ingestion and exact-ID completion requirements remain in force.
+
+## REST archive amendment
+
+On 2026-09-07 the user supplied a Granola API key and authorized storage in the
+encrypted homelab `maya` vault. A read-only REST backfill then fetched 559
+unique API notes across 19 list pages. The local archive contains 559 summaries
+and 557 transcripts; all 559 API IDs are imported and searchable. The API uses
+`not_...` IDs while the MCP connector uses UUID IDs, so the REST result is
+recorded as a separate coverage layer. This one-time archive supersedes the
+historical five-minute MCP drain as the ingestion gate. No webhook or provider
+write was created.

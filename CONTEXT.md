@@ -37,3 +37,18 @@ Historical context is preserved in docs/superpowers/plans/2026-09-06-context-his
 **Coverage run**: A resumable local pass that accounts for every eligible final Zoom media item.
 
 **Derived view**: A rebuildable presentation of source-backed records, not a new source of truth.
+
+**Granola progress checkpoint**: Derived state that reconciles exact listed,
+captured, detailed, transcript, retryable, terminal, imported, and searchable
+meeting-ID sets. It is not a manual retrieval cursor.
+
+**Granola capture batch**: One append-only local capture pass. A clean pass can
+request up to ten detail IDs because that is the connected endpoint limit.
+Transcript retrieval remains one ID per request. An explicit rate-limit outcome
+uses a five-ID recovery batch on the next pass.
+
+**Granola REST archive**: A read-only backfill from Granola's public API. It
+pages up to thirty notes at a time, fetches each note and transcript, and
+preserves the API `not_...` identity in a local raw capture. REST coverage is
+reported separately from MCP UUID coverage because the two interfaces expose
+different provider identifiers.

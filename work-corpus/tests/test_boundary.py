@@ -141,6 +141,7 @@ def test_cli_command_set_has_no_email_or_atlas_command():
         "report",
         "query",
         "mcp-import",
+        "granola-progress",
     }
     assert "email-import" not in commands
     assert "promote-to-atlas" not in commands

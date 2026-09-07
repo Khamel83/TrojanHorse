@@ -1,5 +1,12 @@
 # Granola Adaptive Batching Implementation Plan
 
+Status: the MCP adaptive implementation is complete and retained for optional
+shadow refreshes. For the one-time historical archive, the user-authorized
+Granola REST API backfill superseded this heartbeat: 559 unique API notes were
+fetched, imported, and indexed on 2026-09-07. See
+`docs/LOCAL_WORK_CORPUS_STATUS.md` and `work-corpus/state/mcp/granola_detail_progress.json`
+for the separate REST and MCP coverage layers.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Increase local Granola capture throughput from five to the connector's ten-meeting detail limit while preserving serialized transcript retrieval, exact retries, and safe rate-limit recovery.
@@ -15,7 +22,9 @@
 - Exact listed IDs are the completion authority; unlisted provider responses remain excluded from completion.
 - `granola_get_meetings` accepts at most 10 IDs; `granola_get_meeting_transcript` remains one-ID-per-call.
 - A retryable or rate-limited response preserves successful records and never advances past the unresolved exact ID.
-- Milestone 2 entity, relationship, and task work remains blocked until the Granola ingestion gate is complete.
+- Milestone 2 entity, relationship, and task work remains blocked until the
+  REST archive acceptance gate is complete; the optional MCP shadow checkpoint
+  is not that gate.
 
 ---
 

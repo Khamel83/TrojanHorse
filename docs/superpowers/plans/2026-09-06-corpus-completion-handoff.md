@@ -3,7 +3,27 @@
 Status: User confirmed both milestones in order; Antigravity Opus 4.6 Thinking
 approved the supplied plan with an index-API annotation, now applied. See
 `../reviews/2026-09-06-corpus-completion-opus-review.md`. Documentation and
-planning only; execute the reviewed checklist in a clean Luna session.
+planning are now supplemented by the verified execution record below.
+
+## User-approved throughput amendment
+
+On 2026-09-06 the user approved a faster Granola pull after the connected tool
+contract was verified. `granola_get_meetings` accepts up to ten meeting IDs,
+while `granola_get_meeting_transcript` accepts one ID per call. Execution
+therefore supersedes the earlier five-ID clean-pass wording with up to ten
+detail/transcript IDs per pass, serialized transcript requests, and a five-ID
+recovery pass after an explicit rate-limit outcome. The ingestion-before-
+organization order and exact-ID completion rule are unchanged.
+
+On 2026-09-07 the user supplied a Granola API key and authorized its storage in
+the existing encrypted homelab `maya` vault as `GRANOLA_API_KEY`. The official
+REST API was verified with HTTP 200, then used for the one-time archive: 559
+unique notes across 19 list pages, 559 summaries, and 557 transcript arrays.
+All 559 REST IDs are imported and searchable in TrojanHorse. REST IDs use the
+provider's `not_...` format, while the MCP connector exposes a separate UUID
+set, so `granola_progress.rest_api` reports this archive independently. The
+MCP shadow gaps no longer block ingestion completion. No webhook endpoint or
+other provider write was created.
 
 ## Evidence and corrections
 
@@ -27,13 +47,15 @@ inventory IDs in earlier runs. Recompute by exact IDs; never repair IDs by guess
    Preserve unrelated changes and raw data. Snapshot SQLite with its backup API
    before migration or bulk repair; keep state consistent with any WAL.
 2. Reconcile all existing Granola captures, inventory records, database evidence
-   and search entries. Register missing captures using the existing inventory
-   workflow, then import and rebuild the existing indexes. Prefer existing CLI
-   operations; confirm command help before running. Prove one previously missing
-   capture is represented by exact provider ID, source version, content and query
-   evidence. Repeat for all preserved batches. Reimport twice to prove idempotency
-   and that richer summaries/transcripts survive thinner responses. Add focused
-   regression coverage for the missing-capture boundary if code changes are needed.
+   and search entries. Use the read-only REST backfill as the primary one-time
+   archive path; register the resulting capture with the existing inventory
+   workflow, then import and rebuild the existing indexes. Keep the MCP UUID
+   checkpoint as a separate shadow-feed diagnostic. Prefer existing CLI
+   operations; confirm command help before running. Prove the REST capture has
+   559 unique API IDs, source version, content and query evidence. Reimport
+   twice to prove idempotency and that richer summaries/transcripts survive
+   thinner responses. Add focused regression coverage for the missing-capture
+   boundary if code changes are needed.
 3. Replace manually incremented progress with derived sets: listed IDs, detailed
    IDs, transcript IDs, retryable IDs, terminal unavailable IDs. Distinguish local
    capture success from database import and query verification. Audit raw error
@@ -43,13 +65,12 @@ inventory IDs in earlier runs. Recompute by exact IDs; never repair IDs by guess
    raw error responses and explicit empty/no-transcript outcomes; parser failures
    and rate limits remain retryable. Never silently drop an item because its ID
    appeared in a prior partial capture. Test retry and completion arithmetic.
-4. Update the existing heartbeat to register captures before import and prioritize
-   retries, with at most five meeting IDs per run. Respect provider cooldowns;
-   reduce request bursts/back off after rate limits. Resume the single heartbeat.
-   Completion requires every listed ID and requested transcript to be captured,
-   imported and indexed or explicitly terminal with a supported reason. Do not
-   stop solely because metadata_only_pending is zero. Stop the automation on
-   verified completion and notify only for completion or actionable failures.
+4. The REST archive supersedes the historical MCP heartbeat for the one-time
+   ingestion gate. Keep the tested MCP ten/five adaptive policy documented for
+   optional future shadow refreshes, but do not recreate a five-minute heartbeat
+   solely to duplicate the completed REST archive. Future steady-state refreshes
+   should use an API `updated_after` delta or supported Granola webhooks after a
+   separate receiver review.
 5. Reconcile remaining source gaps using available local evidence. Match the 470
    Capacities pointers against local payloads with evidence-backed identities;
    preserve ambiguity and missing targets as explicit outcomes. Do not fetch signed

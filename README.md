@@ -1,14 +1,16 @@
 # TrojanHorse: Local Work Corpus
 
-> Current work: reconcile Granola captures with inventory, imported evidence and
-> search before claiming complete coverage. Then organize entities, relationships
-> and supported tasks. See [TODO](TODO.md) and the
-> [Luna handoff](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md).
-> Previous cumulative Granola counts require reconstruction by exact ID.
+> Current work: the one-time Granola REST archive is complete and searchable.
+> The older MCP UUID shadow feed remains separately measurable but is no longer
+> the archive completion gate. See [TODO](TODO.md) and the [Luna
+> handoff](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md).
 
 The current project is a private, local, single-user work-evidence corpus. It
-is separate from Atlas and does not include email. The raw `data/` tree stays
-unchanged. The reviewed design, inventory, and implementation plan are the
+is separate from Atlas and does not include email. Existing raw files stay
+unchanged; authorized provider captures are appended as new raw files. The
+local corpus under this project is the archive target; this workflow does not
+move, delete, or rewrite source material outside TrojanHorse.
+The reviewed design, inventory, and implementation plan are the
 authoritative project documents:
 
 - [Project context](CONTEXT.md)
@@ -38,19 +40,50 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . transcribe --approve-
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . report
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . query "project changes"
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . mcp-import
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . granola-progress
 ```
+
+For a one-time complete Granola archive, run the read-only API client on
+homelab, where `GRANOLA_API_KEY` is stored in the encrypted `maya` vault, and
+stream its JSON output into this repository. The command below does not place
+the key in this checkout or in a local command argument:
+
+```bash
+capture_id='granola-api-backfill-YYYY-MM-DDTHH-MM-SSZ'
+umask 077
+ssh homelab 'api_key=$(secrets get GRANOLA_API_KEY) && GRANOLA_API_KEY="$api_key" python3 - --capture-id '"$capture_id" \
+  < work-corpus/src/work_corpus/granola_api.py \
+  > "data/mcp/granola/${capture_id}.json"
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . inventory --full-hash
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . mcp-import
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . granola-progress
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . report
+```
+
+The REST API lists up to 30 notes per page and uses an opaque cursor. The
+backfill fetches each note with its transcript, falls back to the paginated
+transcript endpoint for oversized notes, and paces requests below the
+documented sustained limit. API note IDs use `not_...`, so the report keeps
+REST coverage separate from the MCP connector's UUID IDs.
 
 The current acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
 [the human-readable report](work-corpus/corpus/reports/what_we_have_and_need.md),
 [the transcription queue](work-corpus/state/transcription_queue.csv), and
-[the raw immutability result](work-corpus/state/raw_immutability.json).
+[the raw immutability result](work-corpus/state/raw_immutability.json). The
+exact Granola checkpoint is [granola_detail_progress.json](work-corpus/state/mcp/granola_detail_progress.json);
+the local acceptance ledgers are [granola_acceptance.json](work-corpus/state/granola_acceptance.json)
+and [adapter_acceptance.json](work-corpus/state/adapter_acceptance.json).
 
-The current local run observes 2,718 source files (55.3 GB), 1,693 normalized
-source versions, 231 Zoom groups with 230 successful and 1 partial local
-transcription result, and all 29 OneNote files with 295 extracted pages.
-Granola has 559 listed meetings; its local detail/transcript capture proceeds
-in five-record background batches. See [the current status document](docs/LOCAL_WORK_CORPUS_STATUS.md)
-for the exact remaining gaps.
+At the latest verified checkpoint (2026-09-07 00:03 PDT), the local run observes
+2,751 source files (55.5 GB), 1,693 normalized source versions, 231 tracked Zoom
+groups with 230 successful and 1 partial local transcription result, and all 29
+OneNote files with 295 extracted pages. The Granola REST archive contains 559
+unique notes across 19 list pages, with 559 summaries and 557 transcripts; all
+559 REST IDs are imported and searchable. The older MCP shadow checkpoint has
+186 detail captures, 181 detailed summaries, and 177 transcripts for its 559
+UUID IDs, and remains recorded separately rather than blocking the REST archive.
+See [the current status document](docs/LOCAL_WORK_CORPUS_STATUS.md) for the
+exact residuals and proof boundaries.
 
 The repository also contains an older vault/RAG processor and Atlas bridge
 description below. That material is historical and is not an instruction to

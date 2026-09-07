@@ -209,8 +209,17 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
         )
         source("data/notes/notion/database.csv", "notion", "table")
         source("data/notes/notion/attachment.png", "notion", "unknown")
-        onenote_source, _ = source(
+        onenote_source, onenote_version = source(
             "data/notes/Backup/notebook.one", "onenote", "archive"
+        )
+        con.execute(
+            """
+            INSERT INTO normalized_document (
+                source_version_id, source_id, normalized_path, parser,
+                parser_version, status, error
+            ) VALUES (?, ?, ?, 'onenote-test', 'v1', 'prior_good_retained', NULL)
+            """,
+            (onenote_version, onenote_source, str(tmp_path / "corpus/notebook.md")),
         )
 
         media_source, media_version = source(
@@ -321,6 +330,17 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
             json.dumps({"fts_rows": 1, "relationship_rows": 0}),
             encoding="utf-8",
         )
+        (config.state_dir / "mcp").mkdir(parents=True, exist_ok=True)
+        (config.state_dir / "mcp/granola_detail_progress.json").write_text(
+            json.dumps(
+                {
+                    "status": "incomplete",
+                    "next_batch_size": 5,
+                    "rate_limited_ids": ["granola-42"],
+                }
+            ),
+            encoding="utf-8",
+        )
         summary = build_report(config, con)
     finally:
         con.close()
@@ -338,6 +358,7 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
         "entities",
         "tasks",
         "indexes",
+        "granola_progress",
         "mcp_feed_freshness",
         "raw_immutability",
     }
@@ -349,6 +370,10 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
     assert summary["notion"]["database_count"] == 1
     assert summary["notion"]["attachment_count"] == 1
     assert summary["onenote"]["files"] == 1
+    assert summary["onenote"]["parsed_files"] == 1
+    assert summary["granola_progress"]["next_batch_size"] == 5
+    assert summary["granola_progress"]["rate_limited_id_count"] == 1
+    assert summary["granola_progress"]["rate_limited_ids"] == ["granola-42"]
     assert summary["raw_immutability"]["status"] == "passed"
     assert summary["zoom_missing_transcripts"] == 1
     assert summary["zoom_media_without_terminal_status"] == 0

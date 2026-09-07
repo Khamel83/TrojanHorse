@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import sqlite3
 from datetime import date
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from .config import Config
 from .db import current_tasks
@@ -295,7 +295,11 @@ def _onenote_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     )
     return {
         "files": files,
-        "parsed_files": status_counts.get("normalized", 0),
+        "parsed_files": sum(
+            count
+            for status, count in status_counts.items()
+            if status in {"normalized", "prior_good_retained", "succeeded", "complete"}
+        ),
         "pages_extracted": int(state.get("pages_extracted", 0) or 0),
         "reviewed_expected_pages": expected_pages,
         "page_count_basis": str(state.get("page_count_basis") or "not_recorded"),
@@ -464,6 +468,122 @@ def _index_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "relationships": {
             "rows": relationship_rows,
             "freshness": "fresh" if fresh else ("not_recorded" if not recorded else "stale"),
+        },
+    }
+
+
+def _granola_progress_summary(config: Config) -> Dict[str, Any]:
+    """Expose the exact Granola checkpoint without copying every meeting ID."""
+    state = _read_state_json(config, "mcp/granola_detail_progress.json")
+    if not state:
+        return {"status": "not_recorded"}
+
+    rest_state = state.get("rest_api")
+    rest_api = rest_state if isinstance(rest_state, Mapping) else {}
+
+    def rest_count(key: str) -> int:
+        value = rest_api.get(key)
+        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+
+    def count(count_key: str, ids_key: str) -> int:
+        value = state.get(count_key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+        ids = state.get(ids_key)
+        return len(ids) if isinstance(ids, list) else 0
+
+    def ids(ids_key: str) -> List[str]:
+        values = state.get(ids_key)
+        return [_safe_text(value) for value in values] if isinstance(values, list) else []
+
+    return {
+        "status": _safe_text(state.get("status", "unknown")),
+        "mcp_status": _safe_text(state.get("status", "unknown")),
+        "archive_status": (
+            "complete"
+            if _safe_text(rest_api.get("status", "")) == "complete"
+            else _safe_text(state.get("status", "unknown"))
+        ),
+        "generated_at": _safe_text(state.get("generated_at", "")),
+        "listed_id_count": count("listed_id_count", "listed_ids"),
+        "content_captured_id_count": count(
+            "content_captured_id_count", "content_captured_ids"
+        ),
+        "detailed_summary_id_count": count(
+            "detailed_summary_id_count", "detailed_summary_ids"
+        ),
+        "transcript_id_count": count("transcript_id_count", "transcript_ids"),
+        "metadata_only_pending": count("metadata_only_pending", "metadata_only_ids"),
+        "transcript_pending_count": count(
+            "transcript_pending_count", "transcript_pending_ids"
+        ),
+        "detail_retry_count": count("detail_retry_count", "detail_retry_ids"),
+        "transcript_retry_count": count(
+            "transcript_retry_count", "transcript_retry_ids"
+        ),
+        "retryable_count": count("retryable_count", "retryable_ids"),
+        "rate_limited_id_count": count(
+            "rate_limited_id_count", "rate_limited_ids"
+        ),
+        "terminal_unavailable_count": count(
+            "terminal_unavailable_count", "terminal_unavailable_ids"
+        ),
+        "terminal_unavailable_listed_count": count(
+            "terminal_unavailable_listed_count", "terminal_unavailable_listed_ids"
+        ),
+        "imported_id_count": count("imported_id_count", "imported_ids"),
+        "searchable_id_count": count("searchable_id_count", "searchable_ids"),
+        "unimported_id_count": count("unimported_id_count", "unimported_ids"),
+        "unsearchable_id_count": count(
+            "unsearchable_id_count", "unsearchable_ids"
+        ),
+        "max_batch_size": (
+            int(state["max_batch_size"])
+            if isinstance(state.get("max_batch_size"), (int, float))
+            and not isinstance(state.get("max_batch_size"), bool)
+            else 0
+        ),
+        "next_batch_size": (
+            int(state["next_batch_size"])
+            if isinstance(state.get("next_batch_size"), (int, float))
+            and not isinstance(state.get("next_batch_size"), bool)
+            else 0
+        ),
+        "batch_policy": _safe_text(state.get("batch_policy", "")),
+        "requested_ids_not_in_inventory_count": count(
+            "requested_ids_not_in_inventory_count", "requested_ids_not_in_inventory"
+        ),
+        "unregistered_capture_file_count": len(
+            state.get("unregistered_capture_files", [])
+            if isinstance(state.get("unregistered_capture_files"), list)
+            else []
+        ),
+        "malformed_capture_file_count": len(
+            state.get("malformed_capture_files", [])
+            if isinstance(state.get("malformed_capture_files"), list)
+            else []
+        ),
+        "retryable_ids": ids("retryable_ids"),
+        "rate_limited_ids": ids("rate_limited_ids"),
+        "terminal_unavailable_listed_ids": ids("terminal_unavailable_listed_ids"),
+        "unimported_ids": ids("unimported_ids"),
+        "unsearchable_ids": ids("unsearchable_ids"),
+        "rest_api": {
+            "status": _safe_text(rest_api.get("status", "not_recorded")),
+            "capture_file": _safe_text(rest_api.get("capture_file", "")),
+            "capture_id": _safe_text(rest_api.get("capture_id", "")),
+            "capture_file_count": rest_count("capture_file_count"),
+            "note_count": rest_count("note_count"),
+            "unique_note_id_count": rest_count("unique_note_id_count"),
+            "summary_count": rest_count("summary_count"),
+            "transcript_count": rest_count("transcript_count"),
+            "summary_only_count": rest_count("summary_only_count"),
+            "list_page_count": rest_count("list_page_count"),
+            "imported_id_count": rest_count("imported_id_count"),
+            "searchable_id_count": rest_count("searchable_id_count"),
+            "missing_import_count": rest_count("missing_import_count"),
+            "unsearchable_id_count": rest_count("unsearchable_id_count"),
+            "error_count": rest_count("error_count"),
         },
     }
 
@@ -801,6 +921,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     entities = _entity_summary(con)
     tasks = _task_summary(con)
     indexes = _index_summary(config, con)
+    granola_progress = _granola_progress_summary(config)
     zoom = _zoom_summary(config, con)
     raw_immutability = _raw_immutability_summary(config)
 
@@ -858,6 +979,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "entities": entities,
         "tasks": tasks,
         "indexes": indexes,
+        "granola_progress": granola_progress,
         "raw_immutability": raw_immutability,
     }
     atomic_write_json(reports / "status.json", summary)
@@ -947,6 +1069,11 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         ["candidate_status", "count"],
     )
 
+    rest_api = granola_progress.get("rest_api", {})
+    rest_api_complete = (
+        isinstance(rest_api, Mapping) and rest_api.get("status") == "complete"
+    )
+
     needs: List[str] = []
     if source_count == 0:
         needs.append("No raw source files are currently present under `data/`.")
@@ -960,6 +1087,36 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append("No durable Granola dump has been identified; MCP access alone is not a raw archive.")
     if not any(row["source_system"] == "wispr_flow" for row in coverage):
         needs.append("No durable Wispr Flow dump has been identified.")
+    if granola_progress.get("status") == "not_recorded":
+        needs.append("Granola exact-ID capture progress has not been recorded.")
+    elif granola_progress.get("status") != "complete" and not rest_api_complete:
+        needs.append(
+            "Granola capture remains incomplete: "
+            f"{granola_progress['metadata_only_pending']:,} IDs lack detail and "
+            f"{granola_progress['transcript_pending_count']:,} lack transcripts."
+        )
+    if granola_progress.get("retryable_count", 0):
+        needs.append(
+            f"{granola_progress['retryable_count']:,} Granola IDs are retryable; "
+            "retry them before advancing the batch."
+        )
+    if granola_progress.get("rate_limited_id_count", 0):
+        needs.append(
+            f"The latest Granola pass rate-limited {granola_progress['rate_limited_id_count']:,} IDs; "
+            "the next pass uses the five-ID recovery batch."
+        )
+    if granola_progress.get("terminal_unavailable_listed_count", 0):
+        needs.append(
+            f"{granola_progress['terminal_unavailable_listed_count']:,} listed Granola IDs "
+            "have explicit terminal-unavailable outcomes."
+        )
+    if granola_progress.get("unregistered_capture_file_count", 0):
+        needs.append(
+            f"{granola_progress['unregistered_capture_file_count']:,} Granola capture files "
+            "are not registered in the inventory."
+        )
+    if granola_progress.get("unimported_id_count", 0) or granola_progress.get("unsearchable_id_count", 0):
+        needs.append("Granola import/search coverage does not yet match the listed-ID set.")
     if zoom_unprocessed:
         needs.append(
             f"{zoom_unprocessed} eligible Zoom media items still have no terminal local status."
@@ -1017,6 +1174,13 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     if mcp_count == 0:
         next_steps.append(
             "Use the MCP capture prompts to persist a small Granola and Wispr Flow sample under `data/mcp/`."
+        )
+    if (
+        granola_progress.get("status") not in {"not_recorded", "complete"}
+        and not rest_api_complete
+    ):
+        next_steps.append(
+            "Run `work-corpus granola-progress`, then process its retryable IDs before the next adaptive Granola batch."
         )
     if normalize_unsupported:
         next_steps.append(
@@ -1100,6 +1264,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         if onenote["reviewed_expected_pages"] is not None
         else f"{onenote['pages_extracted']:,} pages extracted"
     )
+    granola_retry_ids = ", ".join(granola_progress.get("retryable_ids", [])) or "none"
     md.extend([
         f"- OneNote: {onenote['files']:,} files; {onenote['parsed_files']:,} parsed; "
         f"{onenote_page_expectation}; page_count_basis={onenote['page_count_basis']}; "
@@ -1112,6 +1277,19 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Entities: {entities['aliases']:,} aliases and {entities['ambiguous_merge_proposals']:,} ambiguous merge proposals.",
         f"- Tasks: {tasks['current_candidates']:,} current candidates and "
         f"{tasks['historical_or_review_candidates']:,} historical/review candidates.",
+        f"- Granola capture: status={granola_progress.get('status', 'not_recorded')}; "
+        f"listed {granola_progress.get('listed_id_count', 0):,}; captured {granola_progress.get('content_captured_id_count', 0):,}; "
+        f"detailed {granola_progress.get('detailed_summary_id_count', 0):,}; transcripts {granola_progress.get('transcript_id_count', 0):,}; "
+        f"imported {granola_progress.get('imported_id_count', 0):,}; searchable {granola_progress.get('searchable_id_count', 0):,}; "
+        f"detail pending {granola_progress.get('metadata_only_pending', 0):,}; transcript pending {granola_progress.get('transcript_pending_count', 0):,}; "
+        f"retryable {granola_progress.get('retryable_count', 0):,} ({granola_retry_ids}); "
+        f"next batch {granola_progress.get('next_batch_size', 0):,} "
+        f"({granola_progress.get('batch_policy', 'unknown')}).",
+        f"- Granola REST archive: status={rest_api.get('status', 'not_recorded')}; "
+        f"{rest_api.get('note_count', 0):,} notes across {rest_api.get('list_page_count', 0):,} list pages; "
+        f"summaries {rest_api.get('summary_count', 0):,}; transcripts {rest_api.get('transcript_count', 0):,}; "
+        f"summary-only {rest_api.get('summary_only_count', 0):,}; "
+        f"imported {rest_api.get('imported_id_count', 0):,}; searchable {rest_api.get('searchable_id_count', 0):,}.",
         f"- Indexes: FTS {indexes['fts']['rows']:,} rows ({indexes['fts']['freshness']}); "
         f"relationships {indexes['relationships']['rows']:,} rows ({indexes['relationships']['freshness']}).",
         "",
@@ -1175,6 +1353,14 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "</tr>"
         for row in unsupported[:200]
     )
+    rest_api_html = (
+        f"status={html.escape(str(rest_api.get('status', 'not_recorded')))}; "
+        f"{rest_api.get('note_count', 0):,} notes; "
+        f"summaries {rest_api.get('summary_count', 0):,}; "
+        f"transcripts {rest_api.get('transcript_count', 0):,}; "
+        f"summary-only {rest_api.get('summary_only_count', 0):,}; "
+        f"searchable {rest_api.get('searchable_id_count', 0):,}."
+    )
 
     document = f"""<!doctype html>
 <html lang="en">
@@ -1210,6 +1396,9 @@ th {{ background: #eee; }}
 <thead><tr><th>Source</th><th>Files</th><th>Size</th><th>Earliest hint</th><th>Latest hint</th></tr></thead>
 <tbody>{coverage_rows}</tbody>
 </table>
+
+<h2>Granola API archive</h2>
+<p>{rest_api_html}</p>
 
 <h2>What is still needed</h2>
 <ul>{needs_html}</ul>
