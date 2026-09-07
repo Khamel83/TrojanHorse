@@ -113,7 +113,7 @@ The first source adapters are:
 | OneNote | 29 `.one` section files; 295 pages extracted | Use the tested local parser route. Write Markdown as derived output. Keep the `.one` files as source evidence. |
 | Formal records | PDF, DOCX, PPTX, XLSX, and CSV files | Extract text, pages, slides, tables, and sheet information. Preserve document locations. |
 | Wispr Flow | 13 locally captured records | Import local snapshots and retain unknown retrieval-date freshness. |
-| Granola | 559 listed meetings; 69 detailed summaries and 19 transcripts captured so far | Fetch details and transcripts incrementally in five-record batches. Preserve raw responses, merge by provider ID, and record unavailable IDs without dropping them. |
+| Granola | 559 listed meetings; the current checkpoint has 166 distinct detail captures, 161 detailed summaries, and 157 transcripts | Fetch up to ten detail IDs per pass, then retrieve one transcript per ID. Preserve raw responses, merge by provider ID, and record unavailable IDs without dropping them. After an explicit rate-limit outcome, use a five-ID recovery pass and return to ten after a clean pass. |
 
 The Notion ExportBlock and Capacities export are separate source systems. The source registry must identify them by explicit root path, not by filename heuristics.
 
@@ -355,8 +355,17 @@ tasks. It must label the result as raw or unreviewed evidence.
 ## Wispr Flow and Granola
 
 Wispr Flow and Granola are local input streams. Granola detail and transcript
-retrieval is currently continued by a bounded Codex heartbeat; the heartbeat
-does not write back to Granola.
+retrieval is continued by a bounded Codex heartbeat; the heartbeat does not
+write back to Granola. The connector accepts up to ten meeting IDs for one
+detail request, while transcript retrieval accepts one meeting ID per request.
+The heartbeat therefore uses up to ten IDs per clean pass, serializes transcript
+requests, and falls back to five IDs after an explicit rate-limit outcome.
+
+The persisted Granola progress checkpoint is a derived reconciliation of the
+latest inventory, raw captures, imported evidence, and searchable evidence. It
+is not a manual cursor. It keeps exact listed, captured, detailed, transcript,
+retryable, terminal, imported, and searchable ID sets so a repeated or partial
+capture cannot be mistaken for new coverage.
 
 Each input keeps:
 
