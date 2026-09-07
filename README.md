@@ -20,6 +20,7 @@ authoritative project documents:
 - [Source access matrix](01_INVENTORY/source_access_matrix.md)
 - [Boundary ADR](docs/adr/0001-local-work-corpus-boundary.md)
 - [Current operational status](docs/LOCAL_WORK_CORPUS_STATUS.md)
+- [Remaining work after ingestion](docs/REMAINING_WORK.md)
 
 ## Current local corpus workflow
 

@@ -19,7 +19,9 @@ at a time. An explicit rate limit causes a five-ID recovery pass.
 
 The latest checkpoint is derived from raw captures, source records, evidence,
 and search by exact ID. The original 2026-09-04 acceptance snapshot remains
-historical evidence; the clean-session checklist is `TODO.md`.
+historical evidence; the clean-session checklist is `TODO.md`. See the
+[remaining-work map](REMAINING_WORK.md) for the exact boundary between
+completed ingestion and unfinished organization.
 
 
 ## Current corpus

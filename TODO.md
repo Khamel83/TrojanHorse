@@ -4,6 +4,7 @@ Reviewed handoff for a clean Luna session. User approved both milestones in this
 order. Antigravity Opus 4.6 Thinking approved the supplied plan; its required
 index-API clarification is applied. Checked items below record verified work;
 remaining unchecked items are not complete.
+The residual scope is summarized in [Remaining Work After Ingestion](docs/REMAINING_WORK.md).
 
 Read [the plan](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md)
 and [review](docs/superpowers/reviews/2026-09-06-corpus-completion-opus-review.md).
@@ -45,9 +46,10 @@ evidence, and the original completed Tasks 0–9 and historical gates remain doc
   unresolved targets. Inspect Wispr date evidence and preserve unknown dates.
   Verify existing OneNote coverage and retain quiet Zoom/artifact terminal outcomes.
   No new exports required; no signed-URL fetches or unnecessary retranscription.
-- [ ] 6. Close ingestion milestone with evidence: coverage by exact identity,
-  representative query checks including scope exclusions, preserved source hashes,
-  retry/terminal accounting, and appropriate regression tests. Report residuals.
+- [x] 6. Close ingestion milestone with evidence: exact Granola REST identity
+  coverage, representative Work-scope query checks, preserved source hashes,
+  retry/terminal accounting, and regression tests. The residual interpretation
+  and organization work is documented in `docs/REMAINING_WORK.md`.
 
 ## Milestone 2 — Organize the evidence
 
