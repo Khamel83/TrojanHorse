@@ -2,7 +2,7 @@
 
 Status date: 2026-09-07
 Evidence basis: [`status.json`](../work-corpus/corpus/reports/status.json),
-generated at `2026-09-07T11:50:41-07:00`, plus the organization and
+generated at `2026-09-07T15:01:41-07:00`, plus the organization and
 reconciliation ledgers in `work-corpus/state/`.
 
 ## The current boundary
