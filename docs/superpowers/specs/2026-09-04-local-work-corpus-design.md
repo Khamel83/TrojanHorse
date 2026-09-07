@@ -1,5 +1,23 @@
 # Local Work Corpus Design
 
+## Completion amendment — 2026-09-06
+
+The user confirmed ingestion and search verification first, followed by evidence
+organization into people, projects, relationships and supported tasks. See
+`../plans/2026-09-06-corpus-completion-handoff.md`. Historical counts require
+reconciliation against captured, imported and searchable evidence.
+
+Register new captures in inventory before MCP import. Derive progress from exact
+identities and persisted outcomes; retries never count as new meetings. Retrieve
+requested transcripts for summary-only meetings too. Rate limits and parsing
+errors remain retryable; unavailable outcomes require exact identity and evidence.
+Completion includes transcript retries and database/index verification regardless
+of the metadata-only counter. Normalize all eligible parseable evidence while
+retaining Work-only default queries and the runtime-relative 14-day task window.
+Resolve supported aliases and relationships using existing APIs; uncertain cases
+stay explicit review items. Do not force queues to zero or invent current tasks.
+Prior context is preserved in `../plans/2026-09-06-context-history.md`.
+
 Status: Approved and operationally amended 2026-09-06 for complete local
 source ingestion and local transcription coverage. The original 2026-09-04
 acceptance snapshot is historical; see

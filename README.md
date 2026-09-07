@@ -1,8 +1,10 @@
 # TrojanHorse: Local Work Corpus
 
-> Current status: The local corpus is operational. All currently parseable
-> sources are normalized; Zoom and OneNote processing completed with local
-> tools. Granola detail and transcript capture continues incrementally.
+> Current work: reconcile Granola captures with inventory, imported evidence and
+> search before claiming complete coverage. Then organize entities, relationships
+> and supported tasks. See [TODO](TODO.md) and the
+> [Luna handoff](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md).
+> Previous cumulative Granola counts require reconstruction by exact ID.
 
 The current project is a private, local, single-user work-evidence corpus. It
 is separate from Atlas and does not include email. The raw `data/` tree stays

@@ -2,6 +2,25 @@
 
 Status date: 2026-09-06
 
+## Reconciliation required before completion
+
+The user approved two ordered milestones: finish ingestion and verify search,
+then organize people, projects, relationships and supported tasks. See
+[completion handoff](superpowers/plans/2026-09-06-corpus-completion-handoff.md).
+
+The counts below are a historical operational snapshot, not current verified
+coverage. Granola capture batches have been saved without a corresponding
+inventory refresh: `mcp-import` reads registered source records, not the inbox
+directory directly. Command success alone did not prove new batches were imported.
+The manual progress counters also counted a retry as a new meeting. Reconcile
+raw captures, source records, evidence and search by exact ID before reporting
+remaining counts. Two unavailable IDs need exact-identity validation.
+
+Remaining work includes this ingestion repair, all pending Granola transcripts
+and retries, Capacities pointer matching, date gaps, interpretation queues,
+entity/relationship/task population, final verification and documentation.
+The clean-session checklist is `TODO.md`; the handoff carries acceptance gates.
+
 This document is the current operational status. The original 2026-09-04
 acceptance snapshot remains in the implementation plan as historical evidence;
 its early `blocked` counts were resolved after the required local tools and
