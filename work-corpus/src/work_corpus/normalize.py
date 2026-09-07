@@ -26,6 +26,7 @@ from .util import (
     atomic_write_json,
     atomic_write_text,
     ensure_dir,
+    effective_extension,
     html_to_text,
     now_iso,
     provenance_header,
@@ -610,7 +611,11 @@ def _notion_or_capacities_parts(
 ) -> ExtractionResult:
     max_text = int(config.get("normalization", "max_text_file_mb", 200)) * 1024 * 1024
     max_rows = int(config.get("normalization", "max_table_rows", 100000))
-    ext = extension.lower()
+    ext = (
+        effective_extension(path)
+        if re.search(r"\.[A-Za-z0-9]+\s+\(\d+\)$", path.name)
+        else extension.lower()
+    )
     if source_system == "capacities" and ext in {".md", ".markdown"}:
         raw = read_text_guess(path, max_bytes=max_text)
         pointer = _pointer_only(raw)
@@ -730,7 +735,11 @@ def extract_source(
 ) -> ExtractionResult:
     """Extract one immutable source version into scrubbed, locatable parts."""
     system = (source_system or "").casefold()
-    ext = extension.lower()
+    ext = (
+        effective_extension(path)
+        if re.search(r"\.[A-Za-z0-9]+\s+\(\d+\)$", path.name)
+        else extension.lower()
+    )
     max_text = int(config.get("normalization", "max_text_file_mb", 200)) * 1024 * 1024
     max_rows = int(config.get("normalization", "max_table_rows", 100000))
 
@@ -1085,6 +1094,47 @@ def _record_extraction_review(
     )
 
 
+def _resolve_extraction_reviews(
+    con: sqlite3.Connection,
+    row: sqlite3.Row,
+    parser: str,
+) -> None:
+    """Resolve a prior parser review only when the same source version succeeds."""
+    source_version_id = str(row["source_version_id"] or "")
+    if not source_version_id:
+        return
+    candidates = con.execute(
+        """
+        SELECT review_id, proposed_result_json
+        FROM review_item
+        WHERE source_id=? AND status='pending'
+          AND issue_type IN ('parser_unsupported', 'parser_error', 'extraction_blocked')
+        """,
+        (row["source_id"],),
+    ).fetchall()
+    for review in candidates:
+        try:
+            proposed = json.loads(review["proposed_result_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            proposed = {}
+        if not isinstance(proposed, dict) or str(proposed.get("source_version_id") or "") != source_version_id:
+            continue
+        con.execute(
+            """
+            UPDATE review_item
+            SET status='resolved',
+                resolution=?,
+                updated_at=?
+            WHERE review_id=? AND status='pending'
+            """,
+            (
+                f"Superseded: source version normalized successfully with {parser}.",
+                now_iso(),
+                review["review_id"],
+            ),
+        )
+
+
 def _task_date_basis(source_date_basis: str) -> str:
     """Map inventory provenance names to the task date vocabulary."""
     return {
@@ -1218,7 +1268,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
         ).fetchone()
         if (
             existing
-            and existing["status"] in {"normalized", "metadata"}
+            and existing["status"] in {"normalized", "metadata", "prior_good_retained"}
             and existing["parser_version"] == PARSER_VERSION
             and existing["normalized_path"]
             and Path(existing["normalized_path"]).exists()
@@ -1285,6 +1335,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                     scope=row["classification"] or "Unknown",
                     commit=False,
                 )
+            _resolve_extraction_reviews(con, row, extracted.parser)
             result["normalized"] += 1
         except ExtractionBlocked as exc:
             error = scrub_derived_text(str(exc))

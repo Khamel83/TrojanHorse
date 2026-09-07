@@ -288,8 +288,16 @@ ARCHIVE_EXTENSIONS = {".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".olm", ".ps
 JSON_EXTENSIONS = {".json", ".jsonl"}
 
 
+def effective_extension(path: Path) -> str:
+    """Return the real extension when macOS appended a duplicate suffix."""
+    duplicate = re.search(r"(\.[A-Za-z0-9]+)\s+\(\d+\)$", path.name)
+    if duplicate:
+        return duplicate.group(1).casefold()
+    return path.suffix.casefold()
+
+
 def detect_kind(path: Path, source_system: str) -> str:
-    ext = path.suffix.lower()
+    ext = effective_extension(path)
     name = path.name.lower()
     if (
         source_system == "zoom"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 from pathlib import Path
 import sys
@@ -14,6 +15,7 @@ from .granola_progress import write_granola_progress
 from .inventory import inventory
 from .mcp_ingest import ingest_mcp_sources
 from .normalize import normalize_all
+from .organization import organize_all
 from .query import rebuild_search_index, search
 from .report import build_report
 from .transcription import transcribe_jobs
@@ -157,6 +159,15 @@ def _parser() -> argparse.ArgumentParser:
         "granola-progress",
         help="Reconcile exact Granola capture, import, and search progress.",
     )
+    organize = sub.add_parser(
+        "organize",
+        help="Build deterministic derived entities, links, task proposals, and residuals.",
+    )
+    organize.add_argument(
+        "--run-date",
+        default="",
+        help="ISO date used for current-task eligibility (defaults to today).",
+    )
     return parser
 
 
@@ -212,12 +223,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.command == "granola-progress":
             details = write_granola_progress(config, con)
             details["index_verification"] = _record_index_checkpoint(config, con)
+        elif args.command == "organize":
+            run_date = date.fromisoformat(args.run_date) if args.run_date else None
+            details = organize_all(config, con, run_date=run_date)
+            details["index_verification"] = _record_index_checkpoint(config, con)
+            details["report"] = build_report(config, con)
         else:
             parser.error(f"unknown command: {args.command}")
 
         _record_end(con, run_id, "complete", details)
         print(json.dumps(details, indent=2, ensure_ascii=False, default=str))
-        if args.command in {"report", "transcribe"}:
+        if args.command in {"report", "transcribe", "organize"}:
             print(f"\nOpen: {config.corpus_dir / 'reports' / 'status.html'}")
         return 0
     except KeyboardInterrupt:

@@ -757,10 +757,14 @@ def inventory(
                 errors.append(f"hash {path}: {exc}")
 
         source_id = stable_source_id(source_root_key, relative_path)
-        if not content_hash and source_system == "zoom" and kind == "media":
-            # Large Zoom media is intentionally not rehashed on every scan.
-            # Preserve a previously verified version when its size and mtime
-            # still match, so transcription jobs remain bound to current bytes.
+        if not content_hash and (
+            (source_system == "zoom" and kind == "media")
+            or kind == "mcp"
+        ):
+            # Large media and persisted MCP snapshots are intentionally not
+            # rehashed on every scan. Preserve a previously verified version
+            # when its size and mtime still match, so derived records remain
+            # bound to the same captured bytes.
             prior_media = con.execute(
                 """
                 SELECT source_version_id, content_sha256, size_bytes, mtime_ns

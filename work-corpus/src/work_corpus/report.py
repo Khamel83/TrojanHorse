@@ -312,7 +312,7 @@ def _onenote_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     }
 
 
-def _capacities_summary(con: sqlite3.Connection) -> Dict[str, Any]:
+def _capacities_summary(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     pointer_only = 0
     for row in con.execute(
         """
@@ -336,9 +336,38 @@ def _capacities_summary(con: sqlite3.Connection) -> Dict[str, Any]:
                 and re.search(r"(?i)\b(?:url|path|payload)\b", raw)
             )
         pointer_only += int(is_pointer)
+    reconciliation = _read_state_json(
+        config, "capacities_payload_reconciliation.json"
+    )
+
+    def count(name: str) -> int:
+        value = reconciliation.get(name, 0)
+        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+
+    unresolved_by_reason = reconciliation.get("unresolved_by_reason", {})
+    if not isinstance(unresolved_by_reason, Mapping):
+        unresolved_by_reason = {}
+    recorded_pointer_count = count("pointer_count")
+    if recorded_pointer_count:
+        pointer_only = recorded_pointer_count
     return {
+        "pointer_count": recorded_pointer_count or pointer_only,
         "pointer_only_payloads": pointer_only,
         "signed_urls_fetched": 0,
+        "reconciliation_status": (
+            "not_recorded"
+            if not reconciliation
+            else ("complete" if count("unresolved_pointer_count") == 0 else "partial")
+        ),
+        "matched_pointer_count": count("matched_pointer_count"),
+        "unresolved_pointer_count": count("unresolved_pointer_count"),
+        "target_payload_record_count": count("target_payload_record_count"),
+        "payload_relationship_count": count("relationship_count"),
+        "unresolved_by_reason": {
+            _safe_text(key): int(value)
+            for key, value in unresolved_by_reason.items()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        },
     }
 
 
@@ -447,6 +476,31 @@ def _task_summary(con: sqlite3.Connection) -> Dict[str, Any]:
         "current_candidates": current,
         "historical_or_review_candidates": max(total - current, 0),
         "candidate_statuses": candidate_statuses,
+    }
+
+
+def _organization_summary(config: Config) -> Dict[str, Any]:
+    state = _read_state_json(config, "organization_acceptance.json")
+    entity_counts = state.get("entity_counts", {})
+    if not isinstance(entity_counts, Mapping):
+        entity_counts = {}
+    residual = state.get("residual_ledger", {})
+    if not isinstance(residual, Mapping):
+        residual = {}
+
+    def count(value: Any) -> int:
+        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+
+    return {
+        "status": "recorded" if state else "not_recorded",
+        "projects": count(entity_counts.get("project")),
+        "people": count(entity_counts.get("person")),
+        "organizations": count(entity_counts.get("organization")),
+        "project_sources_linked": count(state.get("project_sources_linked")),
+        "task_proposals_scanned": count(state.get("task_proposals_scanned")),
+        "task_rows": count(state.get("task_rows")),
+        "current_task_rows": count(state.get("current_task_rows")),
+        "residual_pending": count(residual.get("pending_count")),
     }
 
 
@@ -915,11 +969,12 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     discovery_excluded = _discovery_excluded(con)
     normalization = _normalization_summary(con)
     onenote = _onenote_summary(config, con)
-    capacities = _capacities_summary(con)
+    capacities = _capacities_summary(config, con)
     notion = _notion_summary(con)
     review_queues = _review_queue_summary(con, len(sensitive_review))
     entities = _entity_summary(con)
     tasks = _task_summary(con)
+    organization = _organization_summary(config)
     indexes = _index_summary(config, con)
     granola_progress = _granola_progress_summary(config)
     zoom = _zoom_summary(config, con)
@@ -978,6 +1033,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "review_queues": review_queues,
         "entities": entities,
         "tasks": tasks,
+        "organization": organization,
         "indexes": indexes,
         "granola_progress": granola_progress,
         "raw_immutability": raw_immutability,
@@ -1117,6 +1173,11 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         )
     if granola_progress.get("unimported_id_count", 0) or granola_progress.get("unsearchable_id_count", 0):
         needs.append("Granola import/search coverage does not yet match the listed-ID set.")
+    if capacities["unresolved_pointer_count"]:
+        needs.append(
+            f"{capacities['unresolved_pointer_count']:,} Capacities pointer targets remain unresolved; "
+            "see `state/capacities_payload_reconciliation.json`."
+        )
     if zoom_unprocessed:
         needs.append(
             f"{zoom_unprocessed} eligible Zoom media items still have no terminal local status."
@@ -1151,6 +1212,13 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         for section in indexes.values()
     ):
         needs.append("FTS and relationship index freshness is not yet confirmed by the acceptance run.")
+    if organization["status"] == "not_recorded":
+        needs.append("The deterministic organization pass has not been recorded.")
+    elif organization["residual_pending"]:
+        needs.append(
+            f"{organization['residual_pending']:,} pending review items remain in the residual ledger; "
+            "semantic decisions are still outstanding."
+        )
 
     next_steps = []
     missing_note_sources = [
@@ -1185,6 +1253,12 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     if normalize_unsupported:
         next_steps.append(
             "Review `unsupported_and_errors.csv`; install optional document parsers or export proprietary formats."
+        )
+    if organization["status"] == "not_recorded":
+        next_steps.append("Run `work-corpus organize` to build deterministic links, proposals, and the residual ledger.")
+    elif organization["residual_pending"]:
+        next_steps.append(
+            "Review `corpus/reports/residual_ledger.csv` selectively; keep ambiguous scope, identity, sensitivity, duplicate, and date decisions unresolved until verified."
         )
     if not next_steps:
         next_steps.append("The mechanical evidence layer is ready for project/task/career extraction.")
@@ -1269,7 +1343,10 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- OneNote: {onenote['files']:,} files; {onenote['parsed_files']:,} parsed; "
         f"{onenote_page_expectation}; page_count_basis={onenote['page_count_basis']}; "
         f"converter_available={str(onenote['converter_available']).lower()}.",
-        f"- Capacities pointer-only payloads: {capacities['pointer_only_payloads']:,}; signed URLs fetched: {capacities['signed_urls_fetched']:,}.",
+        f"- Capacities typed pointer records: {capacities['pointer_count']:,}; "
+        f"matched locally: {capacities['matched_pointer_count']:,}; unresolved: {capacities['unresolved_pointer_count']:,}; "
+        f"payload relationships: {capacities['payload_relationship_count']:,}; "
+        f"reconciliation={capacities['reconciliation_status']}; signed URLs fetched: {capacities['signed_urls_fetched']:,}.",
         f"- Notion: {notion['page_count']:,} pages, {notion['database_count']:,} databases, "
         f"{notion['attachment_count']:,} local attachments, {notion['unresolved_relationships']:,} unresolved relationships.",
         f"- Review queues: {review_queues['scope']['pending_review_items']:,} scope items and "
@@ -1277,6 +1354,12 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Entities: {entities['aliases']:,} aliases and {entities['ambiguous_merge_proposals']:,} ambiguous merge proposals.",
         f"- Tasks: {tasks['current_candidates']:,} current candidates and "
         f"{tasks['historical_or_review_candidates']:,} historical/review candidates.",
+        f"- Organization: status={organization['status']}; projects {organization['projects']:,}; "
+        f"people {organization['people']:,}; organizations {organization['organizations']:,}; "
+        f"project sources linked {organization['project_sources_linked']:,}; "
+        f"task proposals scanned {organization['task_proposals_scanned']:,}; "
+        f"task rows {organization['task_rows']:,}; current task rows {organization['current_task_rows']:,}; "
+        f"residual pending {organization['residual_pending']:,}.",
         f"- Granola capture: status={granola_progress.get('status', 'not_recorded')}; "
         f"listed {granola_progress.get('listed_id_count', 0):,}; captured {granola_progress.get('content_captured_id_count', 0):,}; "
         f"detailed {granola_progress.get('detailed_summary_id_count', 0):,}; transcripts {granola_progress.get('transcript_id_count', 0):,}; "

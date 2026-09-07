@@ -1,8 +1,10 @@
 # TrojanHorse: Local Work Corpus
 
-> Current work: the one-time Granola REST archive is complete and searchable.
-> The older MCP UUID shadow feed remains separately measurable but is no longer
-> the archive completion gate. See [TODO](TODO.md) and the [Luna
+> Current work: the one-time Granola REST archive and deterministic organization
+> pass are complete for the captured local sources. Human review queues remain
+> open. The older MCP UUID shadow feed is separately measurable but is no
+> longer the archive completion gate. See [TODO](TODO.md), the [remaining-work
+> map](docs/REMAINING_WORK.md), and the [Luna
 > handoff](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md).
 
 The current project is a private, local, single-user work-evidence corpus. It
@@ -42,6 +44,7 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . report
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . query "project changes"
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . mcp-import
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . granola-progress
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . organize --run-date 2026-09-07
 ```
 
 For a one-time complete Granola archive, run the read-only API client on
@@ -69,22 +72,24 @@ REST coverage separate from the MCP connector's UUID IDs.
 
 The current acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
 [the human-readable report](work-corpus/corpus/reports/what_we_have_and_need.md),
+[the organization acceptance state](work-corpus/state/organization_acceptance.json),
+[the residual ledger](work-corpus/corpus/reports/residual_ledger.csv),
 [the transcription queue](work-corpus/state/transcription_queue.csv), and
 [the raw immutability result](work-corpus/state/raw_immutability.json). The
 exact Granola checkpoint is [granola_detail_progress.json](work-corpus/state/mcp/granola_detail_progress.json);
 the local acceptance ledgers are [granola_acceptance.json](work-corpus/state/granola_acceptance.json)
 and [adapter_acceptance.json](work-corpus/state/adapter_acceptance.json).
 
-At the latest verified checkpoint (2026-09-07 00:03 PDT), the local run observes
-2,751 source files (55.5 GB), 1,693 normalized source versions, 231 tracked Zoom
-groups with 230 successful and 1 partial local transcription result, and all 29
-OneNote files with 295 extracted pages. The Granola REST archive contains 559
-unique notes across 19 list pages, with 559 summaries and 557 transcripts; all
-559 REST IDs are imported and searchable. The older MCP shadow checkpoint has
-186 detail captures, 181 detailed summaries, and 177 transcripts for its 559
-UUID IDs, and remains recorded separately rather than blocking the REST archive.
-See [the current status document](docs/LOCAL_WORK_CORPUS_STATUS.md) for the
-exact residuals and proof boundaries.
+At the latest verified checkpoint (2026-09-07 11:50 PDT), the local run observes
+2,751 source files (55.5 GB), 1,849 source versions, a fresh FTS index with
+72,138 rows, 231 tracked Zoom groups with 230 successful and 1 partial local
+transcription result, and all 29 OneNote files with 295 extracted pages. The
+Granola REST archive contains 559 unique notes across 19 list pages, with 559
+summaries and 557 transcripts; all 559 REST IDs are imported and searchable.
+The deterministic organization pass produced 9 explicit projects and 27
+evidence-backed project links, while retaining 4,492 ambiguous review items.
+See [the current status document](docs/LOCAL_WORK_CORPUS_STATUS.md) for exact
+residuals and proof boundaries.
 
 The repository also contains an older vault/RAG processor and Atlas bridge
 description below. That material is historical and is not an instruction to

@@ -98,6 +98,59 @@ def test_report_marks_unknown_mcp_retrieval_as_unknown(tmp_path: Path):
     assert report["mcp_feed_freshness"][0]["freshness"] == "unknown"
 
 
+def test_report_exposes_reconciliation_and_organization_acceptance(tmp_path: Path):
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "report.sqlite")
+    try:
+        config.state_dir.mkdir(parents=True, exist_ok=True)
+        (config.state_dir / "capacities_payload_reconciliation.json").write_text(
+            json.dumps(
+                {
+                    "pointer_count": 4,
+                    "matched_pointer_count": 3,
+                    "unresolved_pointer_count": 1,
+                    "target_payload_record_count": 3,
+                    "relationship_count": 5,
+                    "signed_urls_fetched": 0,
+                    "unresolved_by_reason": {"pointer_missing_file_size": 1},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (config.state_dir / "organization_acceptance.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "entity_counts": {"project": 2, "person": 0, "organization": 0},
+                    "project_sources_linked": 4,
+                    "task_proposals_scanned": 8,
+                    "task_rows": 0,
+                    "current_task_rows": 0,
+                    "residual_ledger": {"pending_count": 9},
+                }
+            ),
+            encoding="utf-8",
+        )
+        summary = build_report(config, con)
+    finally:
+        con.close()
+
+    assert summary["capacities"]["matched_pointer_count"] == 3
+    assert summary["capacities"]["unresolved_pointer_count"] == 1
+    assert summary["capacities"]["payload_relationship_count"] == 5
+    assert summary["organization"] == {
+        "status": "recorded",
+        "projects": 2,
+        "people": 0,
+        "organizations": 0,
+        "project_sources_linked": 4,
+        "task_proposals_scanned": 8,
+        "task_rows": 0,
+        "current_task_rows": 0,
+        "residual_pending": 9,
+    }
+
+
 def test_report_contains_all_acceptance_categories_without_sensitive_values(
     tmp_path: Path,
 ):

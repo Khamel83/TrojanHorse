@@ -860,6 +860,39 @@ def test_unchanged_zoom_media_keeps_known_version_when_rescan_skips_hash(
     assert current_source["content_sha256"] == initial_hash
 
 
+def test_unchanged_mcp_snapshot_keeps_known_version_when_rescan_skips_hash(
+    tmp_path: Path,
+):
+    relative_path = "data/mcp/granola/large.json"
+    snapshot_path = tmp_path / relative_path
+    snapshot_path.parent.mkdir(parents=True)
+    snapshot_path.write_bytes(b"persisted MCP snapshot")
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "mcp-version-preservation.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        initial_source, _ = _row(con, relative_path)
+        initial_version_id = initial_source["source_version_id"]
+        initial_hash = initial_source["content_sha256"]
+
+        config_dir = tmp_path / "work-corpus"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.json").write_text(
+            json.dumps({"inventory": {"hash_files_up_to_mb": 0}}),
+            encoding="utf-8",
+        )
+        low_hash_config = load_config(tmp_path)
+        inventory_module.inventory(low_hash_config, con)
+        current_source, _ = _row(con, relative_path)
+    finally:
+        con.close()
+
+    assert initial_version_id
+    assert initial_hash
+    assert current_source["source_version_id"] == initial_version_id
+    assert current_source["content_sha256"] == initial_hash
+
+
 def test_normalization_excludes_non_evidence_and_unhashed_inventory_rows(
     tmp_path: Path,
 ):

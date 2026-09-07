@@ -14,8 +14,8 @@ import pytest
 import work_corpus.inventory as inventory_module
 import work_corpus.normalize as normalize_module
 from work_corpus.config import load_config
-from work_corpus.db import connect
-from work_corpus.util import provenance_header, scrub_derived_text, stable_evidence_id
+from work_corpus.db import connect, record_review_item
+from work_corpus.util import detect_kind, provenance_header, scrub_derived_text, stable_evidence_id
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "inventory_tree"
@@ -123,6 +123,32 @@ def test_parser_specific_source_distinctions(tmp_path: Path):
     assert "own evidence unit" in notion_transcript
     assert transcript_candidate == notion_transcript
     assert "Synthetic Zoom transcript" in zoom_transcript
+
+
+def test_macos_duplicate_suffix_keeps_markdown_source_parseable(tmp_path: Path):
+    config = load_config(tmp_path)
+    path = tmp_path / "image.md (1)"
+    path.write_text(
+        "type: Image\n"
+        "title: image\n"
+        "mimeType: image/png\n"
+        "fileSize: 4\n"
+        "url: null\n",
+        encoding="utf-8",
+    )
+
+    assert detect_kind(path, "capacities") == "document"
+    result = normalize_module.extract_source(
+        path,
+        "document",
+        path.suffix,
+        config,
+        source_system="capacities",
+        relative_path="data/notes/Capacities iCloud 2025-08-06/Images/image.md (1)",
+    )
+
+    assert result.parser == "capacities_markdown:v1"
+    assert result.metadata["payload_status"] == "missing"
 
 
 def test_formal_pdf_parser_keeps_page_locator(tmp_path: Path):
@@ -354,6 +380,46 @@ def test_parser_version_change_rebuilds_same_source_version(tmp_path: Path):
     assert first["normalized"] == 1
     assert second["normalized"] == 1
     assert second["skipped_unchanged"] == 0
+
+
+def test_successful_reparse_resolves_matching_extraction_review(tmp_path: Path):
+    path = tmp_path / "data" / "notes" / "Notes" / "recoverable.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("# Recoverable\n", encoding="utf-8")
+    config_dir = tmp_path / "work-corpus"
+    config_dir.mkdir()
+    (config_dir / "config.local.json").write_text(
+        json.dumps({"normalization": {"skip_classifications": []}}),
+        encoding="utf-8",
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "reparse-review.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        normalize_module.normalize_all(config, con)
+        row = _source_row(con, "data/notes/Notes/recoverable.md")
+        review_id = record_review_item(
+            con,
+            issue_type="parser_unsupported",
+            source_id=row["source_id"],
+            proposed_result={"source_version_id": row["source_version_id"]},
+            reason="synthetic prior parser failure",
+        )
+        con.execute(
+            "UPDATE normalized_document SET parser_version='old' WHERE source_id=?",
+            (row["source_id"],),
+        )
+        con.commit()
+        normalize_module.normalize_all(config, con)
+        review = con.execute(
+            "SELECT status, resolution FROM review_item WHERE review_id=?",
+            (review_id,),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert review["status"] == "resolved"
+    assert "normalized successfully" in review["resolution"]
 
 
 def test_matching_archive_does_not_duplicate_directory_content(tmp_path: Path):

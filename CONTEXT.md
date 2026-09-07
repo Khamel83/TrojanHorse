@@ -4,6 +4,11 @@ A private source-evidence corpus supporting operating memory and career evidence
 Behavior is specified in the design document; execution is tracked in TODO.md.
 Historical context is preserved in docs/superpowers/plans/2026-09-06-context-history.md.
 
+The current operational checkpoint is recorded in
+`docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md`. Ingestion and
+the deterministic organization pass are complete for the captured local
+sources; human semantic review remains a separate downstream step.
+
 ## Language
 
 **Raw evidence**: The original local file or provider response. The system never rewrites it.
@@ -52,3 +57,18 @@ pages up to thirty notes at a time, fetches each note and transcript, and
 preserves the API `not_...` identity in a local raw capture. REST coverage is
 reported separately from MCP UUID coverage because the two interfaces expose
 different provider identifiers.
+
+**Organization pass**: A local deterministic pass that reconciles available
+payloads, applies existing scope/sensitivity/date rules, creates only explicit
+source-backed entities and relationships, records task proposals, and writes a
+residual review ledger. It does not make human privacy, identity, merge, or
+current-task decisions.
+
+**Residual ledger**: A rebuildable list of pending review items. Each entry
+identifies the source and locator when available, states the bounded reason,
+records the work attempted, and names the smallest human decision needed. It
+does not replace raw evidence or copy raw sensitive text.
+
+**Project source link**: A confirmed relationship from an explicit non-generic
+Capacities `Project` record to a source-backed evidence record. A filename or
+free-text mention alone does not create this link.

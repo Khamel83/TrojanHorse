@@ -31,6 +31,24 @@ The implementation plan is recorded in
 `docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md` and
 was reviewed by Gemini 3.1 Pro.
 
+## Operational checkpoint — 2026-09-07
+
+The captured local corpus now satisfies the ingestion and deterministic
+organization milestones. The acceptance report records 2,751 inventoried
+files, 1,849 source versions, 72,138 FTS rows, and 1,243 relationship rows.
+The Granola REST archive contains 559 imported and searchable API notes, with
+559 summaries and 557 transcripts. The local organization pass created 9
+explicit Project entities, 27 evidence-backed project links, and scanned 1,910
+evidence records for task proposals without creating a current task backlog.
+
+Ambiguous interpretation remains an explicit review state. The current
+residual ledger contains 4,492 pending items, including scope, sensitivity,
+duplicate/version, identity, meeting-link, date, and one Zoom quality review.
+Six Capacities pointers still lack file-size metadata. This is not an
+ingestion failure: available raw data remains preserved and searchable. No
+signed URL was fetched, no provider was written to, and no raw corpus content
+was sent to an external model or service.
+
 ## Goal
 
 Build a local, single-user work assistant that answers questions from historical work evidence and current or future Wispr Flow and Granola records.
