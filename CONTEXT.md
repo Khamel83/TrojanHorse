@@ -64,6 +64,18 @@ source-backed entities and relationships, records task proposals, and writes a
 residual review ledger. It does not make human privacy, identity, merge, or
 current-task decisions.
 
+**First-pass triage**: A follow-on local pass that applies the existing safe
+defaults to policy-stable review queues and writes one grouped exception sheet.
+It may exclude uncertain material from the default Work view and select a
+provisional display record, but it does not delete sources or claim human
+approval.
+
+**Wispr capture date**: The date on the saved local capture envelope. It is
+separate from a Wispr meeting event date. The importer maps `meetings[].start`
+to the event date and the envelope `captured_at` to local capture and retrieval
+dates. It preserves `end` and `modified_at` as separate derived metadata fields
+and does not treat `modified_at` as an event date.
+
 **Residual ledger**: A rebuildable list of pending review items. Each entry
 identifies the source and locator when available, states the bounded reason,
 records the work attempted, and names the smallest human decision needed. It

@@ -14,8 +14,10 @@ from work_corpus.db import (
     upsert_source_record,
 )
 from work_corpus.organization import (
+    apply_first_pass,
     _reconcile_malformed_reviews,
     _record_sensitivity_reviews,
+    _record_wispr_date_reviews,
     organize_all,
     reconcile_capacities_payloads,
 )
@@ -23,10 +25,13 @@ from work_corpus.util import sha256_text
 
 
 def test_cli_exposes_the_resumable_organization_pass():
-    args = _parser().parse_args(["organize", "--run-date", "2026-09-07"])
+    args = _parser().parse_args(
+        ["organize", "--run-date", "2026-09-07", "--first-pass"]
+    )
 
     assert args.command == "organize"
     assert args.run_date == "2026-09-07"
+    assert args.first_pass is True
 
 
 def _source(
@@ -344,6 +349,70 @@ def test_sensitivity_review_supersedes_unanchored_row_when_evidence_arrives(tmp_
     assert stale_id
 
 
+def test_wispr_date_review_is_superseded_after_mapping_repair(tmp_path):
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "organization.sqlite")
+    try:
+        source_id, source_version_id, _ = _source(
+            tmp_path,
+            con,
+            root_key="mcp_wispr_flow",
+            relative_path="data/mcp/wispr_flow/wispr-flow-full-20260906.json",
+            content=b"wispr snapshot",
+            source_system="wispr_flow",
+            kind="mcp",
+        )
+        evidence_id = record_evidence(
+            con,
+            source_version_id,
+            "mcp:item:wispr-item",
+            "work-corpus/corpus/mcp/wispr-flow-item.md",
+            "e" * 64,
+            "derived",
+            derived_text="Wispr item",
+        )
+        con.execute(
+            """
+            INSERT INTO mcp_item (
+                item_id, source_id, provider, external_record_id, capture_date,
+                event_date, retrieval_date, original_response_sha256,
+                normalized_evidence_id, checkpoint_id, updated_at
+            ) VALUES (?, ?, 'wispr_flow', ?, NULL, ?, ?, ?, ?, NULL, ?)
+            """,
+            (
+                "wispr-item",
+                source_id,
+                "wispr-item",
+                "2026-09-04",
+                "2026-09-06",
+                "f" * 64,
+                evidence_id,
+                "2026-09-06T00:00:00Z",
+            ),
+        )
+        stale_id = record_review_item(
+            con,
+            issue_type="wispr_date_review",
+            source_id=source_id,
+            evidence_id=evidence_id,
+            proposed_result={"action": "preserve_unknown_retrieval_date"},
+            reason="old parser run",
+        )
+        con.commit()
+
+        candidates = _record_wispr_date_reviews(con)
+        stale = con.execute(
+            "SELECT status, resolution FROM review_item WHERE review_id=?",
+            (stale_id,),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert candidates == 0
+    assert stale["status"] == "resolved"
+    assert "mapping" in stale["resolution"]
+
+
 def test_organize_all_creates_only_explicit_project_entities_and_repeats_cleanly(tmp_path):
     config = load_config(tmp_path)
     con = connect(config.state_dir / "organization.sqlite")
@@ -419,3 +488,201 @@ def test_organize_all_creates_only_explicit_project_entities_and_repeats_cleanly
     assert state["entity_counts"]["project"] == 1
     assert state["entity_counts"]["person"] == 0
     assert state["entity_counts"]["organization"] == 0
+
+
+def test_first_pass_closes_policy_stable_rows_and_writes_small_response_sheet(tmp_path):
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "organization.sqlite")
+    try:
+        unknown_id, _, _ = _source(
+            tmp_path,
+            con,
+            root_key="capacities_markdown",
+            relative_path="data/notes/Notes/Unknown.md",
+            content=b"unknown",
+            scope="Unknown",
+        )
+        work_id, _, _ = _source(
+            tmp_path,
+            con,
+            root_key="capacities_markdown",
+            relative_path="data/notes/Notes/Work/Restricted.md",
+            content=b"restricted",
+            scope="Work",
+            sensitivity="potential_restricted",
+        )
+        duplicate_one, _, _ = _source(
+            tmp_path,
+            con,
+            root_key="capacities_markdown",
+            relative_path="data/notes/Notes/Copy.md",
+            content=b"copy",
+        )
+        duplicate_two, _, _ = _source(
+            tmp_path,
+            con,
+            root_key="capacities_markdown",
+            relative_path="data/notes/Notes/Copy (1).md",
+            content=b"copy",
+        )
+        version_one, _, _ = _source(
+            tmp_path,
+            con,
+            root_key="capacities_markdown",
+            relative_path="data/notes/Notes/Plan draft.md",
+            content=b"draft",
+        )
+        version_two, _, _ = _source(
+            tmp_path,
+            con,
+            root_key="capacities_markdown",
+            relative_path="data/notes/Notes/Plan final.md",
+            content=b"final",
+        )
+        con.execute(
+            "UPDATE source_record SET mtime_ns=? WHERE source_id=?",
+            (1, version_one),
+        )
+        con.execute(
+            "UPDATE source_record SET mtime_ns=? WHERE source_id=?",
+            (2, version_two),
+        )
+        scope_review = record_review_item(
+            con,
+            issue_type="scope_review",
+            source_id=unknown_id,
+            proposed_result={"scope": "Unknown"},
+            reason="unknown scope",
+        )
+        sensitivity_review = record_review_item(
+            con,
+            issue_type="sensitivity_review",
+            source_id=unknown_id,
+            proposed_result={"action": "review"},
+            reason="unknown sensitivity",
+        )
+        task_scope_review = record_review_item(
+            con,
+            issue_type="task_scope_review",
+            source_id=unknown_id,
+            proposed_result={"action": "do task"},
+            reason="unknown task scope",
+        )
+        meeting_review = record_review_item(
+            con,
+            issue_type="meeting_link_review",
+            source_id=unknown_id,
+            proposed_result={"action": "link"},
+            reason="mixed meeting",
+        )
+        historical_date = record_review_item(
+            con,
+            issue_type="task_date_review",
+            source_id=unknown_id,
+            proposed_result={
+                "source_event_date": "2020-01-01",
+                "source_date_basis": "meeting_date",
+                "eligibility_status": "historical",
+            },
+            reason="old date",
+        )
+        unknown_date = record_review_item(
+            con,
+            issue_type="task_date_review",
+            source_id=unknown_id,
+            proposed_result={
+                "source_event_date": None,
+                "source_date_basis": "not_observed",
+                "eligibility_status": "review",
+            },
+            reason="no date",
+        )
+        duplicate_review = record_review_item(
+            con,
+            issue_type="duplicate_group_review",
+            proposed_result={
+                "duplicate_group_id": "dup-1",
+                "source_ids": [duplicate_one, duplicate_two],
+            },
+            reason="exact duplicate",
+        )
+        version_review = record_review_item(
+            con,
+            issue_type="version_family_review",
+            proposed_result={
+                "family_key": "plan.md",
+                "source_ids": [version_one, version_two],
+            },
+            reason="version family",
+        )
+        record_review_item(
+            con,
+            issue_type="capacities_payload_match",
+            source_id=work_id,
+            proposed_result={"action": "locate"},
+            reason="missing payload",
+        )
+        record_review_item(
+            con,
+            issue_type="entity_candidate_review",
+            source_id=work_id,
+            proposed_result={"candidate_type": "unknown"},
+            reason="unclear entity",
+        )
+        record_review_item(
+            con,
+            issue_type="zoom_quality_review",
+            source_id=work_id,
+            proposed_result={"action": "inspect"},
+            reason="partial transcript",
+        )
+        record_review_item(
+            con,
+            issue_type="sensitivity_review",
+            source_id=work_id,
+            proposed_result={"action": "review"},
+            reason="restricted work source",
+        )
+        con.commit()
+
+        result = apply_first_pass(config, con)
+        repeated = apply_first_pass(config, con)
+        rows = con.execute(
+            "SELECT review_id, status, resolution FROM review_item"
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert result["auto_resolved_review_items"] == 8
+    assert result["pending_action_count"] == 4
+    assert repeated["auto_resolved_review_items"] == 8
+    assert repeated["provisional_display_candidates"] == 2
+    assert result["auto_resolved_by_issue_type"] == {
+        "duplicate_group_review": 1,
+        "meeting_link_review": 1,
+        "sensitivity_review": 1,
+        "scope_review": 1,
+        "task_date_review": 2,
+        "task_scope_review": 1,
+        "version_family_review": 1,
+    }
+    resolved = {row["review_id"]: row for row in rows if row["status"] == "resolved"}
+    assert "provisional display record" in resolved[duplicate_review]["resolution"]
+    assert version_two in resolved[version_review]["resolution"]
+    assert "historical" in resolved[historical_date]["resolution"]
+    assert "no reliable" in resolved[unknown_date]["resolution"]
+    assert resolved[scope_review]
+    assert resolved[sensitivity_review]
+    assert resolved[task_scope_review]
+    assert resolved[meeting_review]
+    assert result["pending_by_issue_type"] == {
+        "capacities_payload_match": 1,
+        "entity_candidate_review": 1,
+        "sensitivity_review": 1,
+        "zoom_quality_review": 1,
+    }
+    response_text = (config.corpus_dir / "reports" / "first_pass_review.md").read_text()
+    assert "4 pending action items" in response_text
+    assert "| `CAPACITIES_PAYLOAD` | 1 |" in response_text
+    assert "| `ENTITY_CANDIDATE` | 1 |" in response_text
+    assert "https://" not in response_text

@@ -37,6 +37,23 @@ local-only work corpus described in `CONTEXT.md`.
 - [x] Compare the raw corpus before and after acceptance: 1,414 files and
   58,965,738,600 bytes match with zero path, size, mtime, or hash mismatches.
 
+## Operational update — 2026-09-07
+
+- [x] Correct the Wispr Flow importer to map `meetings[].start` to event dates,
+  the saved capture envelope's `captured_at` to local capture/retrieval dates,
+  and `end`/`modified_at` to separate derived metadata. The live local result
+  is 13/13 capture dates, 12/13 meeting event dates, 12/12 meeting end dates,
+  13/13 provider-modified dates, and 13/13 retrieval dates. The one scratchpad
+  has no event date in its source object; no event date was invented.
+- [x] Supersede the 13 stale unknown-Wispr-date review rows created by the old
+  mapping and refresh their derived metadata without changing raw files.
+- [x] Apply the safe first-pass triage: 4,411 policy-stable rows resolved, 622
+  provisional duplicate/version display choices retained, and 68 grouped
+  exception items left in the response sheet.
+
+See `docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md` for the
+current boundary. The older Bridge log below is historical.
+
 Current authoritative documents:
 
 - `CONTEXT.md`

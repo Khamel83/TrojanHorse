@@ -6,7 +6,7 @@ does not connect to an MCP server, call a provider, or upload source text.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 from pathlib import Path
@@ -30,7 +30,7 @@ from .util import (
 
 SUPPORTED_PROVIDERS = frozenset({"granola", "wispr_flow"})
 PARSER_NAME = "mcp_snapshot"
-PARSER_VERSION = "1"
+PARSER_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -39,6 +39,7 @@ class SnapshotRecord:
     payload: Mapping[str, Any]
     original_response: str
     line_number: Optional[int] = None
+    snapshot_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,20 @@ def _date_text(value: Any) -> Optional[str]:
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _snapshot_metadata(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Keep envelope dates available to each item without copying the body."""
+    return {
+        key: payload[key]
+        for key in (
+            "capture_date",
+            "captured_at",
+            "retrieval_date",
+            "retrieved_at",
+        )
+        if key in payload and payload[key] not in (None, "")
+    }
 
 
 def _content_from_obj(obj: Mapping[str, Any]) -> str:
@@ -132,6 +147,7 @@ def _records_from_snapshot(path: Path) -> Tuple[List[SnapshotRecord], List[Malfo
         if isinstance(payload, list):
             candidates: Sequence[Any] = payload
         elif isinstance(payload, dict):
+            snapshot_metadata = _snapshot_metadata(payload)
             candidates = []
             for key in ("meetings", "notes", "items", "results", "data", "value"):
                 value = payload.get(key)
@@ -142,11 +158,20 @@ def _records_from_snapshot(path: Path) -> Tuple[List[SnapshotRecord], List[Malfo
                 candidates = [payload]
         else:
             return [], [MalformedRecord(0, "JSON snapshot is neither an object nor an array")]
+        if not isinstance(payload, dict):
+            snapshot_metadata = {}
         for index, item in enumerate(candidates):
             if not isinstance(item, dict):
                 malformed.append(MalformedRecord(index, "snapshot record is not an object"))
                 continue
-            records.append(SnapshotRecord(index, item, _canonical_json(item)))
+            records.append(
+                SnapshotRecord(
+                    index,
+                    item,
+                    _canonical_json(item),
+                    snapshot_metadata=snapshot_metadata,
+                )
+            )
         return records, malformed
 
     return [], [MalformedRecord(0, f"unsupported snapshot extension: {extension or '[none]'}")]
@@ -160,19 +185,65 @@ def _record_fields(record: SnapshotRecord) -> Dict[str, Optional[str]]:
         "",
     )
     title = _first(obj, ("title", "name", "topic", "meeting_title"), "")
+    capture_value = _first(
+        obj,
+        ("capture_date", "captured_at", "recorded_at", "created_at"),
+        "",
+    )
+    if not capture_value:
+        capture_value = _first(
+            record.snapshot_metadata,
+            ("capture_date", "captured_at"),
+            "",
+        )
+    event_value = _first(
+        obj,
+        (
+            "event_date",
+            "meeting_date",
+            "date",
+            "start_time",
+            "start",
+            "event_at",
+        ),
+        "",
+    )
+    event_end_value = _first(
+        obj,
+        ("event_end_date", "end_time", "end", "ended_at"),
+        "",
+    )
+    provider_modified_value = _first(
+        obj,
+        ("provider_modified_date", "modified_at", "updated_at"),
+        "",
+    )
+    retrieval_value = _first(
+        obj,
+        (
+            "retrieval_date",
+            "retrieved_at",
+            "ingested_at",
+            "fetched_at",
+            "captured_at",
+        ),
+        "",
+    )
+    if not retrieval_value:
+        retrieval_value = _first(
+            record.snapshot_metadata,
+            ("retrieval_date", "retrieved_at", "captured_at"),
+            "",
+        )
     return {
         "external_record_id": str(external_id).strip() or None,
         "title": str(title).strip() or "Snapshot item",
         "content": _content_from_obj(obj),
-        "capture_date": _date_text(
-            _first(obj, ("capture_date", "captured_at", "recorded_at", "created_at"), "")
-        ),
-        "event_date": _date_text(
-            _first(obj, ("event_date", "meeting_date", "date", "start_time", "event_at"), "")
-        ),
-        "retrieval_date": _date_text(
-            _first(obj, ("retrieval_date", "retrieved_at", "ingested_at", "fetched_at"), "")
-        ),
+        "capture_date": _date_text(capture_value),
+        "event_date": _date_text(event_value),
+        "event_end_date": _date_text(event_end_value),
+        "provider_modified_date": _date_text(provider_modified_value),
+        "retrieval_date": _date_text(retrieval_value),
     }
 
 
@@ -303,6 +374,135 @@ def _derived_content_length(con: sqlite3.Connection, evidence_id: str) -> int:
     return len(text.strip())
 
 
+def _record_body(
+    *,
+    row: sqlite3.Row,
+    provider: str,
+    item_id: str,
+    source_version_id: str,
+    safe_fields: Mapping[str, Any],
+) -> str:
+    source_date = safe_fields["event_date"] or safe_fields["capture_date"]
+    date_basis = "event_date" if safe_fields["event_date"] else (
+        "capture_date" if safe_fields["capture_date"] else "not_observed"
+    )
+    header = provenance_header(
+        {
+            "source_id": row["source_id"],
+            "source_version_id": source_version_id,
+            "source_system": provider,
+            "original_path": row["absolute_path"],
+            "relative_path": row["relative_path"],
+            "original_date": source_date or "",
+            "source_date_basis": date_basis,
+            "file_type": "mcp_item",
+            "parser": PARSER_NAME,
+            "parser_version": PARSER_VERSION,
+            "locator": f"mcp:item:{item_id}",
+            "generated_at": now_iso(),
+        }
+    )
+    return "\n".join(
+        [
+            header.rstrip(),
+            f"# {safe_fields['title']}",
+            "",
+            f"- Provider: {provider}",
+            f"- External record ID: {safe_fields['external_record_id'] or ''}",
+            f"- Capture date: {safe_fields['capture_date'] or ''}",
+            f"- Event date: {safe_fields['event_date'] or ''}",
+            f"- Event end date: {safe_fields['event_end_date'] or ''}",
+            f"- Provider modified date: {safe_fields['provider_modified_date'] or ''}",
+            f"- Retrieval date: {safe_fields['retrieval_date'] or ''}",
+            "",
+            "## Content",
+            "",
+            scrub_fts_text(str(safe_fields["content"] or "")).strip(),
+            "",
+        ]
+    )
+
+
+def _refresh_existing_derived_dates(
+    config: Config,
+    con: sqlite3.Connection,
+    *,
+    evidence_id: Optional[str],
+    safe_fields: Mapping[str, Any],
+) -> None:
+    """Repair date metadata without replacing richer existing content."""
+    if not evidence_id:
+        return
+    evidence = con.execute(
+        "SELECT source_version_id, locator, derived_text_path FROM evidence_record WHERE evidence_id=?",
+        (evidence_id,),
+    ).fetchone()
+    if not evidence or not evidence["derived_text_path"]:
+        return
+    path = Path(str(evidence["derived_text_path"]))
+    config.assert_derived_path(path)
+    if not path.is_file():
+        return
+    body = path.read_text(encoding="utf-8")
+    source_date = safe_fields["event_date"] or safe_fields["capture_date"]
+    date_basis = "event_date" if safe_fields["event_date"] else (
+        "capture_date" if safe_fields["capture_date"] else "not_observed"
+    )
+    replacements = {
+        "- Capture date: ": safe_fields["capture_date"] or "",
+        "- Event date: ": safe_fields["event_date"] or "",
+        "- Event end date: ": safe_fields["event_end_date"] or "",
+        "- Provider modified date: ": safe_fields["provider_modified_date"] or "",
+        "- Retrieval date: ": safe_fields["retrieval_date"] or "",
+        "original_date: ": json.dumps(source_date or ""),
+        "source_date_basis: ": json.dumps(date_basis),
+        "parser_version: ": json.dumps(PARSER_VERSION),
+    }
+    lines = body.splitlines()
+    changed = False
+    found_prefixes = set()
+    for index, line in enumerate(lines):
+        for prefix, value in replacements.items():
+            if line.startswith(prefix):
+                found_prefixes.add(prefix)
+                replacement = f"{prefix}{value}"
+                if line != replacement:
+                    lines[index] = replacement
+                    changed = True
+                break
+    insert_at = next(
+        (index for index, line in enumerate(lines) if line.startswith("- Retrieval date: ")),
+        None,
+    )
+    if insert_at is not None:
+        for prefix, value in (
+            ("- Event end date: ", safe_fields["event_end_date"] or ""),
+            ("- Provider modified date: ", safe_fields["provider_modified_date"] or ""),
+        ):
+            if prefix not in found_prefixes:
+                lines.insert(insert_at, f"{prefix}{value}")
+                insert_at += 1
+                changed = True
+    if not changed:
+        return
+    refreshed = "\n".join(lines) + ("\n" if body.endswith("\n") else "")
+    atomic_write_text(path, refreshed)
+    fts = con.execute(
+        "SELECT document_id FROM derived_text_fts WHERE evidence_id=?",
+        (evidence_id,),
+    ).fetchone()
+    record_evidence(
+        con,
+        source_version_id=str(evidence["source_version_id"]),
+        locator=str(evidence["locator"]),
+        derived_text_path=str(path),
+        text_sha256=sha256_text(refreshed),
+        evidence_status="derived",
+        derived_text=refreshed,
+        document_id=fts["document_id"] if fts else None,
+    )
+
+
 def _persist_record(
     config: Config,
     con: sqlite3.Connection,
@@ -323,6 +523,12 @@ def _persist_record(
         source_version_id,
         record.index,
         response_sha256,
+    )
+    output = _normalized_output(
+        config,
+        provider=provider,
+        item_id=item_id,
+        source_version_id=source_version_id,
     )
     existing = con.execute(
         "SELECT * FROM mcp_item WHERE item_id=?",
@@ -366,6 +572,12 @@ def _persist_record(
                 item_id,
             ),
         )
+        _refresh_existing_derived_dates(
+            config,
+            con,
+            evidence_id=str(existing["normalized_evidence_id"]),
+            safe_fields=safe_fields,
+        )
         return item_id, str(existing["normalized_evidence_id"])
     if (
         existing
@@ -401,51 +613,21 @@ def _persist_record(
                 item_id,
             ),
         )
+        _refresh_existing_derived_dates(
+            config,
+            con,
+            evidence_id=str(existing["normalized_evidence_id"]),
+            safe_fields=safe_fields,
+        )
         return item_id, str(existing["normalized_evidence_id"])
 
     locator = f"mcp:item:{item_id}"
-    output = _normalized_output(
-        config,
+    body = _record_body(
+        row=row,
         provider=provider,
         item_id=item_id,
         source_version_id=source_version_id,
-    )
-    source_date = safe_fields["event_date"] or safe_fields["capture_date"]
-    date_basis = "event_date" if safe_fields["event_date"] else (
-        "capture_date" if safe_fields["capture_date"] else "not_observed"
-    )
-    header = provenance_header(
-        {
-            "source_id": row["source_id"],
-            "source_version_id": source_version_id,
-            "source_system": provider,
-            "original_path": row["absolute_path"],
-            "relative_path": row["relative_path"],
-            "original_date": source_date or "",
-            "source_date_basis": date_basis,
-            "file_type": "mcp_item",
-            "parser": PARSER_NAME,
-            "parser_version": PARSER_VERSION,
-            "locator": locator,
-            "generated_at": now_iso(),
-        }
-    )
-    body = "\n".join(
-        [
-            header.rstrip(),
-            f"# {safe_fields['title']}",
-            "",
-            f"- Provider: {provider}",
-            f"- External record ID: {safe_fields['external_record_id'] or ''}",
-            f"- Capture date: {safe_fields['capture_date'] or ''}",
-            f"- Event date: {safe_fields['event_date'] or ''}",
-            f"- Retrieval date: {safe_fields['retrieval_date'] or ''}",
-            "",
-            "## Content",
-            "",
-            scrub_fts_text(str(safe_fields["content"] or "")).strip(),
-            "",
-        ]
+        safe_fields=safe_fields,
     )
     atomic_write_text(output, body)
     evidence_id = record_evidence(

@@ -40,14 +40,21 @@ The Granola REST archive contains 559 imported and searchable API notes, with
 559 summaries and 557 transcripts. The local organization pass created 9
 explicit Project entities, 27 evidence-backed project links, and scanned 1,910
 evidence records for task proposals without creating a current task backlog.
+The safe first pass then resolved 4,411 policy-stable review rows and reduced
+the pending response to 68 grouped exceptions. Wispr Flow now has 13/13 local
+capture and retrieval dates and 12/13 meeting event dates; the one scratchpad
+has no event date in its source object. The old 13 unknown-date rows were
+superseded after the importer was corrected to map `meetings[].start` and the
+capture envelope's `captured_at`.
 
-Ambiguous interpretation remains an explicit review state. The current
-residual ledger contains 4,492 pending items, including scope, sensitivity,
-duplicate/version, identity, meeting-link, date, and one Zoom quality review.
-Six Capacities pointers still lack file-size metadata. This is not an
-ingestion failure: available raw data remains preserved and searchable. No
-signed URL was fetched, no provider was written to, and no raw corpus content
-was sent to an external model or service.
+Ambiguous interpretation remains an explicit review state. The safe first pass
+resolved 4,411 policy-stable review rows and the current residual ledger
+contains 68 grouped exceptions: six Capacities payload gaps, 48 entity
+candidates, four unconfirmed-scope sources, nine Work-restricted sensitivity
+items, and one Zoom quality review. Six Capacities pointers still lack
+file-size metadata. This is not an ingestion failure: available raw data
+remains preserved and searchable. No signed URL was fetched, no provider was
+written to, and no raw corpus content was sent to an external model or service.
 
 ## Goal
 
@@ -130,7 +137,7 @@ The first source adapters are:
 | Notion | `LifeOS` ExportBlock with HTML, database CSV files, transcripts, and attachments | Parse HTML and CSV database exports. Link local attachments. Preserve page and database identity. |
 | OneNote | 29 `.one` section files; 295 pages extracted | Use the tested local parser route. Write Markdown as derived output. Keep the `.one` files as source evidence. |
 | Formal records | PDF, DOCX, PPTX, XLSX, and CSV files | Extract text, pages, slides, tables, and sheet information. Preserve document locations. |
-| Wispr Flow | 13 locally captured records | Import local snapshots and retain unknown retrieval-date freshness. |
+| Wispr Flow | 13 locally captured records | Import local snapshots; map the capture envelope, meeting start/end dates, and provider-modified dates as separate metadata, while retaining a missing event date when the source does not provide one. |
 | Granola | REST archive has 559 unique API notes, 559 summaries, and 557 transcripts; the MCP shadow checkpoint has 559 UUID-listed meetings with 186 detail captures, 181 detailed summaries, and 177 transcripts | Use the read-only REST API for the one-time archive: list up to 30 notes per opaque-cursor page, fetch each note, and use the paginated transcript endpoint for oversized responses. Preserve raw responses and searchable derived records. Retain the MCP connector's up-to-ten detail IDs, serialized transcript calls, and five-ID rate-limit recovery as an optional shadow refresh path. |
 
 The Notion ExportBlock and Capacities export are separate source systems. The source registry must identify them by explicit root path, not by filename heuristics.

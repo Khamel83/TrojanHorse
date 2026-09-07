@@ -120,6 +120,114 @@ def test_external_id_is_idempotent_and_event_date_is_preserved(tmp_path: Path):
     ]
 
 
+def test_wispr_capture_envelope_maps_start_and_captured_at_dates(tmp_path: Path):
+    payload = json.dumps(
+        {
+            "schema_version": 1,
+            "provider": "wispr_flow",
+            "capture_id": "wispr-capture-20260906",
+            "captured_at": "2026-09-06T16:10:20.872Z",
+            "meetings": [
+                {
+                    "id": "wispr-meeting-1",
+                    "title": "Recorded meeting",
+                    "start": "2026-09-04T18:01:28.068Z",
+                    "end": "2026-09-04T18:15:48.952Z",
+                    "modified_at": "2026-09-04T18:20:51.398Z",
+                    "transcript": "Meeting transcript.",
+                }
+            ],
+        }
+    )
+    config, con, _source_id, _version_id = _source(
+        tmp_path, "wispr_flow", "wispr-flow-full-20260906.json", payload
+    )
+    try:
+        result = ingest_mcp_sources(config, con)
+        item = con.execute("SELECT * FROM mcp_item").fetchone()
+        evidence_path = Path(
+            con.execute(
+                "SELECT derived_text_path FROM evidence_record WHERE evidence_id=?",
+                (item["normalized_evidence_id"],),
+            ).fetchone()[0]
+        )
+        evidence_body = evidence_path.read_text(encoding="utf-8")
+    finally:
+        con.close()
+
+    assert result["items"] == 1
+    assert item["capture_date"] == "2026-09-06"
+    assert item["event_date"] == "2026-09-04"
+    assert item["retrieval_date"] == "2026-09-06"
+    assert "- Event end date: 2026-09-04" in evidence_body
+    assert "- Provider modified date: 2026-09-04" in evidence_body
+    assert 'parser_version: "2"' in evidence_body
+
+
+def test_wispr_date_repair_refreshes_existing_derived_metadata(tmp_path: Path):
+    payload = json.dumps(
+        {
+            "schema_version": 1,
+            "provider": "wispr_flow",
+            "capture_id": "wispr-capture-20260906",
+            "captured_at": "2026-09-06T16:10:20.872Z",
+            "meetings": [
+                {
+                    "id": "wispr-meeting-1",
+                    "title": "Recorded meeting",
+                    "start": "2026-09-04T18:01:28.068Z",
+                    "end": "2026-09-04T18:15:48.952Z",
+                    "modified_at": "2026-09-04T18:20:51.398Z",
+                    "transcript": "Meeting transcript.",
+                }
+            ],
+        }
+    )
+    config, con, _source_id, _version_id = _source(
+        tmp_path, "wispr_flow", "wispr-flow-full-20260906.json", payload
+    )
+    try:
+        ingest_mcp_sources(config, con)
+        item = con.execute("SELECT * FROM mcp_item").fetchone()
+        evidence = con.execute(
+            "SELECT derived_text_path FROM evidence_record WHERE evidence_id=?",
+            (item["normalized_evidence_id"],),
+        ).fetchone()
+        evidence_path = Path(evidence["derived_text_path"])
+        evidence_path.write_text(
+            evidence_path.read_text(encoding="utf-8")
+            .replace('original_date: "2026-09-04"', 'original_date: ""')
+            .replace('source_date_basis: "event_date"', 'source_date_basis: "not_observed"')
+            .replace('parser_version: "2"', 'parser_version: "1"')
+            .replace("- Event date: 2026-09-04", "- Event date: ")
+            .replace("- Event end date: 2026-09-04\n", "")
+            .replace("- Provider modified date: 2026-09-04\n", "")
+            .replace("- Retrieval date: 2026-09-06", "- Retrieval date: "),
+            encoding="utf-8",
+        )
+        con.execute(
+            "UPDATE mcp_item SET event_date=NULL, retrieval_date=NULL WHERE item_id=?",
+            (item["item_id"],),
+        )
+        con.commit()
+
+        ingest_mcp_sources(config, con)
+        repaired = con.execute("SELECT * FROM mcp_item").fetchone()
+        repaired_body = evidence_path.read_text(encoding="utf-8")
+    finally:
+        con.close()
+
+    assert repaired["event_date"] == "2026-09-04"
+    assert repaired["retrieval_date"] == "2026-09-06"
+    assert "- Event date: 2026-09-04" in repaired_body
+    assert "- Event end date: 2026-09-04" in repaired_body
+    assert "- Provider modified date: 2026-09-04" in repaired_body
+    assert "- Retrieval date: 2026-09-06" in repaired_body
+    assert 'original_date: "2026-09-04"' in repaired_body
+    assert 'source_date_basis: "event_date"' in repaired_body
+    assert 'parser_version: "2"' in repaired_body
+
+
 def test_overlapping_snapshot_reuses_evidence_for_same_response(tmp_path: Path):
     payload = json.dumps(
         {

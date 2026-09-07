@@ -43,14 +43,17 @@ evidence, and the original completed Tasks 0–9 and historical gates remain doc
   remains documented for an optional future shadow refresh; no recurring
   heartbeat was recreated for duplicate historical calls.
 - [x] 5. Match available Capacities payloads to pointer identities; record specific
-  unresolved targets. Inspect Wispr date evidence and preserve unknown dates.
+  unresolved targets. Repair Wispr date-field mapping and preserve only genuinely
+  missing event dates.
   Verify existing OneNote coverage and retain quiet Zoom/artifact terminal outcomes.
   No new exports required; no signed-URL fetches or unnecessary retranscription.
   Evidence: 563 typed pointers, 557 matched pointers, 451 local payload targets,
   1,216 confirmed payload relationships, and 6 explicit `pointer_missing_file_size`
-  reviews. Wispr has 13 records with unknown retrieval dates; OneNote is 29/29
-  files and 295/295 pages; Zoom has 230 succeeded and 1 partial terminal result
-  with 0 eligible media lacking terminal status.
+  reviews. Wispr has 13/13 local capture and retrieval dates, all 12 meeting
+  start/end/provider-modified dates, and the scratchpad's provider-modified
+  date; the scratchpad has no event date in its source object;
+  OneNote is 29/29 files and 295/295 pages; Zoom has 230 succeeded and 1
+  partial terminal result with 0 eligible media lacking terminal status.
 - [x] 6. Close ingestion milestone with evidence: exact Granola REST identity
   coverage, representative Work-scope query checks, preserved source hashes,
   retry/terminal accounting, and regression tests. The residual interpretation
@@ -61,13 +64,16 @@ evidence, and the original completed Tasks 0–9 and historical gates remain doc
 Start after milestone 1 is verified; resume from persisted checkpoints.
 
 - [x] 7. Apply existing rules to scope, sensitivity, duplicate/version, date and
-  meeting-link queues. Preserve all eligible parseable content. Record reasons and
-  evidence for resolved and unresolved items; never force uncertain merges.
-  Evidence: the deterministic pass records 443 scope, 1,396 sensitivity, 312
-  duplicate, 310 version, 1,561 task-date, 350 task-scope, 52 meeting-link,
-  13 Wispr-date, and 1 Zoom-quality pending items. Stale rows were reconciled
-  only when the same source version gained evidence; no ambiguous decision was
-  forced.
+  meeting-link queues, then apply the safe first-pass defaults. Preserve all
+  eligible parseable content. Record reasons and evidence for resolved and
+  unresolved items; never force uncertain merges.
+  Evidence: the organizer saw 443 scope, 1,396 sensitivity, 312 duplicate,
+  310 version, 1,561 task-date, 350 task-scope, 52 meeting-link, 0 current
+  Wispr-date, and 1 Zoom-quality candidates. The first pass resolved 4,411
+  policy-stable rows, selected 622 provisional display records, and left 68
+  grouped exceptions: 6 payload, 48 entity, 4 scope, 9 sensitivity, and 1 Zoom
+  quality. The old 13 Wispr-date rows were superseded after the field mapping
+  repair; no ambiguous merge was forced.
 - [x] 8. Populate supported people, projects, organizations and aliases with source
   locators. Use existing entities APIs and minimal resumable orchestration.
   Evidence: 9 explicit Project entities, 9 aliases, and 27 evidence-backed
@@ -84,18 +90,19 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   work the agent attempted, and the smallest user decision needed. Do not present
   every queue entry as a mandatory manual task. Keep sensitive details local.
   Evidence: `work-corpus/state/residual_ledger.json` and
-  `work-corpus/corpus/reports/residual_ledger.csv` contain 4,492 pending entries
-  with bounded metadata and no copied raw sensitive text or provider URLs.
+  `work-corpus/corpus/reports/residual_ledger.csv` contain 68 pending grouped
+  entries with bounded metadata and no copied raw sensitive text or provider
+  URLs. The grouped response is `work-corpus/corpus/reports/first_pass_review.md`.
 
 ## Final acceptance and handoff
 
 - [x] 11. Refresh reports in dependency order and run appropriate tests. Verify
   source preservation, provenance, representative searches and derived links/tasks.
   Historical 152-test results are not validation of new changes. Evidence: the
-  current report is generated after organization, both indexes are fresh
-  (72,138 FTS rows and 1,243 relationship rows), raw immutability remains passed,
-  representative Work-scope query checks remain recorded, and the full suite is
-  run as part of final acceptance.
+  current report is generated after organization and first-pass triage, both
+  indexes are fresh (72,138 FTS rows and 1,243 relationship rows), raw
+  immutability remains passed, representative Work-scope query checks remain
+  recorded, and the full suite is run as part of final acceptance.
 - [x] 12. Update README, glossary, status, spec and checklist with verified results.
   Commit scoped code/docs/tests and push under existing user authorization. Verify
   remote commit identity; leave raw data/runtime state outside Git.

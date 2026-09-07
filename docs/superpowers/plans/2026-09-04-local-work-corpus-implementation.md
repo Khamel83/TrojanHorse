@@ -578,7 +578,10 @@ accounted for. It does not count as successfully transcribed.
 - A local transcription executable and model path must be available before the media coverage run. The design supports a configured local command and does not assume a particular engine. If the engine is unavailable, the run records `blocked` items and remains incomplete. It never switches to a cloud engine.
 - The OneNote converter must be available on the machine at implementation time. The selected route and version must be recorded in adapter metadata.
 - Work/personal/mixed classification and ambiguous entity merges require user review. This is expected review work, not a reason to send data to a service.
-- No current Wispr Flow or Granola export is present in this snapshot. The local snapshot adapter can be tested with synthetic fixtures and activated when a user-authorized export exists.
+- At the original 2026-09-04 plan snapshot, no current Wispr Flow or Granola
+  export was present. The local snapshot adapter was later activated with
+  user-authorized captures. The current Wispr result and its date-field repair
+  are recorded in `docs/LOCAL_WORK_CORPUS_STATUS.md`.
 
 ## Final TODO
 

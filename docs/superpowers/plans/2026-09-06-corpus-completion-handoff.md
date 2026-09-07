@@ -39,6 +39,18 @@ are unverified counters. Batch 0031 contained one retry and four new IDs, but
 the counter advanced by five. Two stored unavailable IDs also differ from
 inventory IDs in earlier runs. Recompute by exact IDs; never repair IDs by guess.
 
+### 2026-09-07 execution correction
+
+The saved Wispr capture was not dateless. Its 12 meeting records contain
+`start`, `end`, and `modified_at`; its one note contains `modified_at`; and the
+capture envelope contains `captured_at`. The initial generic importer missed
+`start` and did not propagate the envelope timestamp to item metadata. The
+corrected importer now records 13/13 local capture dates, 12/13 meeting event
+dates, all 12 meeting end dates, 13/13 provider-modified dates, and 13/13
+retrieval dates. The one note remains without an event date because its source
+object does not provide one. The 13 review rows created by the old mapping were
+superseded, and the derived date metadata and parser provenance were refreshed.
+
 ## Ordered implementation and acceptance
 
 1. Establish one writer. Inspect and pause the existing Granola heartbeat while
@@ -75,8 +87,9 @@ inventory IDs in earlier runs. Recompute by exact IDs; never repair IDs by guess
    Capacities pointers against local payloads with evidence-backed identities;
    preserve ambiguity and missing targets as explicit outcomes. Do not fetch signed
    URLs or require another export. Inspect Wispr's 13 records for event dates;
-   record unknown dates honestly. Retain the quiet Zoom partial and artifacts as
-   terminal evidence; confirm all 29 OneNote files/295 pages remain represented.
+   map the provider fields actually present and record only genuinely missing
+   dates. Retain the quiet Zoom partial and artifacts as terminal evidence;
+   confirm all 29 OneNote files/295 pages remain represented.
 6. Process existing interpretation queues with existing rules and APIs: scope,
    sensitivity, duplicate/version families, task dates and ambiguous meeting links.
    Populate supported entity aliases, relationships and explicit task candidates

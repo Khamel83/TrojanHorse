@@ -168,6 +168,11 @@ def _parser() -> argparse.ArgumentParser:
         default="",
         help="ISO date used for current-task eligibility (defaults to today).",
     )
+    organize.add_argument(
+        "--first-pass",
+        action="store_true",
+        help="Apply safe defaults and write a small exception response sheet.",
+    )
     return parser
 
 
@@ -225,7 +230,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             details["index_verification"] = _record_index_checkpoint(config, con)
         elif args.command == "organize":
             run_date = date.fromisoformat(args.run_date) if args.run_date else None
-            details = organize_all(config, con, run_date=run_date)
+            details = organize_all(
+                config,
+                con,
+                run_date=run_date,
+                first_pass=args.first_pass,
+            )
             details["index_verification"] = _record_index_checkpoint(config, con)
             details["report"] = build_report(config, con)
         else:

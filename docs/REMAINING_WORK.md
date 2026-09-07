@@ -7,11 +7,10 @@ reconciliation ledgers in `work-corpus/state/`.
 
 ## The current boundary
 
-The source-backed evidence base and its deterministic organization pass are
-complete for the currently captured local sources. The semantic review phase
-is not complete. It still needs human decisions for scope, sensitivity,
-identity, duplicates, versions, dates, and a small number of media or payload
-links.
+The source-backed evidence base, deterministic organization pass, and safe
+first-pass triage are complete for the currently captured local sources. The
+semantic exception phase is not complete. It now needs only grouped decisions
+for a small number of payload, scope, sensitivity, identity, and media items.
 
 These terms are intentionally separate:
 
@@ -21,6 +20,9 @@ These terms are intentionally separate:
   explicit entities, task proposals, and review items.
 - **Reviewed** means a human accepted or rejected an interpretation. The
   organizer does not claim this state for ambiguous records.
+- **First-pass triage** means the existing default rules handled a policy-stable
+  queue without changing raw files, source classifications, or canonical facts.
+  It does not mean a human approved an interpretation.
 
 ## What is complete
 
@@ -46,7 +48,7 @@ inventory evidence, not missing source content.
 | --- | --- | --- |
 | Granola REST | 559 unique API notes across 19 pages; 559 summaries; 557 transcripts; 2 summary-only notes; all 559 imported and searchable | Complete for the current API listing. No historical API pull is required to close this gate. |
 | Granola MCP shadow | 559 UUID-listed IDs imported/searchable; 186 detail captures, 181 detailed summaries, 177 transcripts | Incomplete but redundant. Its 378 detail and 382 transcript gaps do not reduce REST archive coverage. |
-| Wispr Flow | 13 unique local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | The local capture has no usable retrieval dates, so freshness remains unknown. |
+| Wispr Flow | 13 unique local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | 13/13 have local capture and retrieval dates; all 12 meetings have start, end, and provider-modified dates; the scratchpad has provider-modified metadata but no event date in its source object. |
 | Capacities | 563 typed pointer records; 557 matched to 451 local payload records; 1,216 confirmed pointer-to-payload relationships | Six pointers still lack file-size metadata and remain explicit review items. No signed URL was fetched. |
 | Zoom | 231 tracked groups; 230 successful and 1 quality-limited partial; zero eligible media without a transcript or terminal status | The one partial result and 52 meeting-link reviews remain human review. |
 | OneNote | 29 of 29 files parsed; 295 of 295 reviewed pages extracted | No current mechanical gap. |
@@ -73,47 +75,51 @@ entities, relationships, or review items.
 - 1,910 evidence records were scanned for explicit task proposals. There are
   0 task rows and 0 current task rows. Historical or undated commitments were
   not promoted into a current backlog.
-- The residual ledger contains 4,492 pending items. It records source IDs,
-  evidence locators when available, a bounded reason, the work attempted, and
-  the smallest human decision needed. It does not copy raw sensitive text or
-  provider URLs.
+- The safe first pass resolved 4,411 policy-stable review rows and selected 622
+  provisional duplicate/version display records while retaining every source
+  record. The residual ledger now contains 68 pending items. It records source
+  IDs, evidence locators when available, a bounded reason, the work attempted,
+  and the smallest grouped decision needed. It does not copy raw sensitive
+  text or provider URLs.
+- The old 13 Wispr unknown-retrieval rows were superseded after the importer was
+  corrected to map Wispr `meetings[].start`, `end`, and `modified_at`, plus the
+  capture envelope's `captured_at`. They are not current review work.
 
 ## What remains
 
 These are interpretation queues, not missing raw data:
 
-| Review type | Pending | Smallest next decision |
+| Grouped response code | Pending | Default first-pass action |
 | --- | ---: | --- |
-| Capacities payload match | 6 | Supply or identify the local payload, or explicitly approve a reviewed fetch/export. |
-| Scope | 443 | Confirm Work, Personal, Mixed, or Unknown. |
-| Sensitivity | 1,396 | Confirm whether each flagged source may enter the intended downstream view. |
-| Exact duplicate group | 312 | Choose a canonical display record, if any; retain provenance copies. |
-| Version family | 310 | Identify current versus historical versions without deleting source records. |
-| Entity candidate | 48 | Confirm entity type and canonical name, or leave unresolved. |
-| Meeting link | 52 | Confirm the correct Zoom transcript/media association. |
-| Zoom quality | 1 | Accept the partial transcript or authorize a new local quality pass. |
-| Wispr date | 13 | Supply provider-backed retrieval timing or accept unknown freshness. |
-| Task date | 1,561 | Confirm an event date or leave the proposal historical/unresolved. |
-| Task scope | 350 | Confirm Work scope before surfacing a task. |
+| `CAPACITIES_PAYLOAD` | 6 | Leave unresolved unless the local payload is identified. |
+| `ENTITY_CANDIDATE` | 48 | Leave candidates unclassified. |
+| `SCOPE_UNCONFIRMED` | 4 | Keep outside the default Work view. |
+| `WORK_RESTRICTED` | 9 | Keep outside the Work view. |
+| `ZOOM_PARTIAL` | 1 | Keep the partial result marked partial. |
 
-The scope report groups 443 scope items with 350 task-scope items as 793
-scope-related review items; meeting-link reviews are reported separately.
+The 68 rows are grouped in
+[`first_pass_review.md`](../work-corpus/corpus/reports/first_pass_review.md).
+The CSV contains bounded source metadata for the grouped exceptions; it does
+not require item-by-item review. Duplicate/version choices are recorded in
+[`first_pass_display_candidates.csv`](../work-corpus/corpus/reports/first_pass_display_candidates.csv)
+and all original source records remain available.
 
 ## Ordered next work
 
-The remaining work is now selective human review, in this order:
+The remaining work is now a short grouped response, in this order:
 
-1. Resolve the six Capacities pointers with missing file-size metadata if the
-   corresponding local payload can be identified without guessing.
-2. Review the residual ledger selectively for the intended downstream view:
-   scope and sensitivity first, then duplicate/version decisions.
-3. Review the 48 entity candidates and add people or organizations only when a
-   source-backed canonical identity is clear.
-4. Review the Zoom partial and meeting links, and resolve Wispr freshness only
-   when provider-backed dates are available.
-5. Promote only explicitly dated, Work-scoped task proposals that satisfy the
-   runtime's future-or-previous-14-days rule. Keep older commitments as
-   historical evidence.
+1. Resolve or leave the six Capacities payload gaps.
+2. Confirm whether the nine Work-restricted sources may enter the intended
+   downstream view; the default is to keep them out.
+3. Leave the 48 entity candidates unclassified unless a source-backed identity
+   is clear.
+4. Leave the four unconfirmed-scope sources out and decide whether to accept
+   the one partial Zoom result.
+
+No duplicate/version, task-date, task-scope, meeting-link, or Wispr-date queue
+requires item-by-item review for the current pass. If the user changes one of
+the defaults, the agent can apply that grouped exception against the
+source-backed ledger.
 
 No additional historical Granola or Wispr full pull is required for the
 currently captured sources. The older Granola MCP heartbeat is not needed to
@@ -131,7 +137,7 @@ Run from the repository root:
 
 ```bash
 PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m pytest -q work-corpus/tests
-PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m work_corpus --root . organize --run-date 2026-09-07
+PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m work_corpus --root . organize --run-date 2026-09-07 --first-pass
 PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m work_corpus --root . report
 ```
 
@@ -142,6 +148,10 @@ The organizer writes only rebuildable derived state:
 - `work-corpus/state/residual_ledger.json`
 - `work-corpus/corpus/reports/residual_ledger.csv`
 - `work-corpus/corpus/reports/status.json`
+- `work-corpus/state/first_pass_acceptance.json`
+- `work-corpus/corpus/reports/first_pass_review.md`
+- `work-corpus/corpus/reports/first_pass_review.csv`
+- `work-corpus/corpus/reports/first_pass_display_candidates.csv`
 
 Raw files and provider captures remain outside Git and are not pushed as
 repository content.

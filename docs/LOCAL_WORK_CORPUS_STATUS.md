@@ -1,14 +1,16 @@
 # Local Work Corpus Status
 
 Status date: 2026-09-07
-Latest report: `2026-09-07T11:50:41-07:00`
+Latest report: `2026-09-07T15:01:41-07:00`
 
 ## Current completion boundary
 
-The two approved milestones are complete through deterministic organization:
-first ingestion and search verification, then source-backed links, explicit
-projects, task-proposal scanning, and residual review records. Human semantic
-review remains open. See the [remaining-work map](REMAINING_WORK.md) and the
+The two approved milestones are complete through deterministic organization
+and a safe first-pass triage: first ingestion and search verification, then
+source-backed links, explicit projects, task-proposal scanning, and grouped
+residual exceptions. Human semantic review remains open only for those grouped
+exceptions. See the [remaining-work map](REMAINING_WORK.md), the [first-pass
+review sheet](../work-corpus/corpus/reports/first_pass_review.md), and the
 [completion handoff](superpowers/plans/2026-09-06-corpus-completion-handoff.md).
 
 The local evidence base is complete for the currently captured Granola REST,
@@ -40,7 +42,7 @@ silently canonicalized.
 | --- | --- | --- |
 | Granola REST | 559 unique notes across 19 list pages; 559 summaries; 557 transcripts; 2 summary-only notes; all 559 imported/searchable | Complete for the current API listing. |
 | Granola MCP shadow | 559 listed UUIDs imported/searchable; 186 detail captures, 181 detailed summaries, 177 transcripts | 378 detail and 382 transcript gaps remain in this redundant shadow feed. |
-| Wispr Flow | 13 local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | All 13 retrieval dates are unknown in the saved capture. |
+| Wispr Flow | 13 local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | 13/13 have local capture and retrieval dates; all 12 meetings have start, end, and provider-modified dates; the scratchpad has provider-modified metadata but no event date in its source object. |
 | Capacities | 563 typed pointer records; 557 matched to 451 local payload records; 1,216 confirmed pointer-to-payload relationships | 6 pointers lack file-size metadata and remain review items. No signed URL was fetched. |
 | Zoom | 231 tracked groups; 230 succeeded and 1 is partial; 0 eligible media lacks a transcript or terminal status | 1 partial quality review and 52 meeting-link reviews remain. |
 | OneNote | 29 of 29 `.one` files parsed; 295 of 295 reviewed pages extracted | No current mechanical gap. |
@@ -83,18 +85,21 @@ The acceptance state is
 its machine-readable form is
 [`residual_ledger.json`](../work-corpus/state/residual_ledger.json).
 
-Current pending review counts:
+The first pass resolved 4,411 policy-stable rows, selected 622 provisional
+duplicate/version display records, and left this grouped response:
 
 - Capacities payload match: 6.
-- Scope: 443; task scope: 350.
-- Sensitivity: 1,396.
-- Exact duplicate groups: 312.
-- Version families: 310.
 - Entity candidates: 48.
-- Meeting links: 52; Zoom quality: 1.
-- Wispr dates: 13.
-- Task dates: 1,561.
-- Total residual ledger entries: 4,492.
+- Unconfirmed scope: 4.
+- Work-restricted sensitivity: 9.
+- Zoom quality: 1.
+- Total residual ledger entries: 68.
+
+The old 13 Wispr date rows are resolved as stale parser results. The corrected
+import maps Wispr `meetings[].start` to the event date and the saved envelope's
+`captured_at` to local capture/retrieval dates. It preserves `end` and
+`modified_at` as separate derived metadata fields. It does not convert a
+`modified_at` value into an event date.
 
 These are interpretation queues, not missing raw data. The organizer retains
 all eligible source records and does not force uncertain merges, privacy
@@ -106,7 +111,7 @@ Run from the repository root:
 
 ```bash
 PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m pytest -q work-corpus/tests
-PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m work_corpus --root . organize --run-date 2026-09-07
+PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m work_corpus --root . organize --run-date 2026-09-07 --first-pass
 PYTHONPATH=work-corpus/src /opt/homebrew/bin/python3 -m work_corpus --root . report
 ```
 

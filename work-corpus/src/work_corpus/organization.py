@@ -22,6 +22,7 @@ from .normalize import _task_date_basis
 from .tasks import extract_task_proposals
 from .util import (
     atomic_write_json,
+    atomic_write_text,
     ensure_dir,
     now_iso,
     read_json,
@@ -590,6 +591,27 @@ def _record_sensitivity_reviews(con: sqlite3.Connection) -> Tuple[int, int]:
 
 
 def _record_wispr_date_reviews(con: sqlite3.Connection) -> int:
+    con.execute(
+        """
+        UPDATE review_item
+        SET status='resolved',
+            resolution='Superseded: Wispr date mapping now promotes the saved capture envelope and event fields.',
+            updated_at=?
+        WHERE issue_type='wispr_date_review'
+          AND status='pending'
+          AND EXISTS (
+              SELECT 1
+              FROM mcp_item m
+              WHERE lower(m.provider)='wispr_flow'
+                AND (m.normalized_evidence_id=review_item.evidence_id
+                     OR (review_item.evidence_id IS NULL
+                         AND m.source_id=review_item.source_id))
+                AND m.retrieval_date IS NOT NULL
+                AND trim(m.retrieval_date)<>''
+          )
+        """,
+        (now_iso(),),
+    )
     rows = con.execute(
         """
         SELECT item_id, source_id, external_record_id, capture_date, event_date,
@@ -883,7 +905,7 @@ WORK_ATTEMPTED: Dict[str, str] = {
     "task_date_review": "Extracted explicit task language; did not promote missing or historical dates to current work.",
     "task_scope_review": "Extracted explicit task language; did not promote unresolved scope.",
     "entity_candidate_review": "Reviewed structured Capacities metadata; promoted only explicit non-generic Project records.",
-    "wispr_date_review": "Inspected persisted Wispr Flow date fields; preserved unknown retrieval dates.",
+    "wispr_date_review": "Repaired the Wispr Flow field mapping and superseded stale unknown-date rows without inventing event dates.",
     "meeting_link_review": "Retained Zoom meeting groups marked needs_review; did not force transcript links.",
     "zoom_quality_review": "Retained the terminal partial transcription result; did not retranscribe automatically.",
     "mcp_malformed_item": "Compared the old review row with later clean repeat-import results.",
@@ -897,11 +919,410 @@ HUMAN_DECISION: Dict[str, str] = {
     "task_date_review": "Confirm an event date or leave the proposal historical/unresolved.",
     "task_scope_review": "Confirm Work scope before surfacing a task.",
     "entity_candidate_review": "Confirm the entity type and canonical name or leave it unresolved.",
-    "wispr_date_review": "Supply provider-backed retrieval timing or accept unknown freshness.",
+    "wispr_date_review": "Only inspect a future row if its saved capture envelope lacks a retrieval timestamp.",
     "meeting_link_review": "Confirm the correct transcript/media association.",
     "zoom_quality_review": "Accept the partial transcript or authorize a new local quality pass.",
     "mcp_malformed_item": "No action unless the preserved malformed record still needs inspection.",
 }
+
+
+FIRST_PASS_ACTIONS: Dict[str, Tuple[str, str, str]] = {
+    "capacities_payload_match": (
+        "CAPACITIES_PAYLOAD",
+        "Identify the local payload, or leave the six pointers unresolved.",
+        "Leave unresolved unless you know the local file.",
+    ),
+    "scope_review": (
+        "SCOPE_UNCONFIRMED",
+        "Confirm scope for the four sources whose path is not an approved Work root.",
+        "Keep them out of the default Work view.",
+    ),
+    "sensitivity_review": (
+        "WORK_RESTRICTED",
+        "Decide whether Work records with restricted markers may enter the Work view.",
+        "Keep them out of the Work view.",
+    ),
+    "entity_candidate_review": (
+        "ENTITY_CANDIDATE",
+        "Confirm an entity type and name, or leave the candidate unclassified.",
+        "Leave candidates unclassified.",
+    ),
+    "zoom_quality_review": (
+        "ZOOM_PARTIAL",
+        "Accept the partial transcript, or authorize a new local quality pass.",
+        "Accept the partial transcript as partial.",
+    ),
+}
+
+
+def _review_json(value: Any) -> Dict[str, Any]:
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _resolve_review_item(
+    con: sqlite3.Connection,
+    review_id: str,
+    resolution: str,
+) -> int:
+    cursor = con.execute(
+        """
+        UPDATE review_item
+        SET status='resolved', resolution=?, updated_at=?
+        WHERE review_id=? AND status='pending'
+        """,
+        (resolution, now_iso(), review_id),
+    )
+    return int(cursor.rowcount or 0)
+
+
+def _source_rows_for_ids(
+    con: sqlite3.Connection,
+    source_ids: Any,
+) -> List[sqlite3.Row]:
+    if not isinstance(source_ids, list):
+        return []
+    ids = [str(value) for value in source_ids if value]
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _value in ids)
+    return con.execute(
+        f"""
+        SELECT s.source_id, s.relative_path, s.root_key, s.mtime_ns,
+               COALESCE(r.precedence, 999) AS root_precedence
+        FROM source_record s
+        LEFT JOIN source_root r ON r.root_key=s.root_key
+        WHERE s.status='present' AND s.source_id IN ({placeholders})
+        """,
+        ids,
+    ).fetchall()
+
+
+def _provisional_display_row(
+    rows: Sequence[sqlite3.Row],
+    *,
+    latest: bool,
+) -> Optional[sqlite3.Row]:
+    if not rows:
+        return None
+    if latest:
+        return sorted(
+            rows,
+            key=lambda row: (
+                -int(row["mtime_ns"] or 0),
+                int(row["root_precedence"] or 999),
+                str(row["relative_path"]).casefold(),
+                str(row["source_id"]),
+            ),
+        )[0]
+    return sorted(
+        rows,
+        key=lambda row: (
+            int(row["root_precedence"] or 999),
+            str(row["relative_path"]).casefold(),
+            str(row["source_id"]),
+        ),
+    )[0]
+
+
+def _pending_response_rows(
+    con: sqlite3.Connection,
+) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for row in con.execute(
+        """
+        SELECT r.review_id, r.issue_type, r.source_id, r.evidence_id, r.reason,
+               s.relative_path, s.source_system, s.classification, s.scope,
+               s.sensitivity
+        FROM review_item r
+        LEFT JOIN source_record s ON s.source_id=r.source_id
+        WHERE r.status='pending'
+        ORDER BY r.issue_type, COALESCE(s.relative_path, ''), r.review_id
+        """
+    ):
+        issue_type = str(row["issue_type"])
+        action_code, _decision, default = FIRST_PASS_ACTIONS.get(
+            issue_type,
+            (
+                "OTHER",
+                "Resolve the remaining review item.",
+                "Leave unresolved.",
+            ),
+        )
+        rows.append(
+            {
+                "response_code": action_code,
+                "review_id": str(row["review_id"]),
+                "issue_type": issue_type,
+                "source_id": str(row["source_id"] or ""),
+                "evidence_id": str(row["evidence_id"] or ""),
+                "relative_path": scrub_derived_text(str(row["relative_path"] or "")),
+                "source_system": scrub_derived_text(str(row["source_system"] or "")),
+                "scope": scrub_derived_text(
+                    str(row["classification"] or row["scope"] or "Unknown")
+                ),
+                "sensitivity": scrub_derived_text(str(row["sensitivity"] or "unknown")),
+                "reason": scrub_derived_text(str(row["reason"] or "")),
+                "default_action": default,
+            }
+        )
+    return rows
+
+
+def _write_first_pass_artifacts(
+    config: Config,
+    *,
+    auto_resolved_by_issue_type: Mapping[str, int],
+    display_candidates: Sequence[Mapping[str, Any]],
+    pending_rows: Sequence[Mapping[str, str]],
+) -> Dict[str, Any]:
+    pending_by_action = Counter(row["response_code"] for row in pending_rows)
+    pending_by_issue_type = Counter(row["issue_type"] for row in pending_rows)
+    auto_resolved = sum(auto_resolved_by_issue_type.values())
+    state = {
+        "schema_version": 1,
+        "generated_at": now_iso(),
+        "auto_resolved_review_items": auto_resolved,
+        "auto_resolved_by_issue_type": dict(sorted(auto_resolved_by_issue_type.items())),
+        "provisional_display_candidates": len(display_candidates),
+        "pending_action_count": len(pending_rows),
+        "pending_by_action": dict(sorted(pending_by_action.items())),
+        "pending_by_issue_type": dict(sorted(pending_by_issue_type.items())),
+        "response_codes": {
+            code: {
+                "decision": decision,
+                "default": default,
+            }
+            for code, decision, default in sorted(
+                ((value[0], value[1], value[2]) for value in FIRST_PASS_ACTIONS.values()),
+                key=lambda item: item[0],
+            )
+        },
+        "raw_boundary": {
+            "raw_data_modified": False,
+            "signed_urls_fetched": 0,
+        },
+    }
+    state_path = config.state_dir / "first_pass_acceptance.json"
+    response_path = config.corpus_dir / "reports" / "first_pass_review.md"
+    response_csv_path = config.corpus_dir / "reports" / "first_pass_review.csv"
+    display_csv_path = config.corpus_dir / "reports" / "first_pass_display_candidates.csv"
+    config.assert_derived_path(state_path)
+    config.assert_derived_path(response_path)
+    config.assert_derived_path(response_csv_path)
+    config.assert_derived_path(display_csv_path)
+    ensure_dir(config.state_dir)
+    ensure_dir(response_path.parent)
+    atomic_write_json(state_path, state)
+    write_csv(
+        response_csv_path,
+        pending_rows,
+        [
+            "response_code",
+            "review_id",
+            "issue_type",
+            "source_id",
+            "evidence_id",
+            "relative_path",
+            "source_system",
+            "scope",
+            "sensitivity",
+            "reason",
+            "default_action",
+        ],
+    )
+    write_csv(
+        display_csv_path,
+        display_candidates,
+        [
+            "review_type",
+            "review_id",
+            "group_key",
+            "display_source_id",
+            "display_relative_path",
+            "member_count",
+            "selection_rule",
+        ],
+    )
+    lines = [
+        "# First-Pass Review Sheet",
+        "",
+        f"Generated: `{state['generated_at']}`",
+        "",
+        f"The first pass closed **{auto_resolved:,}** policy-stable review rows.",
+        f"It left **{len(pending_rows):,} pending action items**.",
+        "",
+        "The first pass did not delete files or change source classifications.",
+        "It only applied the existing default Work-view rules and selected provisional display records.",
+        "All original source records remain available.",
+        "",
+        "## Reply with exceptions",
+        "",
+        "The defaults below require no item-by-item review.",
+        "Reply only when you want a different result.",
+        "",
+        "| Code | Items | Default | Change it only if |",
+        "| --- | ---: | --- | --- |",
+    ]
+    for _issue_type, (code, decision, default) in sorted(
+        FIRST_PASS_ACTIONS.items(), key=lambda item: item[1][0]
+    ):
+        count = int(pending_by_action.get(code, 0))
+        if count:
+            lines.append(f"| `{code}` | {count:,} | {default} | {decision} |")
+    lines.extend(
+        [
+            "",
+            "Examples:",
+            "",
+            "- `Keep WORK_RESTRICTED out.`",
+            "- `Keep SCOPE_UNCONFIRMED out.`",
+            "- `Leave CAPACITIES_PAYLOAD unresolved.`",
+            "- `Leave ENTITY_CANDIDATE items unclassified.`",
+            "- `Accept ZOOM_PARTIAL.`",
+            "",
+            "Exact local source IDs and paths are in [`first_pass_review.csv`](first_pass_review.csv).",
+            "Provisional duplicate/version display choices are in [`first_pass_display_candidates.csv`](first_pass_display_candidates.csv).",
+            "The response files contain bounded metadata only. They contain no raw body text or provider URLs.",
+            "",
+            "## Automatically handled",
+            "",
+        ]
+    )
+    for issue_type, count in sorted(auto_resolved_by_issue_type.items()):
+        lines.append(f"- `{issue_type}`: {count:,}")
+    atomic_write_text(response_path, "\n".join(lines) + "\n")
+    return {
+        "auto_resolved_review_items": auto_resolved,
+        "auto_resolved_by_issue_type": dict(sorted(auto_resolved_by_issue_type.items())),
+        "provisional_display_candidates": len(display_candidates),
+        "pending_action_count": len(pending_rows),
+        "pending_by_action": dict(sorted(pending_by_action.items())),
+        "pending_by_issue_type": dict(sorted(pending_by_issue_type.items())),
+        "state_path": str(state_path),
+        "response_path": str(response_path),
+        "response_csv_path": str(response_csv_path),
+        "display_csv_path": str(display_csv_path),
+    }
+
+
+def apply_first_pass(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
+    """Apply safe defaults and write one small response sheet for exceptions."""
+    auto_resolved: Counter[str] = Counter()
+    for issue_type in (
+        "scope_review",
+        "sensitivity_review",
+        "task_scope_review",
+        "meeting_link_review",
+    ):
+        rows = con.execute(
+            """
+            SELECT r.review_id, COALESCE(s.classification, s.scope, 'Unknown') AS scope
+            FROM review_item r
+            JOIN source_record s ON s.source_id=r.source_id
+            WHERE r.issue_type=? AND r.status='pending'
+            """,
+            (issue_type,),
+        ).fetchall()
+        for row in rows:
+            if str(row["scope"]).casefold() == "work":
+                continue
+            if _resolve_review_item(
+                con,
+                str(row["review_id"]),
+                "First pass: retained the source classification and excluded it from the default Work view.",
+            ):
+                auto_resolved[issue_type] += 1
+
+    rows = con.execute(
+        """
+        SELECT review_id, proposed_result_json
+        FROM review_item
+        WHERE issue_type='task_date_review' AND status='pending'
+        ORDER BY review_id
+        """
+    ).fetchall()
+    for row in rows:
+        proposal = _review_json(row["proposed_result_json"])
+        if proposal.get("eligibility_status") == "historical":
+            resolution = "First pass: marked historical; it cannot create a current task."
+        else:
+            resolution = "First pass: marked not-current; no reliable event or meeting date is available."
+        if _resolve_review_item(con, str(row["review_id"]), resolution):
+            auto_resolved["task_date_review"] += 1
+
+    display_candidates: List[Dict[str, Any]] = []
+    rows = con.execute(
+        """
+        SELECT review_id, issue_type, proposed_result_json, status, resolution
+        FROM review_item
+        WHERE issue_type IN ('duplicate_group_review', 'version_family_review')
+          AND (
+              status='pending'
+              OR (status='resolved' AND resolution LIKE 'First pass: provisional display record%')
+          )
+        ORDER BY issue_type, review_id
+        """
+    ).fetchall()
+    for row in rows:
+        proposal = _review_json(row["proposed_result_json"])
+        source_rows = _source_rows_for_ids(con, proposal.get("source_ids"))
+        issue_type = str(row["issue_type"])
+        latest = issue_type == "version_family_review"
+        display = _provisional_display_row(source_rows, latest=latest)
+        if display is None:
+            continue
+        group_key = str(
+            proposal.get("duplicate_group_id")
+            or proposal.get("family_key")
+            or ""
+        )
+        display_candidates.append(
+            {
+                "review_type": issue_type,
+                "review_id": str(row["review_id"]),
+                "group_key": scrub_derived_text(group_key),
+                "display_source_id": str(display["source_id"]),
+                "display_relative_path": scrub_derived_text(str(display["relative_path"])),
+                "member_count": len(source_rows),
+                "selection_rule": (
+                    "newest present mtime; root precedence and path break ties"
+                    if latest
+                    else "lowest root precedence; path and source ID break ties"
+                ),
+            }
+        )
+        if _resolve_review_item(
+            con,
+            str(row["review_id"]),
+            f"First pass: provisional display record is {display['source_id']} ({display['relative_path']}); all source records remain.",
+        ):
+            auto_resolved[issue_type] += 1
+
+    con.commit()
+    pending_rows = _pending_response_rows(con)
+    cumulative_auto_resolved = Counter(
+        {
+            str(row["issue_type"]): int(row["count"])
+            for row in con.execute(
+                """
+                SELECT issue_type, COUNT(*) AS count
+                FROM review_item
+                WHERE status='resolved' AND resolution LIKE 'First pass:%'
+                GROUP BY issue_type
+                """
+            )
+        }
+    )
+    return _write_first_pass_artifacts(
+        config,
+        auto_resolved_by_issue_type=cumulative_auto_resolved,
+        display_candidates=display_candidates,
+        pending_rows=pending_rows,
+    )
 
 
 def _write_residual_ledger(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
@@ -988,6 +1409,7 @@ def organize_all(
     con: sqlite3.Connection,
     *,
     run_date: Optional[date] = None,
+    first_pass: bool = False,
 ) -> Dict[str, Any]:
     """Run the complete deterministic organization pass."""
     effective_date = run_date or date.today()
@@ -1002,6 +1424,7 @@ def organize_all(
     project_count, project_source_links, candidate_reviews = _project_and_candidate_reviews(con)
     task_proposals_scanned = _run_task_proposals(con, effective_date)
     con.commit()
+    first_pass_details = apply_first_pass(config, con) if first_pass else {}
 
     entity_counts = {
         str(row["entity_type"]): int(row["count"])
@@ -1035,6 +1458,7 @@ def organize_all(
         "project_sources_linked": project_source_links,
         "candidate_review_items": candidate_reviews,
         "task_proposals_scanned": task_proposals_scanned,
+        "first_pass": first_pass_details,
         "task_rows": int(con.execute("SELECT COUNT(*) FROM task").fetchone()[0]),
         "current_task_rows": len(current_tasks(con, effective_date)),
         "review_counts": _review_counts(con),
@@ -1062,6 +1486,7 @@ def organize_all(
         "project_sources_linked": project_source_links,
         "candidate_review_items": candidate_reviews,
         "task_proposals_scanned": task_proposals_scanned,
+        "first_pass": first_pass_details,
         "task_rows": state["task_rows"],
         "current_task_rows": state["current_task_rows"],
         "review_counts": state["review_counts"],
