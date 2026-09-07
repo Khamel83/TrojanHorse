@@ -13,7 +13,8 @@ requested transcripts for summary-only meetings too. Rate limits and parsing
 errors remain retryable; unavailable outcomes require exact identity and evidence.
 Completion includes transcript retries and database/index verification regardless
 of the metadata-only counter. Normalize all eligible parseable evidence while
-retaining Work-only default queries and the runtime-relative 14-day task window.
+retaining a unified `All` default query, an explicit optional `Work` filter,
+and the runtime-relative 14-day task window.
 Resolve supported aliases and relationships using existing APIs; uncertain cases
 stay explicit review items. Do not force queues to zero or invent current tasks.
 Prior context is preserved in `../plans/2026-09-06-context-history.md`.
@@ -40,21 +41,33 @@ The Granola REST archive contains 559 imported and searchable API notes, with
 559 summaries and 557 transcripts. The local organization pass created 9
 explicit Project entities, 27 evidence-backed project links, and scanned 1,910
 evidence records for task proposals without creating a current task backlog.
-The safe first pass then resolved 4,411 policy-stable review rows and reduced
-the pending response to 68 grouped exceptions. Wispr Flow now has 13/13 local
-capture and retrieval dates and 12/13 meeting event dates; the one scratchpad
-has no event date in its source object. The old 13 unknown-date rows were
-superseded after the importer was corrected to map `meetings[].start` and the
-capture envelope's `captured_at`.
+The safe first pass then resolved 4,479 review rows and closed the 68 grouped
+exception rows under the approved unified-corpus policy. Wispr Flow now has
+13/13 local capture and retrieval dates and 12/13 meeting event dates; the one
+scratchpad has no event date in its source object. The old 13 unknown-date rows
+were superseded after the importer was corrected to map `meetings[].start` and
+the capture envelope's `captured_at`.
 
-Ambiguous interpretation remains an explicit review state. The safe first pass
-resolved 4,411 policy-stable review rows and the current residual ledger
-contains 68 grouped exceptions: six Capacities payload gaps, 48 entity
-candidates, four unconfirmed-scope sources, nine Work-restricted sensitivity
-items, and one Zoom quality review. Six Capacities pointers still lack
-file-size metadata. This is not an ingestion failure: available raw data
-remains preserved and searchable. No signed URL was fetched, no provider was
-written to, and no raw corpus content was sent to an external model or service.
+The residual ledger now contains 0 pending items. Six Capacities pointers retain
+explicit unresolved metadata, 48 ambiguous titles are generic topic labels, and
+the one quality-limited Zoom result remains marked partial. These are preserved
+source-backed states, not ingestion failures. No signed URL was fetched, no
+provider was written to, and no raw corpus content was sent to an external
+model or service.
+
+## Unified-corpus policy amendment — 2026-09-07
+
+The current private-corpus policy includes every nonblank parseable source in
+the default `All` query. Original Work, Personal, Mixed, Unknown, and
+sensitivity labels remain attached as provenance; they are not rewritten into a
+single false classification. `Work` remains an explicit narrower filter.
+
+The grouped first-pass queue is closed by policy: six unavailable Capacities
+payloads remain explicit unresolved metadata, 48 ambiguous titles are generic
+topic labels, four unconfirmed-scope records and nine scope/sensitivity records
+remain searchable under `All`, and the one quality-limited Zoom result remains
+preserved as partial. No raw source is deleted or rewritten, and no canonical
+person, project, or organization is inferred from an ambiguous title.
 
 ## Goal
 
@@ -68,8 +81,10 @@ The system must preserve source evidence, organize it by project, person, date, 
 - Atlas is not part of the architecture, storage, query path, or implementation plan.
 - Email is outside the system.
 - The system is local and single-user.
-- The default query scope is work material.
-- Personal and mixed personal-work records remain in the raw inventory but stay outside the work query.
+- The default query scope is the unified private corpus (`All`); `Work` is an
+  explicit narrower filter.
+- Personal, mixed, and unknown records remain searchable under `All`, with
+  their original labels preserved as provenance.
 - All work material is available to the user, including confidential personnel records.
 - Clear names, aliases, merges, and links may apply automatically.
 - Uncertain changes go to a review queue.
@@ -310,7 +325,9 @@ The raw inventory may contain work, personal, and mixed records.
 
 The work corpus includes work records, including high-sensitivity personnel and performance records.
 
-Personal and mixed records remain inventoried but do not enter the default work query.
+Personal and mixed records enter the default `All` query and retain their
+original scope labels as provenance. They remain outside an explicit `Work`
+query.
 
 Each derived record has a scope classification:
 
@@ -319,14 +336,15 @@ Each derived record has a scope classification:
 - Mixed.
 - Unknown.
 
-Unknown and mixed records stay outside the default work query until classification resolves them.
+Unknown and mixed records remain searchable under `All`; they stay outside an
+explicit `Work` query until classification resolves them.
 
 Private signed URLs are treated as sensitive metadata. The system does not fetch or copy them into derived records.
 
-Raw or unreviewed fallback search is allowed only for source records already
-classified as `Work`. It excludes `Personal`, `Mixed`, and `Unknown` records.
-Signed-URL-like strings and other secret-like values are redacted before a
-fallback snippet is returned.
+Raw or unreviewed fallback search obeys the requested query scope. The default
+`All` fallback includes all eligible source records; an explicit `Work` query
+keeps the narrower Work predicate. Signed-URL-like strings and other
+secret-like values are redacted before a fallback snippet is returned.
 
 ## Review queues
 
@@ -446,7 +464,8 @@ The design is complete when the system can demonstrate:
 - Historical records do not create current tasks.
 - Future and current-date-minus-14-day explicit commitments can create current
   task records.
-- Personal and mixed records stay outside the default work query.
+- The default `All` query includes Personal, Mixed, and Unknown records while
+  preserving their original scope labels; `Work` remains an explicit filter.
 - Duplicate and conflict relationships remain visible.
 - Exact search and relationship search return source-backed candidates.
 - Query answers cite source paths and distinguish fact from inference.

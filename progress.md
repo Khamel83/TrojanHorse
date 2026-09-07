@@ -47,9 +47,15 @@ local-only work corpus described in `CONTEXT.md`.
   has no event date in its source object; no event date was invented.
 - [x] Supersede the 13 stale unknown-Wispr-date review rows created by the old
   mapping and refresh their derived metadata without changing raw files.
-- [x] Apply the safe first-pass triage: 4,411 policy-stable rows resolved, 622
-  provisional duplicate/version display choices retained, and 68 grouped
-  exception items left in the response sheet.
+- [x] Apply the initial safe first-pass triage: 4,411 policy-stable rows
+  resolved, 622 provisional duplicate/version display choices retained, and 68
+  grouped exception items left in the response sheet for the subsequent policy
+  decision.
+- [x] Apply the approved unified-corpus policy pass: resolve all 68 grouped
+  exception rows without changing raw files, include all nonblank parseable
+  scopes in the default `All` query, preserve original labels as provenance,
+  record 48 ambiguous titles as generic topic labels, and accept the one Zoom
+  partial result. The residual ledger now has 0 pending entries.
 
 See `docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md` for the
 current boundary. The older Bridge log below is historical.

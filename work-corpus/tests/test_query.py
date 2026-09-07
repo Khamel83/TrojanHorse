@@ -82,7 +82,7 @@ def _add_source(
     return source_id, version_id, evidence_id
 
 
-def test_default_query_scope_cannot_join_non_work_evidence(tmp_path: Path):
+def test_default_query_scope_includes_all_nonblank_sources(tmp_path: Path):
     con = connect(tmp_path / "state.sqlite")
     try:
         work_id, _, work_evidence_id = _add_source(
@@ -115,22 +115,30 @@ def test_default_query_scope_cannot_join_non_work_evidence(tmp_path: Path):
         )
 
         result = search(con, "shared-marker")
+        work_result = search(con, "shared-marker", scope="Work")
     finally:
         con.close()
 
     hits = result["results"]
-    assert {hit["source_id"] for hit in hits} == {work_id}
-    assert {hit["evidence_id"] for hit in hits} == {work_evidence_id}
-    assert not {personal_id, mixed_id, unknown_id} & {
-        hit["source_id"] for hit in hits
+    assert result["scope"] == "All"
+    assert {hit["source_id"] for hit in hits} == {
+        work_id,
+        personal_id,
+        mixed_id,
+        unknown_id,
     }
-    assert all(hit["scope"] == "Work" for hit in hits)
-    assert "personal.md" not in json.dumps(result)
-    assert "mixed.md" not in json.dumps(result)
-    assert "unknown.md" not in json.dumps(result)
+    assert {hit["evidence_id"] for hit in hits} == {
+        work_evidence_id,
+        next(hit["evidence_id"] for hit in hits if hit["source_id"] == personal_id),
+        next(hit["evidence_id"] for hit in hits if hit["source_id"] == mixed_id),
+        next(hit["evidence_id"] for hit in hits if hit["source_id"] == unknown_id),
+    }
+    assert {hit["scope"] for hit in hits} == {"Work", "Personal", "Mixed", "Unknown"}
+    assert work_result["scope"] == "Work"
+    assert {hit["source_id"] for hit in work_result["results"]} == {work_id}
 
 
-def test_raw_fallback_requires_work_scope(tmp_path: Path):
+def test_raw_fallback_uses_unified_scope_and_preserves_labels(tmp_path: Path):
     con = connect(tmp_path / "raw-fallback.sqlite")
     try:
         work_id, work_version_id, _ = _add_source(
@@ -174,15 +182,38 @@ def test_raw_fallback_requires_work_scope(tmp_path: Path):
         con.close()
 
     hits = result["results"]
-    assert len(hits) == 1
-    assert hits[0]["label"] == "raw_work"
-    assert hits[0]["source_id"] == work_id
-    assert hits[0]["source_version_id"] == work_version_id
-    assert not {personal_id, mixed_id, unknown_id} & {
-        hit["source_id"] for hit in hits
+    assert {hit["source_id"] for hit in hits} == {
+        work_id,
+        personal_id,
+        mixed_id,
+        unknown_id,
     }
-    assert "https://" not in hits[0]["snippet"]
-    assert "secret" not in hits[0]["snippet"]
+    work_hit = next(hit for hit in hits if hit["source_id"] == work_id)
+    assert work_hit["label"] == "raw_work"
+    assert all(
+        hit["label"] == "raw_source"
+        for hit in hits
+        if hit["source_id"] != work_id
+    )
+    assert work_hit["source_version_id"] == work_version_id
+    assert "https://" not in work_hit["snippet"]
+    assert "secret" not in work_hit["snippet"]
+    con = connect(tmp_path / "raw-fallback-work.sqlite")
+    try:
+        _add_source(
+            con,
+            tmp_path,
+            name="work-raw.txt",
+            scope="Work",
+            text="exact-raw-marker https://example.test/private?token=secret",
+            evidence_status=None,
+            root_key="root_work_raw_repeat",
+        )
+        work_result = search(con, "exact-raw-marker", scope="Work")
+    finally:
+        con.close()
+    assert work_result["results"][0]["label"] == "raw_work"
+    assert work_result["results"][0]["scope"] == "Work"
     assert raw_bytes_after_query == (
         b"exact-raw-marker https://example.test/private?token=secret"
     )
@@ -544,12 +575,12 @@ def test_no_match_is_an_explicit_missing_result(tmp_path: Path):
     assert result["missing"][0]["question"] == "unrecorded question"
 
 
-def test_query_rejects_empty_question_and_non_work_default_scope(tmp_path: Path):
+def test_query_rejects_empty_question_and_unknown_scope(tmp_path: Path):
     con = connect(tmp_path / "validation.sqlite")
     try:
         with pytest.raises(ValueError, match="question"):
             search(con, "   ")
-        with pytest.raises(ValueError, match="Work"):
+        with pytest.raises(ValueError, match="All or Work"):
             search(con, "anything", scope="Personal")
     finally:
         con.close()

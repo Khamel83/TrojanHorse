@@ -2,8 +2,10 @@
 
 Reviewed handoff for a clean Luna session. User approved both milestones in this
 order. Antigravity Opus 4.6 Thinking approved the supplied plan; its required
-index-API clarification is applied. Checked items below record verified work;
-remaining unchecked items are not complete.
+index-API clarification is applied. The subsequent user-approved unified-corpus
+policy pass is also complete: the default query includes all nonblank parseable
+sources, original labels remain provenance, and no grouped review rows remain
+pending. Checked items below record verified work.
 The residual scope is summarized in [Remaining Work After Ingestion](docs/REMAINING_WORK.md).
 
 Read [the plan](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md)
@@ -55,7 +57,7 @@ evidence, and the original completed Tasks 0–9 and historical gates remain doc
   OneNote is 29/29 files and 295/295 pages; Zoom has 230 succeeded and 1
   partial terminal result with 0 eligible media lacking terminal status.
 - [x] 6. Close ingestion milestone with evidence: exact Granola REST identity
-  coverage, representative Work-scope query checks, preserved source hashes,
+  coverage, representative unified-All and Work-scope query checks, preserved source hashes,
   retry/terminal accounting, and regression tests. The residual interpretation
   and organization work is documented in `docs/REMAINING_WORK.md`.
 
@@ -72,13 +74,18 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   Wispr-date, and 1 Zoom-quality candidates. The first pass resolved 4,411
   policy-stable rows, selected 622 provisional display records, and left 68
   grouped exceptions: 6 payload, 48 entity, 4 scope, 9 sensitivity, and 1 Zoom
-  quality. The old 13 Wispr-date rows were superseded after the field mapping
-  repair; no ambiguous merge was forced.
+  quality. The approved first pass then resolved all 68 grouped rows, retained
+  six payload gaps as unresolved metadata, recorded 48 generic topic labels,
+  included the scope/sensitivity records in the unified private query, and
+  accepted the one partial Zoom result. The old 13 Wispr-date rows were
+  superseded after the field mapping repair; no ambiguous canonical identity
+  was forced.
 - [x] 8. Populate supported people, projects, organizations and aliases with source
   locators. Use existing entities APIs and minimal resumable orchestration.
   Evidence: 9 explicit Project entities, 9 aliases, and 27 evidence-backed
   project source links were created. No people or organizations were promoted
-  without a safe canonical alias; 48 entity candidates remain review items.
+  without a safe canonical alias; 48 titles are recorded as generic topic labels
+  in `first_pass_topic_labels.csv` rather than promoted to entities.
 - [x] 9. Populate supported relationships and explicit task proposals through
   existing APIs. Anchor current tasks to runtime's 14-day window or future events;
   keep old commitments historical. Unknown dates remain review items. Zero current
@@ -90,9 +97,9 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   work the agent attempted, and the smallest user decision needed. Do not present
   every queue entry as a mandatory manual task. Keep sensitive details local.
   Evidence: `work-corpus/state/residual_ledger.json` and
-  `work-corpus/corpus/reports/residual_ledger.csv` contain 68 pending grouped
-  entries with bounded metadata and no copied raw sensitive text or provider
-  URLs. The grouped response is `work-corpus/corpus/reports/first_pass_review.md`.
+  `work-corpus/corpus/reports/residual_ledger.csv` contain 0 pending entries;
+  the first-pass response sheet is an empty exception sheet. Bounded accepted
+  topic labels are in `work-corpus/corpus/reports/first_pass_topic_labels.csv`.
 
 ## Final acceptance and handoff
 
@@ -102,6 +109,7 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   current report is generated after organization and first-pass triage, both
   indexes are fresh (72,138 FTS rows and 1,243 relationship rows), raw
   immutability remains passed, representative Work-scope query checks remain
+  recorded, the default All-scope and explicit Work-scope query checks remain
   recorded, and the full suite is run as part of final acceptance.
 - [x] 12. Update README, glossary, status, spec and checklist with verified results.
   Commit scoped code/docs/tests and push under existing user authorization. Verify
@@ -123,6 +131,7 @@ continues as a derived use of the same source-backed corpus.
 Execute TODO.md and its reviewed completion handoff in order. Finish ingestion and
 verify search first, then organize entities, relationships and supported tasks.
 Start by controlling the existing heartbeat and verifying saved captures actually
-reach inventory, import and search. Complete locally actionable work, document
-specific residuals, update docs and verify the authorized push. Read AGENTS.md and
-actual CLI/API signatures; preserve unrelated files and raw evidence.
+reach inventory, import and search. Complete locally actionable work, apply the
+approved unified-corpus first pass, update docs, and verify the authorized push.
+Read AGENTS.md and actual CLI/API signatures; preserve unrelated files and raw
+evidence.

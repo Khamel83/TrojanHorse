@@ -929,27 +929,27 @@ HUMAN_DECISION: Dict[str, str] = {
 FIRST_PASS_ACTIONS: Dict[str, Tuple[str, str, str]] = {
     "capacities_payload_match": (
         "CAPACITIES_PAYLOAD",
-        "Identify the local payload, or leave the six pointers unresolved.",
-        "Leave unresolved unless you know the local file.",
+        "Retain pointer metadata when no local payload is identified; do not fetch signed URLs.",
+        "Retain unresolved pointer metadata and continue.",
     ),
     "scope_review": (
         "SCOPE_UNCONFIRMED",
-        "Confirm scope for the four sources whose path is not an approved Work root.",
-        "Keep them out of the default Work view.",
+        "Include the source in the unified private corpus while retaining its original scope label as provenance.",
+        "Include in the unified private corpus.",
     ),
     "sensitivity_review": (
         "WORK_RESTRICTED",
-        "Decide whether Work records with restricted markers may enter the Work view.",
-        "Keep them out of the Work view.",
+        "Include the source in the unified private corpus while retaining its sensitivity label as provenance.",
+        "Include in the unified private corpus.",
     ),
     "entity_candidate_review": (
         "ENTITY_CANDIDATE",
-        "Confirm an entity type and name, or leave the candidate unclassified.",
-        "Leave candidates unclassified.",
+        "Retain the candidate title as a generic topic label; do not infer a person, project, or organization.",
+        "Use the title as a generic topic label.",
     ),
     "zoom_quality_review": (
         "ZOOM_PARTIAL",
-        "Accept the partial transcript, or authorize a new local quality pass.",
+        "Accept the partial transcript as a usable partial record.",
         "Accept the partial transcript as partial.",
     ),
 }
@@ -961,6 +961,93 @@ def _review_json(value: Any) -> Dict[str, Any]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _generic_topic_label(value: str) -> str:
+    """Collapse obvious named meeting titles to a safe type label."""
+    label = re.sub(r"\s+", " ", str(value or "")).strip()
+    if re.match(r"^1\s*:\s*1(?:\s+.*|\s*[-–—].*)?$", label, re.IGNORECASE):
+        return "1:1"
+    if (
+        re.search(r"\bweekly\b", label, re.IGNORECASE)
+        and re.search(r"\bstrategy\b", label, re.IGNORECASE)
+    ):
+        return "Weekly strategy meeting"
+    return label or "Untitled topic"
+
+
+def _generic_topic_resolution(candidate_title: str) -> str:
+    topic_label = _generic_topic_label(candidate_title)
+    return (
+        "First pass: retained generic topic label "
+        f"{scrub_derived_text(topic_label)!r}; no person, project, or organization inferred. "
+        f"Original title preserved: {scrub_derived_text(candidate_title)!r}."
+    )
+
+
+def _generic_topic_labels(
+    con: sqlite3.Connection,
+) -> List[Dict[str, str]]:
+    """Return accepted generic labels without promoting them to entities."""
+    labels: List[Dict[str, str]] = []
+    for row in con.execute(
+        """
+        SELECT r.review_id, r.source_id, r.evidence_id, r.proposed_result_json,
+               s.relative_path
+        FROM review_item r
+        LEFT JOIN source_record s ON s.source_id=r.source_id
+        WHERE r.issue_type='entity_candidate_review'
+          AND r.status='resolved'
+          AND r.resolution LIKE 'First pass: retained generic topic label%'
+        ORDER BY COALESCE(s.relative_path, ''), r.review_id
+        """
+    ):
+        proposal = _review_json(row["proposed_result_json"])
+        candidate_title = str(
+            proposal.get("candidate_name")
+            or proposal.get("title")
+            or "Untitled topic"
+        ).strip()
+        label = _generic_topic_label(candidate_title)
+        labels.append(
+            {
+                "review_id": str(row["review_id"]),
+                "topic_label": scrub_derived_text(label),
+                "candidate_title": scrub_derived_text(candidate_title),
+                "source_id": str(row["source_id"] or ""),
+                "evidence_id": str(row["evidence_id"] or ""),
+                "relative_path": scrub_derived_text(str(row["relative_path"] or "")),
+            }
+        )
+    return labels
+
+
+def _refresh_generic_topic_resolutions(con: sqlite3.Connection) -> None:
+    """Keep prior accepted candidate rows aligned with the generic label rule."""
+    for row in con.execute(
+        """
+        SELECT review_id, proposed_result_json
+        FROM review_item
+        WHERE issue_type='entity_candidate_review'
+          AND status='resolved'
+          AND resolution LIKE 'First pass: retained generic topic label%'
+        ORDER BY review_id
+        """
+    ):
+        proposal = _review_json(row["proposed_result_json"])
+        candidate_title = str(
+            proposal.get("candidate_name")
+            or proposal.get("title")
+            or "Untitled topic"
+        ).strip()
+        con.execute(
+            "UPDATE review_item SET resolution=?, updated_at=? WHERE review_id=?",
+            (
+                _generic_topic_resolution(candidate_title),
+                now_iso(),
+                str(row["review_id"]),
+            ),
+        )
 
 
 def _resolve_review_item(
@@ -1077,6 +1164,7 @@ def _write_first_pass_artifacts(
     *,
     auto_resolved_by_issue_type: Mapping[str, int],
     display_candidates: Sequence[Mapping[str, Any]],
+    topic_labels: Sequence[Mapping[str, str]],
     pending_rows: Sequence[Mapping[str, str]],
 ) -> Dict[str, Any]:
     pending_by_action = Counter(row["response_code"] for row in pending_rows)
@@ -1088,6 +1176,7 @@ def _write_first_pass_artifacts(
         "auto_resolved_review_items": auto_resolved,
         "auto_resolved_by_issue_type": dict(sorted(auto_resolved_by_issue_type.items())),
         "provisional_display_candidates": len(display_candidates),
+        "generic_topic_labels": len(topic_labels),
         "pending_action_count": len(pending_rows),
         "pending_by_action": dict(sorted(pending_by_action.items())),
         "pending_by_issue_type": dict(sorted(pending_by_issue_type.items())),
@@ -1105,15 +1194,23 @@ def _write_first_pass_artifacts(
             "raw_data_modified": False,
             "signed_urls_fetched": 0,
         },
+        "policy": {
+            "default_query_scope": "All",
+            "include_nonblank_parseable_sources": True,
+            "preserve_original_scope_and_sensitivity": True,
+            "ambiguous_entity_titles": "generic_topic_labels",
+        },
     }
     state_path = config.state_dir / "first_pass_acceptance.json"
     response_path = config.corpus_dir / "reports" / "first_pass_review.md"
     response_csv_path = config.corpus_dir / "reports" / "first_pass_review.csv"
     display_csv_path = config.corpus_dir / "reports" / "first_pass_display_candidates.csv"
+    topic_labels_csv_path = config.corpus_dir / "reports" / "first_pass_topic_labels.csv"
     config.assert_derived_path(state_path)
     config.assert_derived_path(response_path)
     config.assert_derived_path(response_csv_path)
     config.assert_derived_path(display_csv_path)
+    config.assert_derived_path(topic_labels_csv_path)
     ensure_dir(config.state_dir)
     ensure_dir(response_path.parent)
     atomic_write_json(state_path, state)
@@ -1147,6 +1244,18 @@ def _write_first_pass_artifacts(
             "selection_rule",
         ],
     )
+    write_csv(
+        topic_labels_csv_path,
+        topic_labels,
+        [
+            "review_id",
+            "topic_label",
+            "candidate_title",
+            "source_id",
+            "evidence_id",
+            "relative_path",
+        ],
+    )
     lines = [
         "# First-Pass Review Sheet",
         "",
@@ -1154,9 +1263,11 @@ def _write_first_pass_artifacts(
         "",
         f"The first pass closed **{auto_resolved:,}** policy-stable review rows.",
         f"It left **{len(pending_rows):,} pending action items**.",
+        *(["No pending exception groups remain."] if not pending_rows else []),
         "",
-        "The first pass did not delete files or change source classifications.",
-        "It only applied the existing default Work-view rules and selected provisional display records.",
+        "The default query scope is now the unified private corpus (`All`); `Work` remains an optional filter.",
+        "The first pass did not delete files or change source classifications or sensitivity labels.",
+        "Original labels remain attached as provenance, and every nonblank parseable source remains searchable.",
         "All original source records remain available.",
         "",
         "## Reply with exceptions",
@@ -1176,16 +1287,17 @@ def _write_first_pass_artifacts(
     lines.extend(
         [
             "",
-            "Examples:",
+            "Examples if a new exception is added:",
             "",
-            "- `Keep WORK_RESTRICTED out.`",
-            "- `Keep SCOPE_UNCONFIRMED out.`",
-            "- `Leave CAPACITIES_PAYLOAD unresolved.`",
-            "- `Leave ENTITY_CANDIDATE items unclassified.`",
+            "- `Include WORK_RESTRICTED in the unified corpus.`",
+            "- `Include SCOPE_UNCONFIRMED in the unified corpus.`",
+            "- `Retain CAPACITIES_PAYLOAD unresolved.`",
+            "- `Use ENTITY_CANDIDATE items as generic topic labels.`",
             "- `Accept ZOOM_PARTIAL.`",
             "",
             "Exact local source IDs and paths are in [`first_pass_review.csv`](first_pass_review.csv).",
             "Provisional duplicate/version display choices are in [`first_pass_display_candidates.csv`](first_pass_display_candidates.csv).",
+            f"Accepted generic topic labels: **{len(topic_labels):,}**; see [`first_pass_topic_labels.csv`](first_pass_topic_labels.csv).",
             "The response files contain bounded metadata only. They contain no raw body text or provider URLs.",
             "",
             "## Automatically handled",
@@ -1206,36 +1318,80 @@ def _write_first_pass_artifacts(
         "response_path": str(response_path),
         "response_csv_path": str(response_csv_path),
         "display_csv_path": str(display_csv_path),
+        "topic_labels_csv_path": str(topic_labels_csv_path),
+        "generic_topic_labels": len(topic_labels),
     }
 
 
 def apply_first_pass(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     """Apply safe defaults and write one small response sheet for exceptions."""
-    auto_resolved: Counter[str] = Counter()
-    for issue_type in (
-        "scope_review",
-        "sensitivity_review",
-        "task_scope_review",
-        "meeting_link_review",
-    ):
+    unified_policy_resolutions = {
+        "scope_review": (
+            "First pass: user policy includes the source in the unified private corpus; "
+            "the original scope and classification labels remain provenance."
+        ),
+        "sensitivity_review": (
+            "First pass: user policy includes the source in the unified private corpus; "
+            "the original sensitivity label remains provenance."
+        ),
+        "task_scope_review": (
+            "First pass: user policy keeps the source in the unified corpus; "
+            "task eligibility remains separate and no task scope is inferred."
+        ),
+        "meeting_link_review": (
+            "First pass: user policy keeps the source in the unified corpus; "
+            "the existing meeting association remains unchanged."
+        ),
+    }
+    for issue_type, resolution in unified_policy_resolutions.items():
         rows = con.execute(
             """
-            SELECT r.review_id, COALESCE(s.classification, s.scope, 'Unknown') AS scope
+            SELECT r.review_id
             FROM review_item r
-            JOIN source_record s ON s.source_id=r.source_id
             WHERE r.issue_type=? AND r.status='pending'
             """,
             (issue_type,),
         ).fetchall()
         for row in rows:
-            if str(row["scope"]).casefold() == "work":
-                continue
-            if _resolve_review_item(
-                con,
-                str(row["review_id"]),
-                "First pass: retained the source classification and excluded it from the default Work view.",
-            ):
-                auto_resolved[issue_type] += 1
+            _resolve_review_item(con, str(row["review_id"]), resolution)
+
+    policy_resolutions = {
+        "capacities_payload_match": (
+            "First pass: retained unresolved pointer metadata; no local payload was identified safely, "
+            "so no signed-URL fetch was performed."
+        ),
+        "zoom_quality_review": (
+            "First pass: user accepted the partial local transcript; the partial quality status was preserved."
+        ),
+    }
+    for issue_type, resolution in policy_resolutions.items():
+        rows = con.execute(
+            "SELECT review_id FROM review_item WHERE issue_type=? AND status='pending' ORDER BY review_id",
+            (issue_type,),
+        ).fetchall()
+        for row in rows:
+            _resolve_review_item(con, str(row["review_id"]), resolution)
+
+    rows = con.execute(
+        """
+        SELECT review_id, proposed_result_json
+        FROM review_item
+        WHERE issue_type='entity_candidate_review' AND status='pending'
+        ORDER BY review_id
+        """
+    ).fetchall()
+    for row in rows:
+        proposal = _review_json(row["proposed_result_json"])
+        candidate_title = str(
+            proposal.get("candidate_name")
+            or proposal.get("title")
+            or "Untitled topic"
+        ).strip()
+        _resolve_review_item(
+            con,
+            str(row["review_id"]),
+            _generic_topic_resolution(candidate_title),
+        )
 
     rows = con.execute(
         """
@@ -1251,8 +1407,7 @@ def apply_first_pass(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
             resolution = "First pass: marked historical; it cannot create a current task."
         else:
             resolution = "First pass: marked not-current; no reliable event or meeting date is available."
-        if _resolve_review_item(con, str(row["review_id"]), resolution):
-            auto_resolved["task_date_review"] += 1
+        _resolve_review_item(con, str(row["review_id"]), resolution)
 
     display_candidates: List[Dict[str, Any]] = []
     rows = con.execute(
@@ -1295,15 +1450,16 @@ def apply_first_pass(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
                 ),
             }
         )
-        if _resolve_review_item(
+        _resolve_review_item(
             con,
             str(row["review_id"]),
             f"First pass: provisional display record is {display['source_id']} ({display['relative_path']}); all source records remain.",
-        ):
-            auto_resolved[issue_type] += 1
+        )
 
+    _refresh_generic_topic_resolutions(con)
     con.commit()
     pending_rows = _pending_response_rows(con)
+    topic_labels = _generic_topic_labels(con)
     cumulative_auto_resolved = Counter(
         {
             str(row["issue_type"]): int(row["count"])
@@ -1321,6 +1477,7 @@ def apply_first_pass(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         config,
         auto_resolved_by_issue_type=cumulative_auto_resolved,
         display_candidates=display_candidates,
+        topic_labels=topic_labels,
         pending_rows=pending_rows,
     )
 

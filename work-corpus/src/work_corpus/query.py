@@ -1,9 +1,9 @@
 """Deterministic, local-only queries over the provenance-first corpus.
 
-The default query path is deliberately narrow.  Every evidence and raw-source
-lookup uses the same Work predicate, so a caller cannot accidentally widen a
-join by changing one search strategy.  Raw fallback is read-only and is never
-written to the corpus or the FTS table.
+The default query path searches the unified private corpus.  ``Work`` remains
+an explicit narrower filter, while original scope and classification labels
+stay attached to every hit as provenance.  Raw fallback is read-only and is
+never written to the corpus or the FTS table.
 """
 
 from __future__ import annotations
@@ -17,7 +17,9 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from .util import read_text_guess, scrub_derived_text
 
 
-DEFAULT_SCOPE = "Work"
+ALL_SCOPE = "All"
+WORK_SCOPE = "Work"
+DEFAULT_SCOPE = ALL_SCOPE
 MAX_QUESTION_LENGTH = 2_000
 MAX_RAW_BYTES = 2 * 1024 * 1024
 DEFAULT_LIMIT = 20
@@ -28,6 +30,7 @@ EVIDENCE_LABELS = frozenset(
         "derived_reviewed",
         "derived_unreviewed",
         "raw_work",
+        "raw_source",
         "inference",
         "conflict",
         "missing",
@@ -36,7 +39,13 @@ EVIDENCE_LABELS = frozenset(
 )
 
 _SOURCE_FACT_LABELS = frozenset(
-    {"canonical", "derived_reviewed", "derived_unreviewed", "raw_work"}
+    {
+        "canonical",
+        "derived_reviewed",
+        "derived_unreviewed",
+        "raw_work",
+        "raw_source",
+    }
 )
 _FTS_TOKEN_RE = re.compile(r"[^\W_]+(?:[-'][^\W_]+)*", re.UNICODE)
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
@@ -98,12 +107,10 @@ def validate_question(question: str) -> str:
 
 def _validate_scope(scope: str) -> str:
     value = str(scope or DEFAULT_SCOPE).strip()
-    if value.casefold() != DEFAULT_SCOPE.casefold():
-        raise QueryValidationError(
-            "the default query path only permits Work scope; "
-            "use diagnostic_search for excluded scopes"
-        )
-    return DEFAULT_SCOPE
+    for allowed in (ALL_SCOPE, WORK_SCOPE):
+        if value.casefold() == allowed.casefold():
+            return allowed
+    raise QueryValidationError("scope must be All or Work")
 
 
 def redact_snippet(value: str) -> str:
@@ -169,8 +176,10 @@ def _fts_query(question: str) -> Optional[str]:
     return " AND ".join('"' + token.replace('"', '""') + '"' for token in tokens)
 
 
-def _scope_sql(alias: str = "s") -> str:
-    """Return the one Work-only predicate used by every default join."""
+def _scope_sql(alias: str = "s", scope: str = WORK_SCOPE) -> str:
+    """Return the validated scope predicate used by evidence joins."""
+    if scope.casefold() == ALL_SCOPE.casefold():
+        return "1=1"
     return f"LOWER(COALESCE({alias}.classification, {alias}.scope, 'Unknown')) = 'work'"
 
 
@@ -311,13 +320,14 @@ def _work_evidence_rows(
     exact_question: Optional[str] = None,
     fts_query: Optional[str] = None,
     evidence_ids: Optional[Sequence[str]] = None,
+    scope: str = DEFAULT_SCOPE,
     diagnostic: bool = False,
     limit: Optional[int] = None,
 ) -> List[sqlite3.Row]:
     predicates: List[str] = []
     parameters: List[Any] = []
-    if not diagnostic:
-        predicates.append(_scope_sql())
+    if not diagnostic and scope.casefold() != ALL_SCOPE.casefold():
+        predicates.append(_scope_sql(scope=scope))
     if exact_question is not None:
         predicates.append(
             "(e.evidence_id IN ("
@@ -405,6 +415,7 @@ def _fetch_evidence_by_ids(
     con: sqlite3.Connection,
     evidence_ids: Iterable[str],
     *,
+    scope: str = DEFAULT_SCOPE,
     diagnostic: bool = False,
     limit: Optional[int] = None,
 ) -> List[sqlite3.Row]:
@@ -412,6 +423,7 @@ def _fetch_evidence_by_ids(
     return _work_evidence_rows(
         con,
         evidence_ids=unique,
+        scope=scope,
         diagnostic=diagnostic,
         limit=limit,
     )
@@ -421,13 +433,16 @@ def exact_search(
     con: sqlite3.Connection,
     question: str,
     *,
+    scope: str = DEFAULT_SCOPE,
     diagnostic: bool = False,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
+    normalized_scope = _validate_scope(scope)
     rows = _work_evidence_rows(
         con,
         exact_question=value,
+        scope=normalized_scope,
         diagnostic=diagnostic,
         limit=limit,
     )
@@ -437,7 +452,7 @@ def exact_search(
             match_type="exact",
             label_override=(
                 "excluded_scope"
-                if diagnostic and _scope_for_row(row) != DEFAULT_SCOPE
+                if diagnostic and _scope_for_row(row) != WORK_SCOPE
                 else None
             ),
         )
@@ -449,16 +464,19 @@ def fts_search(
     con: sqlite3.Connection,
     question: str,
     *,
+    scope: str = DEFAULT_SCOPE,
     diagnostic: bool = False,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
+    normalized_scope = _validate_scope(scope)
     query_expression = _fts_query(value)
     if not query_expression:
         return []
     rows = _work_evidence_rows(
         con,
         fts_query=query_expression,
+        scope=normalized_scope,
         diagnostic=diagnostic,
         limit=limit,
     )
@@ -468,7 +486,7 @@ def fts_search(
             match_type="fts",
             label_override=(
                 "excluded_scope"
-                if diagnostic and _scope_for_row(row) != DEFAULT_SCOPE
+                if diagnostic and _scope_for_row(row) != WORK_SCOPE
                 else None
             ),
         )
@@ -659,14 +677,20 @@ def relationship_search(
     con: sqlite3.Connection,
     question: str,
     *,
+    scope: str = DEFAULT_SCOPE,
     diagnostic: bool = False,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     value = validate_question(question)
+    normalized_scope = _validate_scope(scope)
     evidence_ids = _relationship_evidence_ids(con, value)
     labels = _relationship_evidence_labels(con, value, evidence_ids)
     rows = _fetch_evidence_by_ids(
-        con, evidence_ids, diagnostic=diagnostic, limit=limit
+        con,
+        evidence_ids,
+        scope=normalized_scope,
+        diagnostic=diagnostic,
+        limit=limit,
     )
     return [
         _hit_from_row(
@@ -674,7 +698,7 @@ def relationship_search(
             match_type="relationship",
             label_override=(
                 "excluded_scope"
-                if diagnostic and _scope_for_row(row) != DEFAULT_SCOPE
+                if diagnostic and _scope_for_row(row) != WORK_SCOPE
                 else labels.get(str(row["evidence_id"]))
             ),
         )
@@ -698,6 +722,7 @@ def _raw_work_fallback(
     con: sqlite3.Connection,
     question: str,
     *,
+    scope: str = DEFAULT_SCOPE,
     limit: int,
     diagnostic: bool = False,
 ) -> List[Dict[str, Any]]:
@@ -708,8 +733,8 @@ def _raw_work_fallback(
         "s.source_version_id IS NOT NULL",
         "s.content_sha256 IS NOT NULL",
     ]
-    if not diagnostic:
-        predicates.append(_scope_sql())
+    if not diagnostic and scope.casefold() != ALL_SCOPE.casefold():
+        predicates.append(_scope_sql(scope=scope))
     rows = con.execute(
         f"""
         SELECT s.*, v.source_version_id AS current_version_id,
@@ -744,12 +769,17 @@ def _raw_work_fallback(
             continue
         locator, snippet = found
         date_value, date_basis = _date_fields(dict(row))
-        scope = _scope_for_row(dict(row))
-        label = "excluded_scope" if diagnostic and scope != DEFAULT_SCOPE else "raw_work"
+        row_scope = _scope_for_row(dict(row))
+        if diagnostic:
+            label = "excluded_scope" if row_scope.casefold() != WORK_SCOPE.casefold() else "raw_work"
+        elif row_scope.casefold() == WORK_SCOPE.casefold():
+            label = "raw_work"
+        else:
+            label = "raw_source"
         hits.append(
             {
                 "label": label,
-                "evidence_status": "raw_work",
+                "evidence_status": label if label != "excluded_scope" else "raw_source",
                 "evidence_id": None,
                 "source_path": row["relative_path"],
                 "relative_path": row["relative_path"],
@@ -759,7 +789,7 @@ def _raw_work_fallback(
                 "date_basis": date_basis,
                 "source_date_basis": date_basis,
                 "date_value": date_value,
-                "scope": scope,
+                "scope": row_scope,
                 "source_system": row["source_system"],
                 "sensitivity": row["sensitivity"],
                 "snippet": redact_snippet(snippet),
@@ -796,7 +826,9 @@ def _deduplicate_hits(hits: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     )
 
 
-def _missing_hit(question: str) -> Dict[str, Any]:
+def _missing_hit(question: str, *, scope: str = DEFAULT_SCOPE) -> Dict[str, Any]:
+    scope_description = "Work-scoped" if scope == WORK_SCOPE else "source-backed"
+    reason_scope = "Work raw source" if scope == WORK_SCOPE else "raw source"
     return {
         "label": "missing",
         "evidence_status": "missing",
@@ -809,13 +841,13 @@ def _missing_hit(question: str) -> Dict[str, Any]:
         "date_basis": "not_observed",
         "source_date_basis": "not_observed",
         "date_value": None,
-        "scope": DEFAULT_SCOPE,
+        "scope": scope,
         "source_system": None,
         "sensitivity": None,
-        "snippet": "No Work-scoped source-backed evidence matched the question.",
+        "snippet": f"No {scope_description} evidence matched the question.",
         "match_type": "missing",
         "question": question,
-        "reason": "No canonical, derived, or Work raw source answer was found.",
+        "reason": f"No canonical, derived, or {reason_scope} answer was found.",
     }
 
 
@@ -840,9 +872,11 @@ def search(
 ) -> Dict[str, Any]:
     """Search local evidence in exact, FTS, relationship, then raw order.
 
-    The default response contains Work rows only.  ``diagnostic=True`` is an
-    explicitly separate local inspection mode and labels every excluded row
-    ``excluded_scope``; it is never enabled by the CLI default.
+    The default response searches all source scopes and preserves each row's
+    original scope label.  ``scope="Work"`` narrows the response.
+    ``diagnostic=True`` is an explicitly separate local inspection mode that
+    labels non-Work rows ``excluded_scope``; it is never enabled by the CLI
+    default.
     """
     value = validate_question(question)
     normalized_scope = _validate_scope(scope)
@@ -853,10 +887,32 @@ def search(
     rebuild_search_index(con)
 
     hits: List[Dict[str, Any]] = []
-    hits.extend(exact_search(con, value, diagnostic=diagnostic, limit=limit))
-    hits.extend(fts_search(con, value, diagnostic=diagnostic, limit=limit))
     hits.extend(
-        relationship_search(con, value, diagnostic=diagnostic, limit=limit)
+        exact_search(
+            con,
+            value,
+            scope=normalized_scope,
+            diagnostic=diagnostic,
+            limit=limit,
+        )
+    )
+    hits.extend(
+        fts_search(
+            con,
+            value,
+            scope=normalized_scope,
+            diagnostic=diagnostic,
+            limit=limit,
+        )
+    )
+    hits.extend(
+        relationship_search(
+            con,
+            value,
+            scope=normalized_scope,
+            diagnostic=diagnostic,
+            limit=limit,
+        )
     )
     hits = _deduplicate_hits(hits)
 
@@ -866,6 +922,7 @@ def search(
         fallback_hits = _raw_work_fallback(
             con,
             value,
+            scope=normalized_scope,
             limit=limit,
             diagnostic=False,
         )
@@ -877,6 +934,7 @@ def search(
         diagnostic_raw = _raw_work_fallback(
             con,
             value,
+            scope=normalized_scope,
             limit=limit,
             diagnostic=True,
         )
@@ -884,7 +942,7 @@ def search(
 
     hits = hits[:limit]
     if not hits:
-        hits = [_missing_hit(value)]
+        hits = [_missing_hit(value, scope=normalized_scope)]
 
     partitions = _partition(hits)
     return {
@@ -913,7 +971,7 @@ def diagnostic_search(
     return search(
         con,
         question,
-        scope=DEFAULT_SCOPE,
+        scope=ALL_SCOPE,
         limit=limit,
         raw_fallback=False,
         diagnostic=True,
@@ -924,7 +982,27 @@ def diagnostic_search(
 # introducing a second implementation.
 query = search
 run_query = search
-query_work = search
+
+
+def query_work(
+    con: sqlite3.Connection,
+    question: str,
+    *,
+    limit: int = DEFAULT_LIMIT,
+    raw_fallback: bool = True,
+    diagnostic: bool = False,
+) -> Dict[str, Any]:
+    """Preserve the explicit Work-only convenience entry point."""
+    return search(
+        con,
+        question,
+        scope=WORK_SCOPE,
+        limit=limit,
+        raw_fallback=raw_fallback,
+        diagnostic=diagnostic,
+    )
+
+
 search_exact = exact_search
 search_fts = fts_search
 traverse_relationships = relationship_search

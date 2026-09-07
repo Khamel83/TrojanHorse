@@ -131,6 +131,15 @@ def test_report_exposes_reconciliation_and_organization_acceptance(tmp_path: Pat
             ),
             encoding="utf-8",
         )
+        (config.state_dir / "first_pass_acceptance.json").write_text(
+            json.dumps(
+                {
+                    "pending_action_count": 0,
+                    "policy": {"default_query_scope": "All"},
+                }
+            ),
+            encoding="utf-8",
+        )
         summary = build_report(config, con)
     finally:
         con.close()
@@ -149,6 +158,8 @@ def test_report_exposes_reconciliation_and_organization_acceptance(tmp_path: Pat
         "current_task_rows": 0,
         "residual_pending": 9,
     }
+    report_text = (config.corpus_dir / "reports" / "what_we_have_and_need.md").read_text()
+    assert "pointer targets remain unresolved" not in report_text
 
 
 def test_report_contains_all_acceptance_categories_without_sensitive_values(

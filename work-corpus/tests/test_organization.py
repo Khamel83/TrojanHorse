@@ -626,7 +626,10 @@ def test_first_pass_closes_policy_stable_rows_and_writes_small_response_sheet(tm
             con,
             issue_type="entity_candidate_review",
             source_id=work_id,
-            proposed_result={"candidate_type": "unknown"},
+            proposed_result={
+                "candidate_type": "unknown",
+                "candidate_name": "1:1 Chris",
+            },
             reason="unclear entity",
         )
         record_review_item(
@@ -653,36 +656,51 @@ def test_first_pass_closes_policy_stable_rows_and_writes_small_response_sheet(tm
     finally:
         con.close()
 
-    assert result["auto_resolved_review_items"] == 8
-    assert result["pending_action_count"] == 4
-    assert repeated["auto_resolved_review_items"] == 8
+    assert result["auto_resolved_review_items"] == 12
+    assert result["pending_action_count"] == 0
+    assert repeated["auto_resolved_review_items"] == 12
     assert repeated["provisional_display_candidates"] == 2
     assert result["auto_resolved_by_issue_type"] == {
+        "capacities_payload_match": 1,
         "duplicate_group_review": 1,
+        "entity_candidate_review": 1,
         "meeting_link_review": 1,
-        "sensitivity_review": 1,
+        "sensitivity_review": 2,
         "scope_review": 1,
         "task_date_review": 2,
         "task_scope_review": 1,
         "version_family_review": 1,
+        "zoom_quality_review": 1,
     }
     resolved = {row["review_id"]: row for row in rows if row["status"] == "resolved"}
     assert "provisional display record" in resolved[duplicate_review]["resolution"]
     assert version_two in resolved[version_review]["resolution"]
     assert "historical" in resolved[historical_date]["resolution"]
     assert "no reliable" in resolved[unknown_date]["resolution"]
-    assert resolved[scope_review]
-    assert resolved[sensitivity_review]
-    assert resolved[task_scope_review]
-    assert resolved[meeting_review]
-    assert result["pending_by_issue_type"] == {
-        "capacities_payload_match": 1,
-        "entity_candidate_review": 1,
-        "sensitivity_review": 1,
-        "zoom_quality_review": 1,
-    }
+    assert "unified private corpus" in resolved[scope_review]["resolution"]
+    assert "unified private corpus" in resolved[sensitivity_review]["resolution"]
+    assert "unified corpus" in resolved[task_scope_review]["resolution"]
+    assert "unified corpus" in resolved[meeting_review]["resolution"]
+    capacities = next(
+        row for row in resolved.values()
+        if row["resolution"] and "unresolved pointer metadata" in row["resolution"]
+    )
+    assert capacities
+    topic = next(
+        row for row in resolved.values()
+        if row["resolution"] and "generic topic label" in row["resolution"]
+    )
+    assert topic
+    zoom = next(
+        row for row in resolved.values()
+        if row["resolution"] and "partial local transcript" in row["resolution"]
+    )
+    assert zoom
+    assert result["pending_by_issue_type"] == {}
     response_text = (config.corpus_dir / "reports" / "first_pass_review.md").read_text()
-    assert "4 pending action items" in response_text
-    assert "| `CAPACITIES_PAYLOAD` | 1 |" in response_text
-    assert "| `ENTITY_CANDIDATE` | 1 |" in response_text
+    assert "0 pending action items" in response_text
+    assert "No pending exception groups remain." in response_text
+    assert "first_pass_topic_labels.csv" in response_text
+    topic_labels = (config.corpus_dir / "reports" / "first_pass_topic_labels.csv").read_text()
+    assert "1:1,1:1 Chris" in topic_labels
     assert "https://" not in response_text

@@ -5,6 +5,18 @@ approved the supplied plan with an index-API annotation, now applied. See
 `../reviews/2026-09-06-corpus-completion-opus-review.md`. Documentation and
 planning are now supplemented by the verified execution record below.
 
+## Post-handoff policy amendment — 2026-09-07
+
+The user approved a final bulk policy pass after the ordered implementation.
+It supersedes the earlier Work-only default and the instruction to leave the
+grouped queue pending: the default query is now unified `All`, `Work` remains
+an optional filter, all nonblank parseable source records remain searchable,
+and original scope/sensitivity labels remain provenance. The 68 grouped
+exception rows are resolved without deleting raw data or inventing canonical
+identities. Ambiguous titles are generic topic labels; the six unavailable
+Capacities payloads remain explicit unresolved metadata; and the one Zoom
+partial is accepted as partial.
+
 ## User-approved throughput amendment
 
 On 2026-09-06 the user approved a faster Granola pull after the connected tool

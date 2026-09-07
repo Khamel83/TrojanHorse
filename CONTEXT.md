@@ -5,9 +5,10 @@ Behavior is specified in the design document; execution is tracked in TODO.md.
 Historical context is preserved in docs/superpowers/plans/2026-09-06-context-history.md.
 
 The current operational checkpoint is recorded in
-`docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md`. Ingestion and
-the deterministic organization pass are complete for the captured local
-sources; human semantic review remains a separate downstream step.
+`docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md`. Ingestion,
+deterministic organization, and the approved unified-corpus first pass are
+complete for the captured local sources. Optional semantic refinement remains
+a separate downstream step.
 
 ## Language
 
@@ -18,6 +19,11 @@ sources; human semantic review remains a separate downstream step.
 **Imported**: Captured content is represented in the corpus with its source identity and provenance.
 
 **Searchable**: Imported evidence is represented in the query index and can be retrieved through the applicable scope rules.
+
+**Unified private corpus**: The default `All` query scope includes every
+nonblank parseable source record. The original Work, Personal, Mixed, and
+Unknown labels remain attached as provenance. `Work` is an explicit narrower
+filter.
 
 **Retryable outcome**: An incomplete retrieval or processing attempt that remains eligible for another attempt, such as a provider rate limit.
 
@@ -32,6 +38,9 @@ sources; human semantic review remains a separate downstream step.
 **Meeting group**: One dated Zoom folder, including nested recording assets.
 
 **Canonical entity**: One stable project, person, or organization record.
+
+**Generic topic label**: A source title retained for grouping and search when
+it does not establish a person, project, or organization identity.
 
 **Alias**: A former name, spelling, abbreviation, or source-specific name linked to a canonical entity.
 
@@ -66,9 +75,11 @@ current-task decisions.
 
 **First-pass triage**: A follow-on local pass that applies the existing safe
 defaults to policy-stable review queues and writes one grouped exception sheet.
-It may exclude uncertain material from the default Work view and select a
-provisional display record, but it does not delete sources or claim human
-approval.
+The current approved policy includes all nonblank parseable records in the
+unified private corpus, retains original scope and sensitivity labels as
+provenance, selects provisional display records, and records ambiguous titles
+as generic topic labels. It does not delete sources or invent canonical
+identities.
 
 **Wispr capture date**: The date on the saved local capture envelope. It is
 separate from a Wispr meeting event date. The importer maps `meetings[].start`

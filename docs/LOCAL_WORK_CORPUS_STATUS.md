@@ -1,17 +1,17 @@
 # Local Work Corpus Status
 
 Status date: 2026-09-07
-Latest report: `2026-09-07T15:01:41-07:00`
+Latest report: `2026-09-07T16:51:26-07:00`
 
 ## Current completion boundary
 
 The two approved milestones are complete through deterministic organization
-and a safe first-pass triage: first ingestion and search verification, then
-source-backed links, explicit projects, task-proposal scanning, and grouped
-residual exceptions. Human semantic review remains open only for those grouped
-exceptions. See the [remaining-work map](REMAINING_WORK.md), the [first-pass
-review sheet](../work-corpus/corpus/reports/first_pass_review.md), and the
-[completion handoff](superpowers/plans/2026-09-06-corpus-completion-handoff.md).
+and the unified-corpus first pass: first ingestion and search verification,
+then source-backed links, explicit projects, task-proposal scanning, and
+grouped policy handling. No grouped review decisions are pending. Optional
+semantic refinement remains downstream work. See the [remaining-work
+map](REMAINING_WORK.md), the [first-pass review sheet](../work-corpus/corpus/reports/first_pass_review.md),
+and the [completion handoff](superpowers/plans/2026-09-06-corpus-completion-handoff.md).
 
 The local evidence base is complete for the currently captured Granola REST,
 Granola MCP shadow, Wispr Flow, Capacities, Notion, OneNote, and Zoom sources.
@@ -24,7 +24,10 @@ The deterministic `organize` command was run twice with the same date. It
 produced 9 explicit Project entities, 27 evidence-backed project source links,
 0 people, 0 organizations, 1,910 scanned task proposals, and 0 current task
 rows. Ambiguous records remain in the residual ledger rather than being
-silently canonicalized.
+silently canonicalized. The default query scope is now `All`: every nonblank
+parseable source is searchable, with original Work, Personal, Mixed, Unknown,
+and sensitivity labels preserved as provenance. `Work` remains an optional
+narrow filter.
 
 ## Current corpus
 
@@ -43,8 +46,8 @@ silently canonicalized.
 | Granola REST | 559 unique notes across 19 list pages; 559 summaries; 557 transcripts; 2 summary-only notes; all 559 imported/searchable | Complete for the current API listing. |
 | Granola MCP shadow | 559 listed UUIDs imported/searchable; 186 detail captures, 181 detailed summaries, 177 transcripts | 378 detail and 382 transcript gaps remain in this redundant shadow feed. |
 | Wispr Flow | 13 local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | 13/13 have local capture and retrieval dates; all 12 meetings have start, end, and provider-modified dates; the scratchpad has provider-modified metadata but no event date in its source object. |
-| Capacities | 563 typed pointer records; 557 matched to 451 local payload records; 1,216 confirmed pointer-to-payload relationships | 6 pointers lack file-size metadata and remain review items. No signed URL was fetched. |
-| Zoom | 231 tracked groups; 230 succeeded and 1 is partial; 0 eligible media lacks a transcript or terminal status | 1 partial quality review and 52 meeting-link reviews remain. |
+| Capacities | 563 typed pointer records; 557 matched to 451 local payload records; 1,216 confirmed pointer-to-payload relationships | 6 pointers retain explicit unresolved metadata under the accepted first-pass policy. No signed URL was fetched. |
+| Zoom | 231 tracked groups; 230 succeeded and 1 is partial; 0 eligible media lacks a transcript or terminal status | The partial result is accepted and preserved; 52 meeting groups retain a non-destructive `needs_review` linkage status. |
 | OneNote | 29 of 29 `.one` files parsed; 295 of 295 reviewed pages extracted | No current mechanical gap. |
 | Notion | 95 pages, 2 databases, 24 attachments, 0 unresolved relationships | No current mechanical gap reported. |
 
@@ -85,15 +88,11 @@ The acceptance state is
 its machine-readable form is
 [`residual_ledger.json`](../work-corpus/state/residual_ledger.json).
 
-The first pass resolved 4,411 policy-stable rows, selected 622 provisional
-duplicate/version display records, and left this grouped response:
-
-- Capacities payload match: 6.
-- Entity candidates: 48.
-- Unconfirmed scope: 4.
-- Work-restricted sensitivity: 9.
-- Zoom quality: 1.
-- Total residual ledger entries: 68.
+The first pass resolved 4,479 review rows and selected 622 provisional
+duplicate/version display records. The residual ledger contains 0 pending
+entries. The 48 ambiguous titles are recorded in
+[`first_pass_topic_labels.csv`](../work-corpus/corpus/reports/first_pass_topic_labels.csv)
+as generic topic labels; no person, project, or organization was inferred.
 
 The old 13 Wispr date rows are resolved as stale parser results. The corrected
 import maps Wispr `meetings[].start` to the event date and the saved envelope's
@@ -101,9 +100,9 @@ import maps Wispr `meetings[].start` to the event date and the saved envelope's
 `modified_at` as separate derived metadata fields. It does not convert a
 `modified_at` value into an event date.
 
-These are interpretation queues, not missing raw data. The organizer retains
-all eligible source records and does not force uncertain merges, privacy
-decisions, or historical task statements into a current view.
+These are accepted provenance and quality states, not missing raw data. The
+organizer retains all eligible source records, does not force uncertain merges,
+and keeps historical task statements out of the current-task view.
 
 ## Reproduction and verification
 
@@ -131,5 +130,5 @@ and organization counts separately.
   evidence tied to source-media provenance.
 - No automatic historical task backfill, email, Atlas integration, or external
   model call with raw corpus content is part of this milestone.
-- Human review is still required before sensitive material is exposed in any
-  narrower downstream view.
+- The private `All` query includes retained scope/sensitivity records. A future
+  external or narrower release view still requires its own explicit review.

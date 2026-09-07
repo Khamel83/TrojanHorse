@@ -1,6 +1,7 @@
 # ADR 0001: Local Work Corpus Boundary
 
 - Status: Accepted; operational evidence amended 2026-09-06
+- Current query-policy amendment: 2026-09-07
 - Date: 2026-09-04; evidence update 2026-09-06
 - Scope: private, single-user work corpus
 
@@ -26,8 +27,9 @@ package.
   relationships, review items, task records, and ingestion checkpoints.
 - Normalized text, FTS, reports, and relationships are rebuildable outputs
   outside `data/`.
-- The default query scope is `Work`. `Personal`, `Mixed`, and `Unknown` stay
-  out of that query.
+- The default query scope is the unified private corpus (`All`). `Work` remains
+  an explicit narrower filter. Original `Work`, `Personal`, `Mixed`, and
+  `Unknown` labels remain attached as provenance.
 - Confidential personnel material is allowed in the private work scope and
   retains a sensitivity label.
 - Email is completely outside the system.
@@ -46,6 +48,13 @@ package.
   proposals. Ambiguous or risky changes require review.
 
 ## Implementation evidence
+
+The 2026-09-07 policy pass closed all currently pending grouped review rows.
+It includes every nonblank parseable source in the default private query,
+retains original scope and sensitivity labels, records 48 ambiguous titles as
+generic topic labels, accepts the one quality-limited Zoom result as partial,
+and leaves six unavailable Capacities payloads as explicit unresolved metadata.
+It does not rewrite raw files, fetch signed URLs, or infer canonical identities.
 
 The original 2026-09-04 acceptance run preserved the boundary: its raw corpus
 had 1,414 files and 58,965,738,600 bytes before and after the run, with zero

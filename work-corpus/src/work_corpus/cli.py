@@ -145,9 +145,15 @@ def _parser() -> argparse.ArgumentParser:
     query.add_argument("question", nargs="+", help="Question or exact search text.")
     query.add_argument("--limit", type=int, default=20)
     query.add_argument(
+        "--scope",
+        choices=("All", "Work"),
+        default="All",
+        help="Search the unified corpus (All) or narrow results to Work.",
+    )
+    query.add_argument(
         "--no-raw-fallback",
         action="store_true",
-        help="Do not inspect Work raw files after canonical search misses.",
+        help="Do not inspect raw source files after canonical search misses.",
     )
     query.add_argument(
         "--diagnostic",
@@ -219,6 +225,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             details = search(
                 con,
                 " ".join(args.question),
+                scope=args.scope,
                 limit=args.limit,
                 raw_fallback=not args.no_raw_fallback,
                 diagnostic=args.diagnostic,

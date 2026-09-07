@@ -416,7 +416,7 @@ def _notion_summary(con: sqlite3.Connection) -> Dict[str, Any]:
 
 def _review_queue_summary(
     con: sqlite3.Connection,
-    sensitive_review_count: int,
+    provenance_marker_count: int,
 ) -> Dict[str, Any]:
     by_issue_type = {
         _safe_text(row["issue_type"]): int(row["count"])
@@ -433,6 +433,7 @@ def _review_queue_summary(
         for issue_type, count in by_issue_type.items()
         if "scope" in issue_type.casefold()
     )
+    sensitivity_pending = int(by_issue_type.get("sensitivity_review", 0))
     return {
         "scope": {
             "pending_review_items": scope_pending,
@@ -441,7 +442,8 @@ def _review_queue_summary(
             ),
         },
         "sensitivity": {
-            "source_records_for_review": sensitive_review_count,
+            "pending_review_items": sensitivity_pending,
+            "source_records_with_markers": provenance_marker_count,
         },
         "pending_by_issue_type": by_issue_type,
     }
@@ -1018,7 +1020,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "transcription_jobs_error": tx_errors,
         "exact_duplicate_groups": len(duplicates),
         "likely_version_families": len(version_families),
-        "sensitive_review_candidates": len(sensitive_review),
+        "scope_sensitivity_provenance_markers": len(sensitive_review),
         "coverage": coverage,
         "mcp_feed_freshness": mcp_freshness,
         "unsupported": unsupported,
@@ -1129,6 +1131,19 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
     rest_api_complete = (
         isinstance(rest_api, Mapping) and rest_api.get("status") == "complete"
     )
+    first_pass_state = _read_state_json(config, "first_pass_acceptance.json")
+    first_pass_policy = first_pass_state.get("policy")
+    pending_first_pass_actions = first_pass_state.get("pending_action_count")
+    unified_policy_active = bool(
+        isinstance(first_pass_policy, Mapping)
+        and first_pass_policy.get("default_query_scope") == "All"
+        and int(
+            pending_first_pass_actions
+            if pending_first_pass_actions is not None
+            else 1
+        )
+        == 0
+    )
 
     needs: List[str] = []
     if source_count == 0:
@@ -1173,7 +1188,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         )
     if granola_progress.get("unimported_id_count", 0) or granola_progress.get("unsearchable_id_count", 0):
         needs.append("Granola import/search coverage does not yet match the listed-ID set.")
-    if capacities["unresolved_pointer_count"]:
+    if capacities["unresolved_pointer_count"] and not unified_policy_active:
         needs.append(
             f"{capacities['unresolved_pointer_count']:,} Capacities pointer targets remain unresolved; "
             "see `state/capacities_payload_reconciliation.json`."
@@ -1193,16 +1208,17 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append(f"{normalize_errors} files produced parsing errors.")
     if tx_errors:
         needs.append(f"{tx_errors} local transcription jobs failed and need review.")
-    if tx_partial:
+    if tx_partial and (
+        not unified_policy_active
+        or review_queues["pending_by_issue_type"].get("zoom_quality_review", 0)
+    ):
         needs.append(
             f"{tx_partial} local transcription jobs produced quality-limited partial outputs and need review."
         )
-    if duplicates:
+    if duplicates and not unified_policy_active:
         needs.append(f"{_count_phrase(len(duplicates), 'exact duplicate group')} detected among hashed files.")
-    if version_families:
+    if version_families and not unified_policy_active:
         needs.append(f"{_count_phrase(len(version_families), 'likely version family', 'likely version families')} need review; they were not merged.")
-    if sensitive_review:
-        needs.append(f"{_count_phrase(len(sensitive_review), 'filename/path', 'filenames/paths')} flagged for personal or restricted-content review.")
     if not onenote["converter_available"] and onenote["files"]:
         needs.append("The OneNote converter is unavailable; `.one` files remain raw and blocked.")
     if raw_immutability.get("status") != "passed":
@@ -1282,7 +1298,7 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Eligible final Zoom media without terminal status: **{zoom_unprocessed:,}**",
         f"- Exact duplicate groups: **{len(duplicates):,}**",
         f"- Likely version families: **{len(version_families):,}**",
-        f"- Sensitive-review candidates: **{len(sensitive_review):,}**",
+        f"- Scope/sensitivity provenance markers: **{len(sensitive_review):,}**",
         f"- Raw immutability: **{raw_immutability.get('status', 'not_recorded')}**",
         "",
         "## Physical and source-root accounting",
@@ -1350,7 +1366,9 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Notion: {notion['page_count']:,} pages, {notion['database_count']:,} databases, "
         f"{notion['attachment_count']:,} local attachments, {notion['unresolved_relationships']:,} unresolved relationships.",
         f"- Review queues: {review_queues['scope']['pending_review_items']:,} scope items and "
-        f"{review_queues['sensitivity']['source_records_for_review']:,} sensitivity candidates.",
+        f"{review_queues['sensitivity']['pending_review_items']:,} sensitivity decisions pending; "
+        f"{review_queues['sensitivity']['source_records_with_markers']:,} source records retain "
+        "scope/sensitivity markers as provenance.",
         f"- Entities: {entities['aliases']:,} aliases and {entities['ambiguous_merge_proposals']:,} ambiguous merge proposals.",
         f"- Tasks: {tasks['current_candidates']:,} current candidates and "
         f"{tasks['historical_or_review_candidates']:,} historical/review candidates.",
@@ -1401,6 +1419,19 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         )
     md.extend(["", "## Gaps and unresolved items", ""])
     md.extend(f"- {item}" for item in needs or ["No mechanical gaps detected."])
+    if unified_policy_active:
+        md.extend(
+            [
+                "",
+                "## Accepted bounded states",
+                "",
+                "- The unified private-corpus policy includes all nonblank parseable source records; original scope and sensitivity labels remain provenance.",
+                f"- {capacities['unresolved_pointer_count']:,} Capacities pointers remain explicit unresolved metadata records; no signed URL was fetched.",
+                f"- {tx_partial:,} quality-limited Zoom result remains marked partial and preserved.",
+                f"- {len(duplicates):,} exact-duplicate groups and {len(version_families):,} version families retain every source record with a provisional display choice.",
+                f"- {review_queues['scope']['meeting_groups_needing_review']:,} Zoom meeting groups retain a needs_review linkage status; no transcript or media was dropped and no link was forced.",
+            ]
+        )
     md.extend(["", "## Recommended next steps", ""])
     md.extend(f"{index}. {item}" for index, item in enumerate(next_steps, start=1))
     md.extend([
@@ -1471,7 +1502,7 @@ th {{ background: #eee; }}
 <div class="card"><strong>{zoom_total:,}</strong>Zoom folders</div>
 <div class="card"><strong>{zoom_missing:,}</strong>Zoom transcripts missing</div>
 <div class="card"><strong>{len(duplicates):,}</strong>exact duplicate groups</div>
-<div class="card"><strong>{len(sensitive_review):,}</strong>sensitive-review candidates</div>
+<div class="card"><strong>{len(sensitive_review):,}</strong>scope/sensitivity provenance markers</div>
 </div>
 
 <h2>Coverage</h2>

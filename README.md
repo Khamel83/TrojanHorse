@@ -1,9 +1,9 @@
 # TrojanHorse: Local Work Corpus
 
 > Current work: the one-time Granola REST archive, deterministic organization,
-> and safe first-pass triage are complete for the captured local sources. A
-> grouped exception sheet remains. The older MCP UUID shadow feed is
-> separately measurable but is no longer the archive completion gate. See
+> and the unified-corpus first pass are complete for the captured local
+> sources. The older MCP UUID shadow feed is separately measurable but is no
+> longer the archive completion gate. See
 > [TODO](TODO.md), the [remaining-work map](docs/REMAINING_WORK.md), and the
 > [first-pass review sheet](work-corpus/corpus/reports/first_pass_review.md).
 
@@ -27,9 +27,10 @@ authoritative project documents:
 ## Current local corpus workflow
 
 The active runtime is the `work-corpus/` package. It inventories the raw tree,
-writes provenance-backed derived records outside `data/`, keeps Work scope
-enforced in queries, and records review or blocked states instead of hiding
-uncertainty. It does not read email, call Atlas, or use cloud transcription.
+writes provenance-backed derived records outside `data/`, searches the unified
+private corpus by default, and keeps Work as an explicit optional filter. It
+records review or blocked states instead of hiding uncertainty. It does not
+read email, call Atlas, or use cloud transcription.
 User-authorized Granola and Wispr Flow responses are captured locally before
 import and are not written back to their providers.
 
@@ -42,6 +43,7 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . zoom-scan
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . transcribe --approve-run --all
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . report
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . query "project changes"
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . query --scope Work "project changes"
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . mcp-import
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . granola-progress
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . organize --run-date 2026-09-07 --first-pass
@@ -75,21 +77,23 @@ The current acceptance artifacts are [the JSON status report](work-corpus/corpus
 [the organization acceptance state](work-corpus/state/organization_acceptance.json),
 [the residual ledger](work-corpus/corpus/reports/residual_ledger.csv),
 [the grouped first-pass sheet](work-corpus/corpus/reports/first_pass_review.md),
+[the accepted generic topic labels](work-corpus/corpus/reports/first_pass_topic_labels.csv),
 [the transcription queue](work-corpus/state/transcription_queue.csv), and
 [the raw immutability result](work-corpus/state/raw_immutability.json). The
 exact Granola checkpoint is [granola_detail_progress.json](work-corpus/state/mcp/granola_detail_progress.json);
 the local acceptance ledgers are [granola_acceptance.json](work-corpus/state/granola_acceptance.json)
 and [adapter_acceptance.json](work-corpus/state/adapter_acceptance.json).
 
-At the latest verified checkpoint (2026-09-07 15:01 PDT), the local run observes
+At the latest verified checkpoint (2026-09-07 16:51 PDT), the local run observes
 2,751 source files (55.5 GB), 1,849 source versions, a fresh FTS index with
 72,138 rows, 231 tracked Zoom groups with 230 successful and 1 partial local
 transcription result, and all 29 OneNote files with 295 extracted pages. The
 Granola REST archive contains 559 unique notes across 19 list pages, with 559
 summaries and 557 transcripts; all 559 REST IDs are imported and searchable.
 The deterministic organization pass produced 9 explicit projects and 27
-evidence-backed project links. The safe first pass resolved 4,411 policy-stable
-review rows and left 68 grouped exception items. Wispr Flow now has 13/13
+evidence-backed project links. The unified first pass resolved 4,479 review
+rows, closed the 68 grouped exception rows, and recorded 48 ambiguous titles
+as generic topic labels without inferring identities. Wispr Flow now has 13/13
 capture and retrieval dates, with start, end, and provider-modified dates mapped
 for all 12 meeting records; the one scratchpad has provider-modified metadata
 but no event date in its source object.
