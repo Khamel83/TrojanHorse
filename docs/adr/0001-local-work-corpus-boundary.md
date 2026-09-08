@@ -1,8 +1,8 @@
 # ADR 0001: Local Work Corpus Boundary
 
-- Status: Accepted; operational evidence amended 2026-09-06
+- Status: Accepted; operational evidence amended 2026-09-07
 - Current query-policy amendment: 2026-09-07
-- Date: 2026-09-04; evidence update 2026-09-06
+- Date: 2026-09-04; evidence update 2026-09-07
 - Scope: private, single-user work corpus
 
 ## Context
@@ -13,9 +13,9 @@ OneNote sections, and Zoom media. It also contains personal and mixed records.
 The project needs one trustworthy corpus with source-backed answers, while the
 raw archive must remain unchanged.
 
-The user wants this project to remain separate from Atlas and email. The
-corpus must support historical work evidence, current commitments, canonical
-project and person names, and future local Wispr Flow and Granola inputs.
+The user wants this project to remain separate from Atlas and mailbox access.
+The corpus must support historical work evidence, current commitments,
+canonical project and person names, and local Wispr Flow and Granola inputs.
 
 ## Decision
 
@@ -32,7 +32,8 @@ package.
   `Unknown` labels remain attached as provenance.
 - Confidential personnel material is allowed in the private work scope and
   retains a sensitivity label.
-- Email is completely outside the system.
+- Mailbox discovery and access are outside the system. `.eml` files already
+  captured inside `data/` are local source records and are parsed/searchable.
 - Atlas and the legacy bridge are outside the architecture and must not watch,
   move, or synchronize the corpus.
 - Existing transcripts are used before local transcription. Every final Zoom
@@ -60,15 +61,15 @@ The original 2026-09-04 acceptance run preserved the boundary: its raw corpus
 had 1,414 files and 58,965,738,600 bytes before and after the run, with zero
 path, size, modification-time, or content-hash mismatches. That snapshot's
 Zoom and OneNote tool gaps were later resolved locally. The current inventory
-contains 2,751 source records and source versions, with 1,849 normalization
-records (773 current normalized and 1,076 prior-good retained); 902 source
+contains 2,751 source records and source versions, with 1,869 normalization
+records (793 current normalized and 1,076 prior-good retained); 882 source
 versions have no normalization record because they are media, metadata,
-unknown/intermediate artifacts, or excluded records. 230 Zoom groups
-succeeded, one remains partial because of genuinely quiet audio, and all 29
-OneNote files produced 295 extracted pages. Granola responses are now captured
-locally before import. The saved raw-immutability proof is still scoped to the
-historical 1,414-file snapshot. Raw data remains outside Git and is not
-rewritten.
+unknown/intermediate artifacts, or excluded records. The 20 local `.eml` files
+are normalized and searchable. 230 Zoom groups succeeded, one remains partial
+because of genuinely quiet audio, and all 29 OneNote files produced 295
+extracted pages. Granola responses are captured locally before import. A
+current two-pass raw-immutability proof covers all 2,751 files and
+59,544,967,619 bytes. Raw data remains outside Git and is not rewritten.
 
 ## Consequences
 

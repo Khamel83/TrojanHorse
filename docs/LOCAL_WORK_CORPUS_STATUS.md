@@ -156,7 +156,9 @@ current two-pass comparison covering all 2,751 inventoried files and
   Zoom, or any other provider.
 - No cloud transcription path is used. Local transcription output is derived
   evidence tied to source-media provenance.
-- No automatic historical task backfill, email, Atlas integration, or external
-  model call with raw corpus content is part of this milestone.
+- No automatic historical task backfill, mailbox access, email-provider
+  integration, Atlas integration, or external model call with raw corpus
+  content is part of this milestone. The 20 already-local `.eml` files are
+  included as captured local evidence.
 - The private `All` query includes retained scope/sensitivity records. A future
   external or narrower release view still requires its own explicit review.

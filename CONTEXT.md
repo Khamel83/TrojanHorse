@@ -79,6 +79,10 @@ stages, and advances an overlap watermark only after those stages succeed.
 source-backed observation and is kept separate from a filename or inventory
 path date.
 
+Mailbox discovery and mailbox access remain outside scope. An `.eml` file that
+already exists under the immutable local `data/` tree is not mailbox access;
+the active runtime parses it as a captured source record.
+
 **Organization pass**: A local deterministic pass that reconciles available
 payloads, applies existing scope/sensitivity/date rules, creates only explicit
 source-backed entities and relationships, records task proposals, and writes a
