@@ -47,7 +47,7 @@ The decisive checks were:
 
 - SQLite `quick_check`: `ok`.
 - SQLite foreign-key check: `0` violations.
-- Active package suite: `195 passed`.
+- Active package suite: `196 passed`.
 - Fatal Ruff check, Python compilation, and `git diff --check`: passed.
 - Editable install smoke in an isolated temporary virtual environment: passed,
   including `work-corpus --help` and an active boundary test. The host's

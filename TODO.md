@@ -117,7 +117,7 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   indexes are fresh (72,198 FTS rows and 1,243 relationship rows), and the
   current raw-immutability comparison is passed for all 2,751 files.
   Representative Work-scope and default All-scope query checks remain
-  recorded. The active suite passes 195 tests, with fatal Ruff, compile, and
+  recorded. The active suite passes 196 tests, with fatal Ruff, compile, and
   diff-whitespace checks also passing.
 - [x] 12. Update README, glossary, status, spec and checklist with verified results.
   Commit scoped code/docs/tests and push under existing user authorization. Verify
