@@ -2,7 +2,7 @@
 
 > Tracks progress through continuous plan execution. Use `bd ready` to see next tasks.
 
-## Current corpus status — 2026-09-04
+## Current corpus status — 2026-09-07
 
 The old Bridge log below is historical. The current project is the separate,
 local-only work corpus described in `CONTEXT.md`.
@@ -22,16 +22,14 @@ local-only work corpus described in `CONTEXT.md`.
 - [x] Define the provenance-first SQLite schema, deterministic evidence/review
   APIs, FTS table, current-task boundary, and safe legacy migration
   (`37e50d6`, `bf3b7a6`, `800ad7c`, `6773540`; Task 3 review approved).
-- [x] Run the full local extraction in the order defined by the amended plan:
-  315 source versions normalized, 418 scope-review records retained, 1
-  optional parser case unsupported, and 0 parsing errors.
-- [x] Run the complete Zoom coverage pass: 4 existing media-bearing transcript
-  groups linked, 68 transcript-only groups kept separate, 231 eligible media
-  items terminally `blocked`, 114 raw artifacts visible, and 0 eligible media
-  without a terminal status.
-- [x] Run the 29-file OneNote acceptance pass. The converter is unavailable,
-  so 29 files are `blocked` and 0 pages were extracted; the reviewed expected
-  result is 295 pages.
+- [x] Run the complete local extraction and normalization path: 2,751 source
+  records/source versions, 1,849 normalization records (773 current and 1,076
+  prior-good retained), 0 normalization errors, and 0 unsupported outputs.
+- [x] Run the complete Zoom coverage pass: 231 tracked groups, 230 successful,
+  1 partial, 68 transcript-only groups kept separate, and 0 eligible final media
+  without a transcript or terminal status.
+- [x] Run the 29-file OneNote acceptance pass. The configured local converter
+  extracted all 295 reviewed pages.
 - [x] Rebuild and verify FTS and relationship indexes, run the seven-category
   Work-scoped query suite, and confirm the real current-task view has 0 rows.
 - [x] Compare the raw corpus before and after acceptance: 1,414 files and
@@ -65,11 +63,17 @@ Current authoritative documents:
 - `CONTEXT.md`
 - `docs/superpowers/specs/2026-09-04-local-work-corpus-design.md`
 - `docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md`
+- `docs/TROJAN_HORSE_AUDIT.md`
+- `docs/REMAINING_WORK.md`
 - `01_INVENTORY/coverage_and_gaps.md`
 
-Tasks 0–9 are mechanically accepted. The remaining operational gates are a
-local OneNote converter and a verified local transcription engine. Do not run
-the old Atlas bridge against `data/`.
+Tasks 0–9 are mechanically accepted. The archive/search foundation is
+operational, but the full repository is not yet a finished assistant or
+service. Remaining work is documented in `docs/TROJAN_HORSE_AUDIT.md` and
+`docs/REMAINING_WORK.md`: canonicalize the active entry point, add reproducible
+installation/CI/health checks, verify current raw preservation, handle the 20
+local `.eml` files, build downstream project/task/career views, and add a
+Granola delta-maintenance path. Do not run the old Atlas bridge against `data/`.
 
 Acceptance artifacts:
 
@@ -77,6 +81,7 @@ Acceptance artifacts:
 - `work-corpus/corpus/reports/what_we_have_and_need.md`
 - `work-corpus/state/transcription_queue.csv`
 - `work-corpus/state/raw_immutability.json`
+- `docs/TROJAN_HORSE_AUDIT.md`
 
 ---
 

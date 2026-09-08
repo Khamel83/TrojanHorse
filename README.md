@@ -8,10 +8,12 @@
 > [first-pass review sheet](work-corpus/corpus/reports/first_pass_review.md).
 
 The current project is a private, local, single-user work-evidence corpus. It
-is separate from Atlas and does not include email. Existing raw files stay
+does not use Atlas, a mailbox, or cloud processing. Existing raw files stay
 unchanged; authorized provider captures are appended as new raw files. The
 local corpus under this project is the archive target; this workflow does not
-move, delete, or rewrite source material outside TrojanHorse.
+move, delete, or rewrite source material outside TrojanHorse. Existing local
+`.eml` files are inventoried as corpus evidence, but are not yet normalized by
+the active parser; mailbox access remains out of scope.
 The reviewed design, inventory, and implementation plan are the
 authoritative project documents:
 
@@ -23,6 +25,7 @@ authoritative project documents:
 - [Boundary ADR](docs/adr/0001-local-work-corpus-boundary.md)
 - [Current operational status](docs/LOCAL_WORK_CORPUS_STATUS.md)
 - [Remaining work after ingestion](docs/REMAINING_WORK.md)
+- [Full repository audit](docs/TROJAN_HORSE_AUDIT.md)
 
 ## Current local corpus workflow
 
@@ -30,7 +33,9 @@ The active runtime is the `work-corpus/` package. It inventories the raw tree,
 writes provenance-backed derived records outside `data/`, searches the unified
 private corpus by default, and keeps Work as an explicit optional filter. It
 records review or blocked states instead of hiding uncertainty. It does not
-read email, call Atlas, or use cloud transcription.
+read a mailbox, call Atlas, or use cloud transcription. The older root
+`TrojanHorse/`, `bridge/`, `th`, and `run_tests.sh` lane is historical and is
+not the active runtime; see the [full audit](docs/TROJAN_HORSE_AUDIT.md).
 User-authorized Granola and Wispr Flow responses are captured locally before
 import and are not written back to their providers.
 
@@ -84,10 +89,14 @@ exact Granola checkpoint is [granola_detail_progress.json](work-corpus/state/mcp
 the local acceptance ledgers are [granola_acceptance.json](work-corpus/state/granola_acceptance.json)
 and [adapter_acceptance.json](work-corpus/state/adapter_acceptance.json).
 
-At the latest verified checkpoint (2026-09-07 16:51 PDT), the local run observes
-2,751 source files (55.5 GB), 1,849 source versions, a fresh FTS index with
-72,138 rows, 231 tracked Zoom groups with 230 successful and 1 partial local
-transcription result, and all 29 OneNote files with 295 extracted pages. The
+At the latest verified checkpoint (2026-09-07 20:38 PDT), the local run observes
+2,751 source files (55.5 GB) and 2,751 source versions. It has 1,849
+normalization records (773 current normalized and 1,076 prior-good retained),
+with 902 source versions not represented by a normalization record because they
+are media, metadata, unknown/intermediate artifacts, or excluded records. The
+FTS index has 72,138 rows, with 231 tracked Zoom groups and 230 successful plus
+1 partial local transcription result; all 29 OneNote files have 295 extracted
+pages. The
 Granola REST archive contains 559 unique notes across 19 list pages, with 559
 summaries and 557 transcripts; all 559 REST IDs are imported and searchable.
 The deterministic organization pass produced 9 explicit projects and 27

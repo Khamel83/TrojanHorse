@@ -59,11 +59,15 @@ It does not rewrite raw files, fetch signed URLs, or infer canonical identities.
 The original 2026-09-04 acceptance run preserved the boundary: its raw corpus
 had 1,414 files and 58,965,738,600 bytes before and after the run, with zero
 path, size, modification-time, or content-hash mismatches. That snapshot's
-Zoom and OneNote tool gaps were later resolved locally. The current run
-contains 2,718 inventoried files and 1,693 normalized source versions; 230
-Zoom groups succeeded, one remains partial because of genuinely quiet audio,
-and all 29 OneNote files produced 295 extracted pages. Granola responses are
-now captured locally before import. Raw data remains outside Git and is not
+Zoom and OneNote tool gaps were later resolved locally. The current inventory
+contains 2,751 source records and source versions, with 1,849 normalization
+records (773 current normalized and 1,076 prior-good retained); 902 source
+versions have no normalization record because they are media, metadata,
+unknown/intermediate artifacts, or excluded records. 230 Zoom groups
+succeeded, one remains partial because of genuinely quiet audio, and all 29
+OneNote files produced 295 extracted pages. Granola responses are now captured
+locally before import. The saved raw-immutability proof is still scoped to the
+historical 1,414-file snapshot. Raw data remains outside Git and is not
 rewritten.
 
 ## Consequences

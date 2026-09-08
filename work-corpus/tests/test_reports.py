@@ -429,6 +429,11 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
     assert required <= summary.keys()
     assert summary["physical"]["substantive_files"] == 8
     assert summary["discovery_excluded"]["normalized_documents"] == 0
+    assert summary["normalization"]["source_versions"] == (
+        summary["normalization"]["normalization_records"]
+        + summary["normalization"]["source_versions_without_normalization_record"]
+    )
+    assert "total_source_versions" not in summary["normalization"]
     assert summary["capacities"]["pointer_only_payloads"] == 1
     assert summary["notion"]["page_count"] == 1
     assert summary["notion"]["database_count"] == 1
@@ -439,6 +444,7 @@ def test_report_contains_all_acceptance_categories_without_sensitive_values(
     assert summary["granola_progress"]["rate_limited_id_count"] == 1
     assert summary["granola_progress"]["rate_limited_ids"] == ["granola-42"]
     assert summary["raw_immutability"]["status"] == "passed"
+    assert summary["raw_immutability"]["comparison_scope"] == "historical_snapshot"
     assert summary["zoom_missing_transcripts"] == 1
     assert summary["zoom_media_without_terminal_status"] == 0
     assert summary["zoom_meeting_folders"] == 1

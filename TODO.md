@@ -107,10 +107,11 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   source preservation, provenance, representative searches and derived links/tasks.
   Historical 152-test results are not validation of new changes. Evidence: the
   current report is generated after organization and first-pass triage, both
-  indexes are fresh (72,138 FTS rows and 1,243 relationship rows), raw
-  immutability remains passed, representative Work-scope query checks remain
-  recorded, the default All-scope and explicit Work-scope query checks remain
-  recorded, and the full suite is run as part of final acceptance.
+  indexes are fresh (72,138 FTS rows and 1,243 relationship rows), the
+  historical raw-immutability comparison remains passed, representative
+  Work-scope query checks remain recorded, the default All-scope and explicit
+  Work-scope query checks remain recorded, and the active 181-test suite is
+  run as part of final acceptance.
 - [x] 12. Update README, glossary, status, spec and checklist with verified results.
   Commit scoped code/docs/tests and push under existing user authorization. Verify
   remote commit identity; leave raw data/runtime state outside Git.
@@ -119,9 +120,63 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   contains only the scoped code/docs/tests; raw data and unrelated untracked
   files remain outside Git. Remote identity is verified after push.
 
+## Full-scale repository audit — 2026-09-07
+
+This audit separates the captured evidence archive from the unfinished product
+and operations layers. It does not require the owner to inspect the 1,500-plus
+review rows one by one; the approved first pass already handled those queues.
+See [the full audit](docs/TROJAN_HORSE_AUDIT.md) for evidence, findings, and
+the completion path.
+
+- [x] Reconcile live SQLite counts with the generated report: 2,751 source
+  records/source versions, 1,849 normalization records, 72,139 evidence rows,
+  72,138 FTS rows, 1,243 relationships, and 0 pending review rows.
+- [x] Separate the complete Granola REST archive from the incomplete but
+  redundant MCP shadow: 559 REST notes imported/searchable, 559 summaries, 557
+  transcripts, 2 summary-only notes.
+- [x] Verify the captured-provider and local-transcription boundary: 13 Wispr
+  records imported/searchable, 231 Zoom groups, 230 succeeded, 1 partial, and
+  0 eligible final media without a transcript or terminal status.
+- [x] Correct report terminology so source versions and normalization records
+  are separate metrics; mark the saved raw-immutability proof as historical
+  because it covers 1,414 files rather than the current 2,751-file inventory.
+- [x] Record the repository-level status: active `work-corpus/` tests pass;
+  the root legacy package/test runner, production configuration, scheduler,
+  health checks, and answer-synthesis product are not complete.
+- [ ] Make `work-corpus/` the single supported entry point and retire,
+  quarantine, or explicitly rebuild the legacy `TrojanHorse/`, `th`, and Atlas
+  bridge lane.
+- [ ] Add reproducible installation, optional-parser dependencies, CI, a
+  repository-wide test command, and a safe runtime/doctor check.
+- [ ] Run a fresh raw-preservation verification over the current 2,751-file
+  inventory and decide how to handle the 20 already-local `.eml` files and 49
+  non-final Zoom `.zoom`/`.tmp` artifacts.
+- [ ] Build the source-backed project, task, and career evidence views. The
+  current scan covered 1,910 evidence records but produced 0 task rows; this
+  is a missing downstream deliverable, not proof that raw evidence is absent.
+- [ ] Add a scheduled Granola delta path and monitoring after choosing the
+  operational host. The one-time REST archive is complete; a five-minute loop
+  is not currently configured or required by the archive gate.
+- [ ] Optionally refine generic topic labels, canonical people/organization
+  aliases, and retained Zoom linkage states after the core views are usable.
+
+### Owner input required to finish the product
+
+1. Confirm that the active product is the private local `work-corpus/` path and
+   that the old Atlas/RAG service is retired or quarantined.
+2. Decide whether the 20 `.eml` files already inside the local corpus should be
+   parsed locally and included in `All`, or intentionally remain inventory-only.
+   This question is about existing files, not mailbox access.
+3. Choose the first user-facing output to build: searchable evidence, a current
+   task view, project history, career evidence, or a small local assistant over
+   those views. No item-by-item queue review is required.
+4. Choose manual maintenance versus scheduled Granola delta ingestion. If
+   scheduled, the remaining input is the approved host/service location; the
+   Granola secret is already held outside this checkout.
+
 ## Explicitly deferred features
 
-Email, Atlas integration, cloud raw-data processing, graph/vector infrastructure,
+Mailbox access, Atlas integration, cloud raw-data processing, graph/vector infrastructure,
 structured decision feature development, automatic historical task backfill and
 polished career-document generation remain outside this handoff. Career evidence
 continues as a derived use of the same source-backed corpus.

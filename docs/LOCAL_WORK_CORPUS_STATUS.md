@@ -1,7 +1,7 @@
 # Local Work Corpus Status
 
 Status date: 2026-09-07
-Latest report: `2026-09-07T16:51:26-07:00`
+Latest report: `2026-09-07T20:38:38-07:00`
 
 ## Current completion boundary
 
@@ -14,7 +14,12 @@ map](REMAINING_WORK.md), the [first-pass review sheet](../work-corpus/corpus/rep
 and the [completion handoff](superpowers/plans/2026-09-06-corpus-completion-handoff.md).
 
 The local evidence base is complete for the currently captured Granola REST,
-Granola MCP shadow, Wispr Flow, Capacities, Notion, OneNote, and Zoom sources.
+Granola MCP shadow, Wispr Flow, Capacities, Notion, OneNote, and Zoom sources
+at the capture/inventory boundary. That does not mean every physical file has a
+normalized text record: 902 source versions are media, metadata,
+unknown/intermediate artifacts, or excluded records. The 20 local `.eml` files
+are inventoried but are not yet parsed by the active runtime. Mailbox access is
+still outside the system.
 The REST archive is the Granola completion gate: 559 unique API notes are
 imported and searchable, with 559 summaries and 557 transcripts. The older MCP
 UUID feed remains a measurable but incomplete shadow. It does not block the
@@ -32,8 +37,11 @@ narrow filter.
 ## Current corpus
 
 - 2,751 physical source files are inventoried, totaling 55.5 GB.
-- 1,849 source versions are represented: 773 normalized in the current parser
-  pass and 1,076 retained prior-good outputs.
+- 2,751 source versions are represented.
+- 1,849 normalization records exist: 773 are current normalized outputs and
+  1,076 are retained prior-good outputs. 902 source versions have no
+  normalization record because they are media, metadata, unknown/intermediate
+  artifacts, or excluded records.
 - Normalization reports 0 errors and 0 unsupported files.
 - The FTS index has 72,138 rows and the relationship index has 1,243 rows;
   both are fresh.
@@ -47,7 +55,7 @@ narrow filter.
 | Granola MCP shadow | 559 listed UUIDs imported/searchable; 186 detail captures, 181 detailed summaries, 177 transcripts | 378 detail and 382 transcript gaps remain in this redundant shadow feed. |
 | Wispr Flow | 13 local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | 13/13 have local capture and retrieval dates; all 12 meetings have start, end, and provider-modified dates; the scratchpad has provider-modified metadata but no event date in its source object. |
 | Capacities | 563 typed pointer records; 557 matched to 451 local payload records; 1,216 confirmed pointer-to-payload relationships | 6 pointers retain explicit unresolved metadata under the accepted first-pass policy. No signed URL was fetched. |
-| Zoom | 231 tracked groups; 230 succeeded and 1 is partial; 0 eligible media lacks a transcript or terminal status | The partial result is accepted and preserved; 52 meeting groups retain a non-destructive `needs_review` linkage status. |
+| Zoom | 231 tracked groups; 230 succeeded and 1 is partial; 0 eligible final media lacks a transcript or terminal status | The partial result is accepted and preserved; 52 meeting groups retain a non-destructive `needs_review` linkage status. 49 non-final `.zoom`/`.tmp` artifacts remain inventory-only and are not treated as meeting media. |
 | OneNote | 29 of 29 `.one` files parsed; 295 of 295 reviewed pages extracted | No current mechanical gap. |
 | Notion | 95 pages, 2 databases, 24 attachments, 0 unresolved relationships | No current mechanical gap reported. |
 
@@ -104,6 +112,18 @@ These are accepted provenance and quality states, not missing raw data. The
 organizer retains all eligible source records, does not force uncertain merges,
 and keeps historical task statements out of the current-task view.
 
+## Full-system audit boundary
+
+The corpus pipeline is mechanically usable for the captured local archive, but
+the repository as a whole is not yet a finished assistant or service. The
+active CLI provides inventory, normalization, local transcription, exact FTS
+search, deterministic organization, and reports. It does not yet provide a
+local answer-synthesis service, project/task/career deliverables, a scheduled
+Granola delta path, production monitoring, or a clean repository-wide install
+and test entry point. The older root package and Atlas bridge remain historical
+code and are not part of the active boundary. See the [full audit](TROJAN_HORSE_AUDIT.md)
+for the ordered completion path and the owner decisions.
+
 ## Reproduction and verification
 
 Run from the repository root:
@@ -118,7 +138,9 @@ The current report is [`status.html`](../work-corpus/corpus/reports/status.html)
 and the machine-readable report is
 [`status.json`](../work-corpus/corpus/reports/status.json). The report records
 the raw immutability result, provider coverage, FTS/relationship freshness,
-and organization counts separately.
+and organization counts separately. Its raw-immutability result is explicitly
+marked as historical because the saved comparison covers 1,414 files, while
+the current inventory contains 2,751 files.
 
 ## Boundaries
 

@@ -256,8 +256,24 @@ def _normalization_summary(con: sqlite3.Connection) -> Dict[str, Any]:
             "SELECT status, COUNT(*) AS count FROM normalized_document GROUP BY status ORDER BY status"
         )
     }
+    source_versions = _scalar(con, "SELECT COUNT(*) FROM source_version")
+    normalization_records = sum(statuses.values())
+    source_versions_without_normalization_record = _scalar(
+        con,
+        """
+        SELECT COUNT(*)
+        FROM source_version v
+        LEFT JOIN normalized_document n
+          ON n.source_version_id=v.source_version_id
+        WHERE n.source_version_id IS NULL
+        """,
+    )
     return {
-        "total_source_versions": sum(statuses.values()),
+        "source_versions": source_versions,
+        "normalization_records": normalization_records,
+        "source_versions_without_normalization_record": (
+            source_versions_without_normalization_record
+        ),
         "by_status": statuses,
         "normalized": statuses.get("normalized", 0),
         "unsupported": statuses.get("unsupported", 0),
@@ -984,7 +1000,17 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
 
     source_count = physical["present_files"]
     source_bytes = _scalar(con, "SELECT COALESCE(SUM(size_bytes),0) FROM source_record WHERE status='present'")
+    recorded_raw_files = raw_immutability.get("before_files")
+    recorded_raw_bytes = raw_immutability.get("before_bytes")
+    if isinstance(recorded_raw_files, int) and isinstance(recorded_raw_bytes, int):
+        raw_immutability["comparison_scope"] = (
+            "current_inventory_counts"
+            if recorded_raw_files == source_count and recorded_raw_bytes == source_bytes
+            else "historical_snapshot"
+        )
     normalized = normalization["normalized"]
+    source_versions = normalization["source_versions"]
+    normalization_records = normalization["normalization_records"]
     normalize_errors = normalization["failed"]
     normalize_unsupported = normalization["unsupported"]
     mcp_count = _scalar(con, "SELECT COUNT(*) FROM mcp_item")
@@ -1006,6 +1032,11 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "source_files": source_count,
         "source_bytes": source_bytes,
         "source_size": human_bytes(source_bytes),
+        "source_versions": source_versions,
+        "normalization_records": normalization_records,
+        "source_versions_without_normalization_record": normalization[
+            "source_versions_without_normalization_record"
+        ],
         "normalized_documents": normalized,
         "normalization_errors": normalize_errors,
         "normalization_unsupported": normalize_unsupported,
@@ -1223,6 +1254,11 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         needs.append("The OneNote converter is unavailable; `.one` files remain raw and blocked.")
     if raw_immutability.get("status") != "passed":
         needs.append("Raw immutability has not been recorded as passed for the current acceptance run.")
+    elif raw_immutability.get("comparison_scope") != "current_inventory_counts":
+        needs.append(
+            "Raw immutability passed for a historical snapshot, but the current inventory has different file or byte counts; "
+            "run a fresh raw-preservation check before treating current raw files as verified."
+        )
     if any(
         section["freshness"] != "fresh"
         for section in indexes.values()
@@ -1288,6 +1324,9 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         "",
         f"- Raw source files: **{source_count:,}** ({human_bytes(source_bytes)})",
         f"- Substantive source files: **{physical['substantive_files']:,}**; Finder metadata: **{physical['finder_metadata_files']:,}**",
+        f"- Source versions: **{source_versions:,}**",
+        f"- Normalization records: **{normalization_records:,}** ({normalized:,} current normalized, {normalization['prior_good_retained']:,} prior-good retained); "
+        f"source versions without a normalization record: **{normalization['source_versions_without_normalization_record']:,}**",
         f"- Normalized documents: **{normalized:,}**",
         f"- Granola/Wispr MCP items: **{mcp_count:,}**",
         f"- Zoom dated source folders observed: **{zoom_total:,}**",
@@ -1299,7 +1338,8 @@ def build_report(config: Config, con: sqlite3.Connection) -> Dict[str, Any]:
         f"- Exact duplicate groups: **{len(duplicates):,}**",
         f"- Likely version families: **{len(version_families):,}**",
         f"- Scope/sensitivity provenance markers: **{len(sensitive_review):,}**",
-        f"- Raw immutability: **{raw_immutability.get('status', 'not_recorded')}**",
+        f"- Raw immutability: **{raw_immutability.get('status', 'not_recorded')}** "
+        f"({raw_immutability.get('comparison_scope', 'scope not recorded')})",
         "",
         "## Physical and source-root accounting",
         "",
@@ -1497,7 +1537,8 @@ th {{ background: #eee; }}
 <p>Generated {html.escape(summary['generated_at'])}</p>
 <div class="cards">
 <div class="card"><strong>{source_count:,}</strong>raw files<br>{html.escape(human_bytes(source_bytes))}</div>
-<div class="card"><strong>{normalized:,}</strong>normalized documents</div>
+<div class="card"><strong>{source_versions:,}</strong>source versions</div>
+<div class="card"><strong>{normalization_records:,}</strong>normalization records</div>
 <div class="card"><strong>{mcp_count:,}</strong>MCP items</div>
 <div class="card"><strong>{zoom_total:,}</strong>Zoom folders</div>
 <div class="card"><strong>{zoom_missing:,}</strong>Zoom transcripts missing</div>

@@ -32,14 +32,17 @@ These terms are intentionally separate:
 
 - 2,751 physical files are inventoried: 2,731 substantive files and 20 Finder
   metadata files, totaling 55.5 GB.
-- 1,849 source versions are represented: 773 normalized in the current parser
-  pass and 1,076 retained prior-good outputs.
+- 2,751 source versions are represented.
+- 1,849 normalization records exist: 773 are current normalized outputs and
+  1,076 are retained prior-good outputs. 902 source versions have no
+  normalization record because they are media, metadata, unknown/intermediate
+  artifacts, or excluded records.
 - Normalization reports zero errors and zero unsupported files.
 - The full-text index has 72,138 rows and the relationship index has 1,243
   rows; both are fresh at the acceptance checkpoint.
 - Raw source material remains preserved. The runtime does not rewrite or delete
-  provider data. The raw immutability ledger remains passed with 1,414 files,
-  matching byte totals, and matching stream hashes.
+  provider data. The saved raw immutability ledger passed for a historical
+  1,414-file snapshot; it is not a current 2,751-file immutability proof.
 
 The 15 discovery records are intentionally excluded from extraction. They are
 inventory evidence, not missing source content.
@@ -52,7 +55,8 @@ inventory evidence, not missing source content.
 | Granola MCP shadow | 559 UUID-listed IDs imported/searchable; 186 detail captures, 181 detailed summaries, 177 transcripts | Incomplete but redundant. Its 378 detail and 382 transcript gaps do not reduce REST archive coverage. |
 | Wispr Flow | 13 unique local records: 12 meeting records and 1 scratchpad; 12 summaries; 13 transcript/content records; all imported/searchable | 13/13 have local capture and retrieval dates; all 12 meetings have start, end, and provider-modified dates; the scratchpad has provider-modified metadata but no event date in its source object. |
 | Capacities | 563 typed pointer records; 557 matched to 451 local payload records; 1,216 confirmed pointer-to-payload relationships | Six pointers retain explicit unresolved metadata; the grouped policy accepted that state. No signed URL was fetched. |
-| Zoom | 231 tracked groups; 230 successful and 1 quality-limited partial; zero eligible media without a transcript or terminal status | The partial result is accepted and preserved; 52 meeting groups retain a non-destructive `needs_review` linkage status. |
+| Local `.eml` files inside the captured Capacities trees | 20 files inventoried and hashed | The active parser still excludes `kind=email`, so these local meeting-summary files are not yet normalized or indexed. This is not mailbox access. |
+| Zoom | 231 tracked groups; 230 successful and 1 quality-limited partial; zero eligible final media without a transcript or terminal status | The partial result is accepted and preserved; 52 meeting groups retain a non-destructive `needs_review` linkage status. 49 non-final `.zoom`/`.tmp` artifacts remain inventory-only. |
 | OneNote | 29 of 29 files parsed; 295 of 295 reviewed pages extracted | No current mechanical gap. |
 
 The earlier malformed MCP review row is reconciled: the preserved source
@@ -99,12 +103,46 @@ and provisional duplicate/version display choices are in
 [`first_pass_display_candidates.csv`](../work-corpus/corpus/reports/first_pass_display_candidates.csv).
 All original source records remain available.
 
+## Full-system result
+
+The local corpus pipeline is operational for captured provider data, but the
+repository is not finished as an end-user assistant or continuously operated
+service. The active package has no answer-synthesis API or UI, no completed
+project/task/career output layer, no scheduled Granola delta pull, no
+production host or health checks, and no repository-wide install/test gate.
+The root `TrojanHorse/` package, `th` CLI, `run_tests.sh`, and Atlas bridge are
+historical code and currently conflict with the active local-only boundary.
+They must be retired, quarantined, or explicitly rebuilt before anyone treats
+the repository root as a runnable product.
+
+The 20 local `.eml` files are the one direct captured-content gap found in the
+active parser: they are inventoried but `kind=email` is hard-excluded from
+normalization. Mailbox access remains out of scope; the remaining implementation
+choice is whether to parse these already-local files with a local parser or to
+retain them as intentionally non-searchable source records.
+
 ## Ordered next work
 
-The ingestion and organization path is complete. The next work is downstream
-use of the source-backed corpus: extract project, task, and career evidence, or
-optionally refine canonical identities and the 52 retained Zoom linkage states.
-Those are new product decisions, not an ingestion or archive blocker.
+1. Make `work-corpus/` the single supported product boundary. Update the root
+   package metadata, stale scripts, runbook, and test entry point so a fresh
+   checkout cannot accidentally invoke the Atlas/RAG lane.
+2. Add a reproducible install and CI gate for the active package, including its
+   optional document-parser dependencies, active test command, and a safe
+   `doctor`/health check. Clean up the one stale `pipeline_run` row marked
+   `query/running` or add stale-run recovery before relying on run history.
+3. Run a current raw-preservation verification over the 2,751-file inventory;
+   the existing pass proves only the earlier 1,414-file snapshot. Decide the
+   handling of the 20 local `.eml` files and the 49 non-final Zoom artifacts.
+4. Build the downstream source-backed views: project evidence, explicit task
+   candidates, and career evidence. The current scan found 1,910 evidence
+   records but created 0 task rows, so a usable task view still needs a tested
+   extraction/validation path; this does not mean the raw evidence is missing.
+5. Add a local maintenance path for new Granola data: API delta pull,
+   inventory/import/normalize/report, checkpointing, and monitoring. The
+   one-time REST archive is complete; the old MCP shadow gaps are redundant and
+   should not be treated as a blocker.
+6. Optionally refine the 48 generic topic labels, people/organization aliases,
+   and 52 retained Zoom linkage states after the core views are useful.
 
 No additional historical Granola or Wispr full pull is required for the
 currently captured sources. The older Granola MCP heartbeat is not needed to
@@ -112,9 +150,9 @@ close ingestion. Future Granola maintenance should use an API delta pull or a
 separately reviewed webhook receiver; it should not reopen the completed
 historical archive gate.
 
-Email, Atlas integration, cloud raw-data processing, graph/vector
+Mailbox access, Atlas integration, cloud raw-data processing, graph/vector
 infrastructure, automatic historical task backfill, and provider write-back
-remain outside this process.
+remain outside this process unless the boundary is changed explicitly.
 
 ## Reproduction
 

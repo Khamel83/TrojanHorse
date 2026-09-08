@@ -36,7 +36,11 @@ was reviewed by Gemini 3.1 Pro.
 
 The captured local corpus now satisfies the ingestion and deterministic
 organization milestones. The acceptance report records 2,751 inventoried
-files, 1,849 source versions, 72,138 FTS rows, and 1,243 relationship rows.
+files and 2,751 source versions. It has 1,849 normalization records (773
+current normalized and 1,076 prior-good retained), while 902 source versions
+have no normalization record because they are media, metadata,
+unknown/intermediate artifacts, or excluded records. The report has 72,138
+FTS rows and 1,243 relationship rows.
 The Granola REST archive contains 559 imported and searchable API notes, with
 559 summaries and 557 transcripts. The local organization pass created 9
 explicit Project entities, 27 evidence-backed project links, and scanned 1,910
