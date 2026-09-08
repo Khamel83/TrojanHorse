@@ -80,12 +80,54 @@ def test_delta_uses_overlap_and_advances_checkpoint_after_stages(tmp_path: Path)
     assert stages[0].stat().st_mode & 0o777 == 0o600
     assert result["note_count"] == 1
     assert result["mode"] == "delta"
+    assert result["capture_appended"] is True
+    assert result["poll_id"] == result["capture_id"]
     checkpoint = json.loads(
         (config.state_dir / "mcp/granola_rest_delta.json").read_text()
     )
     assert checkpoint["last_successful_provider_updated_at"] == "2026-09-07T10:02:00Z"
     assert checkpoint["overlap_seconds"] == 300
     assert checkpoint["raw_capture_path"].endswith(".json")
+
+
+def test_delta_skips_local_stages_for_overlap_only_notes(tmp_path: Path):
+    _seed_archive(tmp_path, "2026-09-07T10:00:00Z")
+    config = load_config(tmp_path)
+    client = FakeClient(
+        [
+            {
+                "id": "unchanged-note",
+                "title": "Unchanged note",
+                "updated_at": "2026-09-07T10:00:00.186Z",
+                "summary_text": "Already imported",
+                "transcript": [],
+            }
+        ]
+    )
+    stages: List[Path] = []
+
+    result = run_delta(
+        config,
+        client,
+        captured_at="2026-09-07T10:05:00Z",
+        stage_runner=lambda _config, raw_path: stages.append(raw_path),
+    )
+
+    assert result["stages_skipped"] is True
+    assert result["capture_appended"] is False
+    assert stages == []
+    assert list((tmp_path / "data/mcp/granola").glob("granola-api-delta-*.json")) == []
+    checkpoint = json.loads(
+        (config.state_dir / "mcp/granola_rest_delta.json").read_text()
+    )
+    assert checkpoint["stage_details"] == {
+        "status": "no_provider_changes",
+        "stages_skipped": True,
+    }
+    assert checkpoint["last_successful_capture_id"] is None
+    assert checkpoint["last_successful_poll_id"] == result["poll_id"]
+    assert checkpoint["raw_capture_path"] is None
+    assert checkpoint["raw_boundary"]["raw_capture_appended"] is False
 
 
 def test_delta_failure_keeps_raw_capture_and_previous_checkpoint(tmp_path: Path):

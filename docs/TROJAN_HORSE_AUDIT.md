@@ -1,6 +1,6 @@
 # TrojanHorse full-scale audit
 
-Audit date: 2026-09-07
+Audit date: 2026-09-08
 
 Repository: `main`; audit performed against the working tree after reviewed
 completion design commit `aab25e5`
@@ -9,7 +9,7 @@ reports, provider-capture ledgers, tests, and operations configuration. Raw
 source content and secrets were not copied into this document.
 
 The report checkpoint used for the current counts was generated at
-`2026-09-07T22:03:10-07:00`.
+`2026-09-08T01:47:56-07:00`.
 
 ## Executive verdict
 
@@ -26,11 +26,9 @@ blocker.
 
 The remaining work is deliberately small and separate from ingestion:
 
-1. install and enable the checked-in Granola delta timer on a known host and
-   checkout path;
-2. if TrojanHorse is intended to be an assistant rather than a search-and-ledger
+1. if TrojanHorse is intended to be an assistant rather than a search-and-ledger
    tool, build a local answer-synthesis/API/UI layer over the evidence views;
-3. optionally refine generic labels, aliases, and retained Zoom linkage states.
+2. optionally refine generic labels, aliases, and retained Zoom linkage states.
 
 This does not require the owner to inspect 1,500 task/date/decision rows one by
 one. The approved first pass closed those queues without forcing uncertain
@@ -47,7 +45,7 @@ The decisive checks were:
 
 - SQLite `quick_check`: `ok`.
 - SQLite foreign-key check: `0` violations.
-- Active package suite: `196 passed`.
+- Active package suite: `200 passed`.
 - Fatal Ruff check, Python compilation, and `git diff --check`: passed.
 - Editable install smoke in an isolated temporary virtual environment: passed,
   including `work-corpus --help` and an active boundary test. The host's
@@ -55,8 +53,8 @@ The decisive checks were:
   system environment was modified.
 - A representative real query for “Weekly Strategy Meeting” returned results
   in both `All` and `Work` scopes without raw fallback.
-- Current raw two-pass verification: `passed`, with all 2,751 files and
-  59,544,967,619 bytes matching and zero added, removed, or changed paths.
+- Current raw two-pass verification: `passed`, with all 2,758 files and
+  59,546,347,641 bytes matching and zero added, removed, or changed paths.
 - Current pipeline rows: `0` running and `1` pre-existing stale row recovered
   to `abandoned`.
 
@@ -81,8 +79,9 @@ repository root as `trojanhorse-work-corpus`. Its CLI currently provides:
   acceptance reports;
 - source-backed project, task-candidate, and career-evidence views;
 - local `doctor` and two-pass `raw-verify` checks; and
-- a tested, locked, overlap-watermarked Granola REST delta runner with a
-  five-minute systemd template.
+- a tested, locked, overlap-watermarked Granola REST delta runner with
+  five-minute macOS launchd and Linux systemd templates. The canonical Mac job
+  skips the expensive local rebuild when a poll returns only overlap data.
 
 The runtime does not yet provide a web/API answer-synthesis service, embeddings,
 semantic ranking, or an interactive assistant. Its current query path is exact
@@ -92,11 +91,11 @@ search plus SQLite relationship traversal and deterministic evidence views.
 
 | Measure | Current evidence | Meaning |
 | --- | ---: | --- |
-| Physical source files | 2,751 | All are present in the live inventory; 2,731 are substantive and 20 are Finder metadata. |
-| Source versions | 2,751 | One current source-version row per inventoried source record. |
+| Physical source files | 2,758 | All are present in the live inventory; 2,738 are substantive and 20 are Finder metadata. |
+| Source versions | 2,758 | One current source-version row per inventoried source record. |
 | Current normalized outputs | 793 | Current parser outputs, including all 20 local `.eml` files. |
 | Normalization records | 1,869 | 793 current outputs plus 1,076 retained prior-good outputs. |
-| Source versions without a normalization record | 882 | Media, metadata, unknown/intermediate artifacts, or intentionally excluded records. |
+| Source versions without a normalization record | 889 | Media, metadata, unknown/intermediate artifacts, or intentionally excluded records. |
 | Evidence records | 72,199 | Source-backed derived evidence units. |
 | FTS rows | 72,198 | Fresh exact-search index. The one-row difference is not treated as an error. |
 | Relationship rows | 1,243 | Fresh deterministic relationship index. |
@@ -105,7 +104,7 @@ search plus SQLite relationship traversal and deterministic evidence views.
 | Project/task/career view rows | 27 / 1,951 / 71,834 | Rebuildable source-backed ledgers; current task rows remain 0. |
 | Zoom linkage groups marked `needs_review` | 52 | Non-destructive meeting association uncertainty; not a raw-data deletion. |
 
-Current source-system counts are: Capacities 1,722; Granola 39; inventory
+Current source-system counts are: Capacities 1,722; Granola 46; inventory
 discovery 15; Notion 134; OneNote 29; unclassified residual 14; Wispr Flow 2;
 and Zoom 796.
 
@@ -153,15 +152,16 @@ unified `All` policy are already recorded decisions.
 
 ## What is not finished
 
-### P0 — one operator action
+### P0 — closed
 
-1. **Activate the maintenance timer.** Copy
-   `work-corpus/ops/systemd/work-corpus-granola-delta.service` and `.timer` to
-   the chosen host, replace `/path/to/TrojanHorse`, confirm the service uses
-   the host's active Python environment, then enable the timer. This is not
-   done in the audit because `homelab.yaml` does not identify the production
-   host or checkout path. The runner, lock, overlap watermark, raw capture,
-   ordered local stages, and failure behavior are implemented and tested.
+1. **Activate the maintenance timer.** Complete. The canonical Mac user
+   LaunchAgent `com.khamel83.work-corpus-granola-delta` is installed at
+   `~/Library/LaunchAgents/com.khamel83.work-corpus-granola-delta.plist`, runs
+   at load and every 300 seconds, retrieves the secret through the homelab SSH
+   broker, and keeps the full corpus on the Mac. A supervised run fetched one
+   note, completed all six stages, advanced the checkpoint, and exited 0.
+   The Linux systemd files remain optional templates for a host containing the
+   corpus.
 
 ### P1 — optional assistant product layer
 
@@ -198,14 +198,13 @@ review items. The MCP UUID feed remains a redundant shadow with explicit gaps.
 
 ### Usable private assistant finish line
 
-This requires the local assistant/API/UI layer, plus one deployment action to
-activate the already-tested Granola timer on a known host. It does not require
-manually reading the existing review queues.
+This requires the local assistant/API/UI layer. It does not require manually
+reading the existing review queues.
 
 ## Owner input required
 
-Only one operational input remains: the target host and checkout path for
-enabling the timer. The product policy decisions are already recorded:
+No operational input remains for the approved archive and maintenance path. The
+product policy decisions are already recorded:
 `work-corpus/` is canonical, local `.eml` files are included in `All`, generic
 topic labels are acceptable, the one partial Zoom result is accepted, and no
 item-by-item review is required. The assistant/API/UI layer can be prioritized
@@ -234,10 +233,12 @@ already complete; future runs should be deltas, not another historical pull.
 - The active Granola client is read-only. No provider write-back, Atlas call,
   mailbox access, cloud transcription, or external raw-corpus model call is
   part of the active path.
-- `homelab.yaml` still says lifecycle `development`, monitoring `standby`,
-  production host `unknown`, and health checks `[]`. `docs/OPERATIONS.md` now
-  documents the supported commands and timer template, but there is no
-  evidence of a deployed production service or scheduled maintenance.
+- `homelab.yaml` records the canonical runtime as `macmini` managed by the
+  user LaunchAgent, while monitoring remains `standby` and health checks remain
+  `[]` because no homelab monitor is configured for this local-only job.
+- `docs/OPERATIONS.md` documents the active launchd job and the optional Linux
+  templates. The homelab is a secret broker only; no full raw-corpus clone was
+  created there.
 - The remote repository is therefore source code and policy, not a cloneable
   copy of the private corpus. A fresh clone needs the local data and machine
   configuration before it can reproduce the current report.

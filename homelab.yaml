@@ -10,9 +10,9 @@ monitoring:
   state: standby
 runtime:
   production:
-    host: unknown
-    managed_by: unknown
-    unit: trojanhorse
+    host: macmini
+    managed_by: user-launchd
+    unit: com.khamel83.work-corpus-granola-delta
 health:
   source: homelab-api
   checks: []

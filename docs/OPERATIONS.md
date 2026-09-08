@@ -52,7 +52,28 @@ Do not enable its launch agent or service files.
 
 ## Granola scheduler
 
-The checked-in timer template is
+### macOS launchd: canonical full-corpus host
+
+The full corpus lives on the Mac's local 2TB SSD. Install the user LaunchAgent
+from the repository root:
+
+```bash
+work-corpus/scripts/install_granola_launchd.sh
+launchctl print gui/$(id -u)/com.khamel83.work-corpus-granola-delta
+tail -f "$HOME/Library/Logs/work-corpus-granola-delta.out.log"
+```
+
+The job runs at load and every 300 seconds. It retrieves `GRANOLA_API_KEY`
+through `ssh homelab secrets get GRANOLA_API_KEY`, keeps the key only in the
+child process environment, and writes a changed-note response locally as a
+mode-0600 raw capture. The homelab is the secret broker; it does not receive a
+copy of the corpus. The installer chooses the Python runtime authorized to
+read the removable volume. If a delta contains only the configured overlap,
+the runner records the successful poll without appending a raw file or running
+the expensive local rebuild.
+
+The checked-in Linux timer templates are an alternative only for a host that
+contains the full corpus:
 `work-corpus/ops/systemd/work-corpus-granola-delta.timer`. It polls the
 documented REST `updated_after` filter every five minutes, which is a freshness
 choice rather than a provider requirement. The service obtains
@@ -66,7 +87,7 @@ the raw response, rerun the local stages, and advance the checkpoint only after
 success. A failed local stage leaves the capture for diagnosis and keeps the
 previous watermark.
 
-Before enabling the timer:
+Before enabling the Linux timer:
 
 1. Choose the host and checkout path.
 2. Replace `/path/to/TrojanHorse` in both systemd unit references.
@@ -76,5 +97,6 @@ Before enabling the timer:
 5. Enable the timer and verify its journal plus
    `work-corpus/state/mcp/granola_rest_delta.json`.
 
-The repository does not assume a production host because `homelab.yaml`
-currently leaves that value unknown.
+`homelab.yaml` records `macmini` and the active user LaunchAgent as the
+canonical runtime. Monitoring remains `standby` because no homelab health
+check is configured for this local-only job.

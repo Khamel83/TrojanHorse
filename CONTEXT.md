@@ -9,10 +9,10 @@ The current operational checkpoint is recorded in
 deterministic organization, the approved unified-corpus first pass, source-backed
 views, and the tested Granola delta path are complete for the captured local
 sources. The repository-level audit is in `docs/TROJAN_HORSE_AUDIT.md`: the
-active runtime is packaged, tested, and locally verifiable; the remaining
-operations action is enabling the timer on a known host, and the remaining
-product layer is local answer synthesis/API/UI. Optional semantic refinement
-remains a separate downstream step.
+active runtime is packaged, tested, locally verifiable, and scheduled on the
+canonical Mac host; the remaining product layer is local answer
+synthesis/API/UI. Optional semantic refinement remains a separate downstream
+step.
 
 ## Language
 

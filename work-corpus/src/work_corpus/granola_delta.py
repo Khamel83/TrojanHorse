@@ -95,6 +95,20 @@ def _max_provider_updated_at(notes: Sequence[Mapping[str, Any]]) -> Optional[str
     return _timestamp(max(values))
 
 
+def _has_provider_changes(
+    notes: Sequence[Mapping[str, Any]],
+    base: datetime,
+) -> bool:
+    """Return whether a fetched note is newer than the overlap watermark."""
+    for note in notes:
+        updated_at = _provider_updated_at(note)
+        if updated_at is None:
+            return True
+        if updated_at.replace(microsecond=0) > base.replace(microsecond=0):
+            return True
+    return False
+
+
 def _checkpoint_path(config: Config) -> Path:
     path = config.state_dir / CHECKPOINT_RELATIVE_PATH
     config.assert_derived_path(path)
@@ -242,6 +256,10 @@ def run_delta(
 ) -> Dict[str, Any]:
     """Capture and locally process one bounded Granola delta."""
     with _single_writer_lock(config):
+        checkpoint_path = _checkpoint_path(config)
+        previous_checkpoint = read_json(checkpoint_path, {})
+        if not isinstance(previous_checkpoint, Mapping):
+            previous_checkpoint = {}
         overlap = (
             int(overlap_seconds)
             if overlap_seconds is not None
@@ -275,42 +293,68 @@ def run_delta(
             captured_at=capture_time,
             updated_after=request_after,
         )
-        _atomic_write_raw(capture_path, capture)
 
-        runner = stage_runner or _run_local_stages
-        stage_details = runner(config, capture_path)
         notes = capture.get("notes")
         notes_list = [note for note in notes if isinstance(note, Mapping)] if isinstance(notes, list) else []
+        stages_skipped = not _has_provider_changes(notes_list, base_dt)
+        raw_capture_appended = not stages_skipped
+        if raw_capture_appended:
+            _atomic_write_raw(capture_path, capture)
+        if stages_skipped:
+            stage_details: Mapping[str, Any] = {
+                "status": "no_provider_changes",
+                "stages_skipped": True,
+            }
+        else:
+            runner = stage_runner or _run_local_stages
+            stage_details = runner(config, capture_path) or {}
         latest = _max_provider_updated_at(notes_list) or base
+        previous_capture_id = previous_checkpoint.get("last_successful_capture_id")
+        previous_raw_capture_path = previous_checkpoint.get("raw_capture_path")
+        persisted_capture_id = capture_id if raw_capture_appended else previous_capture_id
+        persisted_raw_capture_path = (
+            capture_path.relative_to(config.root).as_posix()
+            if raw_capture_appended
+            else previous_raw_capture_path
+        )
         checkpoint = {
             "schema_version": 1,
             "provider": "granola",
             "mode": "delta",
             "updated_at": now_iso(),
             "last_successful_provider_updated_at": latest,
-            "last_successful_capture_id": capture_id,
-            "raw_capture_path": capture_path.relative_to(config.root).as_posix(),
+            "last_successful_capture_id": persisted_capture_id,
+            "last_successful_poll_id": capture_id,
+            "raw_capture_path": persisted_raw_capture_path,
             "requested_updated_after": request_after,
             "overlap_seconds": overlap,
             "note_count": len(notes_list),
             "stage_order": list(STAGE_ORDER),
+            "stages_skipped": stages_skipped,
             "stage_details": dict(stage_details or {}),
             "raw_boundary": {
-                "raw_capture_appended": True,
+                "raw_capture_appended": raw_capture_appended,
                 "raw_data_modified": False,
                 "external_writes": 0,
             },
         }
-        atomic_write_json(_checkpoint_path(config), checkpoint)
+        atomic_write_json(checkpoint_path, checkpoint)
         return {
             "mode": "delta",
-            "capture_id": capture_id,
-            "raw_capture_path": str(capture_path),
+            "capture_id": persisted_capture_id,
+            "poll_id": capture_id,
+            "capture_appended": raw_capture_appended,
+            "raw_capture_path": (
+                str(config.root / persisted_raw_capture_path)
+                if persisted_raw_capture_path
+                else None
+            ),
             "requested_updated_after": request_after,
             "note_count": len(notes_list),
             "watermark": latest,
-            "checkpoint_path": str(_checkpoint_path(config)),
+            "checkpoint_path": str(checkpoint_path),
             "stage_order": list(STAGE_ORDER),
+            "stages_skipped": stages_skipped,
             "stages": dict(stage_details or {}),
         }
 

@@ -2,7 +2,7 @@
 
 > Tracks progress through continuous plan execution. Use `bd ready` to see next tasks.
 
-## Current corpus status — 2026-09-07
+## Current corpus status — 2026-09-08
 
 The old Bridge log below is historical. The current project is the separate,
 local-only work corpus described in `CONTEXT.md`.
@@ -22,9 +22,9 @@ local-only work corpus described in `CONTEXT.md`.
 - [x] Define the provenance-first SQLite schema, deterministic evidence/review
   APIs, FTS table, current-task boundary, and safe legacy migration
   (`37e50d6`, `bf3b7a6`, `800ad7c`, `6773540`; Task 3 review approved).
-- [x] Run the complete local extraction and normalization path: 2,751 source
-  records/source versions, 1,869 normalization records (793 current and 1,076
-  prior-good retained), 0 normalization errors, and 0 unsupported outputs.
+- [x] Run the initial complete local extraction and normalization path: 2,751
+  source records/source versions, 1,869 normalization records (793 current and
+  1,076 prior-good retained), 0 normalization errors, and 0 unsupported outputs.
 - [x] Run the complete Zoom coverage pass: 231 tracked groups, 230 successful,
   1 partial, 68 transcript-only groups kept separate, and 0 eligible final media
   without a transcript or terminal status.
@@ -44,9 +44,13 @@ local-only work corpus described in `CONTEXT.md`.
   current raw verification. The legacy Atlas/RAG lane is quarantined.
 - [x] Add and test the Granola REST delta runner, overlap watermark, single
   writer lock, append-only capture, ordered local refresh, and five-minute
-  systemd template. Activation on a known host remains an operator step.
-- [x] Compare the current raw corpus before and after acceptance: 2,751 files
-  and 59,544,967,619 bytes match with zero path, size, or byte-hash mismatches.
+  scheduler templates. The canonical Mac launchd job is installed and its
+  supervised first run exited 0; overlap-only polls skip the expensive rebuild.
+- [x] Compare the current raw corpus before and after acceptance: 2,758 files
+  and 59,546,347,641 bytes match with zero path, size, or byte-hash mismatches.
+- [x] Make overlap-only Granola polls cheap and space-safe: they record a poll
+  receipt, retain the last persisted raw capture, append no duplicate raw file,
+  and skip the six-stage local rebuild.
 
 ## Operational update — 2026-09-07
 
@@ -83,10 +87,9 @@ Current authoritative documents:
 Tasks 0–9 and the approved completion plan are mechanically accepted. The
 archive/search foundation, source-backed views, and tested maintenance path are
 operational. Remaining work is documented in `docs/TROJAN_HORSE_AUDIT.md` and
-`docs/REMAINING_WORK.md`: enable the Granola timer on a known host and, if the
-desired product is an assistant rather than a search-and-ledger tool, build the
-local answer-synthesis/API/UI layer. Do not run the old Atlas bridge against
-`data/`.
+`docs/REMAINING_WORK.md`: if the desired product is an assistant rather than a
+search-and-ledger tool, build the local answer-synthesis/API/UI layer. Do not
+run the old Atlas bridge against `data/`.
 
 Acceptance artifacts:
 

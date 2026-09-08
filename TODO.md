@@ -11,9 +11,9 @@ The residual scope is summarized in [Remaining Work After Ingestion](docs/REMAIN
 The approved full-scale completion design and implementation plan are now
 recorded in [the canonical completion spec](docs/superpowers/specs/2026-09-07-canonical-work-corpus-completion.md)
 and [its implementation plan](docs/superpowers/plans/2026-09-07-canonical-work-corpus-completion.md).
-The plan was executed in order on 2026-09-07. The only remaining deployment
-action is to install the checked-in Granola timer on a known host after setting
-its checkout path.
+The plan was executed in order on 2026-09-07. The canonical Mac launchd
+maintenance job was installed and its first supervised delta succeeded on
+2026-09-08; the Linux systemd files remain optional templates.
 
 Read [the plan](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md)
 and [review](docs/superpowers/reviews/2026-09-06-corpus-completion-opus-review.md).
@@ -115,15 +115,15 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   Historical test results are not validation of new changes. Evidence: the
   current report is generated after organization and first-pass triage, both
   indexes are fresh (72,198 FTS rows and 1,243 relationship rows), and the
-  current raw-immutability comparison is passed for all 2,751 files.
+  current raw-immutability comparison is passed for all 2,758 files.
   Representative Work-scope and default All-scope query checks remain
-  recorded. The active suite passes 196 tests, with fatal Ruff, compile, and
+  recorded. The active suite passes 200 tests, with fatal Ruff, compile, and
   diff-whitespace checks also passing.
 - [x] 12. Update README, glossary, status, spec and checklist with verified results.
   Commit scoped code/docs/tests and push under existing user authorization. Verify
   remote commit identity; leave raw data/runtime state outside Git.
   Evidence: README, CONTEXT.md, the design checkpoint, status, remaining-work
-  map, and this checklist record the 2026-09-07 results. The completion commit
+  map, and this checklist record the 2026-09-08 results. The completion commit
   contains only the scoped code/docs/tests; raw data and unrelated untracked
   files remain outside Git. Remote identity is verified after push.
 
@@ -135,7 +135,7 @@ review rows one by one; the approved first pass already handled those queues.
 See [the full audit](docs/TROJAN_HORSE_AUDIT.md) for evidence, findings, and
 the completion path.
 
-- [x] Reconcile live SQLite counts with the generated report: 2,751 source
+- [x] Reconcile live SQLite counts with the generated report: 2,758 source
   records/source versions, 1,869 normalization records, 72,199 evidence rows,
   72,198 FTS rows, 1,243 relationships, and 0 pending review rows.
 - [x] Separate the complete Granola REST archive from the incomplete but
@@ -146,7 +146,7 @@ the completion path.
   0 eligible final media without a transcript or terminal status.
 - [x] Correct report terminology so source versions and normalization records
   are separate metrics; record a fresh two-pass raw-preservation proof for all
-  2,751 current files; parse and index the 20 already-local `.eml` files; and
+  2,758 current files; parse and index the 20 already-local `.eml` files; and
   retain the 49 non-final Zoom `.zoom`/`.tmp` artifacts as inventory-only.
 - [x] Record the repository-level status: active `work-corpus/` tests pass;
   the root legacy package/test runner is quarantined, while the active package
@@ -159,9 +159,10 @@ the completion path.
   current scan covers 1,930 evidence units for task proposals, produces 0
   current task rows by design, and exposes 1,951 retained task candidates.
 - [x] Add the scheduled Granola delta path, lock, checkpoint, and five-minute
-  systemd template. The exact host checkout path remains an operator action.
-- [ ] Install and enable the Granola timer on a known host after replacing the
-  placeholder checkout path in the systemd service template.
+  scheduler templates. The canonical Mac launchd job is installed at
+  `~/Library/LaunchAgents/com.khamel83.work-corpus-granola-delta.plist` and
+  its supervised first run exited 0 with a persisted checkpoint. The Linux
+  systemd files remain optional templates for a host containing the corpus.
 - [ ] Optionally refine generic topic labels, canonical people/organization
   aliases, and retained Zoom linkage states after the core views are usable.
 
@@ -170,9 +171,9 @@ the completion path.
 1. No product decision is currently required: the approved policy is the
    unified local `work-corpus/` runtime, local `.eml` parsing, generic topic
    labels, and source-backed views.
-2. The only deployment input is the target host and checkout path for enabling
-   the checked-in Granola timer. The Granola secret remains outside this
-   checkout.
+2. No deployment input remains for the approved maintenance path. The canonical
+   Mac job uses the local full corpus and retrieves the Granola secret from the
+   homelab broker over SSH; the secret remains outside this checkout.
 3. A later assistant-synthesis/UI pass can be prioritized after the current
    evidence views are used; it is not required for archive/search completion.
 

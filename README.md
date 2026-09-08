@@ -85,10 +85,11 @@ documented sustained limit. API note IDs use `not_...`, so the report keeps
 REST coverage separate from the MCP connector's UUID IDs.
 
 For ongoing maintenance, use the bounded delta runner. It reads
-`GRANOLA_API_KEY` from the environment, applies an overlap to the last
-successful provider `updated_at`, writes a mode-0600 raw capture, and runs
-inventory, import, normalization, organization, views, and reporting before
-advancing its derived checkpoint:
+`GRANOLA_API_KEY` from the environment and applies an overlap to the last
+successful provider `updated_at`. When the poll contains a changed note, it
+writes one mode-0600 raw capture and runs inventory, import, normalization,
+organization, views, and reporting before advancing its derived checkpoint.
+An overlap-only poll records its receipt without appending or rebuilding:
 
 ```bash
 work-corpus --root . granola-delta
@@ -99,7 +100,23 @@ work-corpus/scripts/run_granola_delta.sh
 The checked-in systemd units are templates only:
 `work-corpus/ops/systemd/work-corpus-granola-delta.service` and
 `work-corpus/ops/systemd/work-corpus-granola-delta.timer`. Set the checkout
-path on the target host before enabling them.
+path on a Linux host that contains the corpus before enabling them.
+
+The canonical full-corpus host is the Mac at `macmini`, because the raw corpus
+is on its local 2TB SSD. Install the user launchd job there with:
+
+```bash
+work-corpus/scripts/install_granola_launchd.sh
+launchctl print gui/$(id -u)/com.khamel83.work-corpus-granola-delta
+```
+
+The installer selects the removable-volume-authorized Python runtime. At run
+time the job retrieves `GRANOLA_API_KEY` from the homelab `secrets` broker over
+the existing `homelab` SSH alias; the key is not written to the plist or this
+repository. The job runs at load and every 300 seconds. Changed-note results
+append one mode-0600 raw capture and run the local stages; overlap-only results
+record a poll receipt without appending another raw file or rebuilding the
+indexes. The homelab is a secret broker only; no raw corpus copy is made there.
 
 The current acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
 [the human-readable report](work-corpus/corpus/reports/what_we_have_and_need.md),
@@ -116,10 +133,10 @@ exact Granola checkpoint is [granola_detail_progress.json](work-corpus/state/mcp
 the local acceptance ledgers are [granola_acceptance.json](work-corpus/state/granola_acceptance.json)
 and [adapter_acceptance.json](work-corpus/state/adapter_acceptance.json).
 
-At the latest verified checkpoint (2026-09-07 22:03 PDT), the local run observes
-2,751 source files (55.5 GB) and 2,751 source versions. It has 1,869
+At the latest verified checkpoint (2026-09-08 01:47 PDT), the local run observes
+2,758 source files (55.5 GB) and 2,758 source versions. It has 1,869
 normalization records (793 current normalized and 1,076 prior-good retained),
-with 882 source versions not represented by a normalization record because they
+with 889 source versions not represented by a normalization record because they
 are media, metadata, unknown/intermediate artifacts, or excluded records. The
 database has 72,199 evidence rows and 72,198 FTS rows, with 231 tracked Zoom
 groups and 230 successful plus 1 partial local transcription result; all 29

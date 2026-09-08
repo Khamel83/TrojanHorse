@@ -1,7 +1,7 @@
 # Local Work Corpus Status
 
-Status date: 2026-09-07
-Latest report: `2026-09-07T22:03:10-07:00`
+Status date: 2026-09-08
+Latest report: `2026-09-08T01:47:56-07:00`
 
 ## Current completion boundary
 
@@ -16,7 +16,7 @@ and the [completion handoff](superpowers/plans/2026-09-06-corpus-completion-hand
 The local evidence base is complete for the currently captured Granola REST,
 Granola MCP shadow, Wispr Flow, Capacities, Notion, OneNote, and Zoom sources
 at the capture/inventory boundary. That does not mean every physical file has a
-normalized text record: 882 source versions are media, metadata,
+normalized text record: 889 source versions are media, metadata,
 unknown/intermediate artifacts, or excluded records. The 20 local `.eml` files
 are now parsed and searchable by the active runtime; mailbox access is still
 outside the system.
@@ -37,17 +37,17 @@ narrow filter.
 
 ## Current corpus
 
-- 2,751 physical source files are inventoried, totaling 55.5 GB.
-- 2,751 source versions are represented.
+- 2,758 physical source files are inventoried, totaling 55.5 GB.
+- 2,758 source versions are represented.
 - 1,869 normalization records exist: 793 are current normalized outputs and
-  1,076 are retained prior-good outputs. 882 source versions have no
+  1,076 are retained prior-good outputs. 889 source versions have no
   normalization record because they are media, metadata, unknown/intermediate
   artifacts, or excluded records.
 - Normalization reports 0 errors and 0 unsupported files.
 - The FTS index has 72,198 rows and the relationship index has 1,243 rows;
   both are fresh.
 - Raw files remain outside Git and are not rewritten by the corpus runtime. A
-  current two-pass verification passed for all 2,751 files and 59,544,967,619
+  current two-pass verification passed for all 2,758 files and 59,546,347,641
   bytes (`comparison_scope=current_inventory_counts`).
 
 ## Source status
@@ -81,11 +81,15 @@ with empty transcript arrays remain explicit summary-only records.
 
 The previous MCP heartbeat is not required for the completed REST archive. A
 checked-in `granola-delta` runner now provides the steady-state path: it uses
-the REST `updated_after` filter, writes an append-only mode-0600 capture, runs
-the local stages, and advances its overlap watermark only after those stages
-succeed. The systemd timer template is set to five minutes, but it is not yet
-enabled because the target host and checkout path are not recorded in
-`homelab.yaml`. No provider write-back was created here.
+the REST `updated_after` filter, writes one append-only mode-0600 capture for a
+changed note, runs the local stages, and advances its checkpoint only after
+success. Overlap-only polls record a receipt without appending another raw
+capture or rebuilding the local indexes. The canonical Mac user LaunchAgent
+`com.khamel83.work-corpus-granola-delta` is installed at a 300-second interval.
+Its supervised run on 2026-09-08 fetched one note, completed all six stages,
+and exited 0. Overlap-only polls now skip the expensive local rebuild. The
+Granola key is retrieved from the homelab broker over SSH; no raw corpus copy
+was made to homelab. No provider write-back was created here.
 
 The optional MCP shadow workflow processes up to ten pending meeting IDs on a
 clean detail pass, serializes transcript requests, and uses five IDs after an
@@ -119,14 +123,15 @@ and keeps historical task statements out of the current-task view.
 
 ## Full-system audit boundary
 
-The corpus pipeline is mechanically usable for the captured local archive, but
-the repository as a whole is not yet a finished assistant or deployed service.
+The corpus pipeline is mechanically usable for the captured local archive, and
+the Granola maintenance job is deployed on the canonical Mac host. The
+repository as a whole is not yet a finished assistant because it has no local
+answer-synthesis/API/UI layer.
 The active package provides reproducible installation, CI, inventory, local
 transcription, exact FTS search, deterministic organization, source-backed
 project/task/career views, reports, `doctor`, current raw verification, and a
 tested Granola delta runner. The remaining product edge is local
-answer-synthesis/API/UI; the remaining operations edge is enabling the timer
-on a known host. The older root package and Atlas bridge remain historical
+answer-synthesis/API/UI. The older root package and Atlas bridge remain historical
 code and are not part of the active boundary. See the [full audit](TROJAN_HORSE_AUDIT.md)
 for the ordered completion path and owner input.
 
@@ -145,8 +150,8 @@ and the machine-readable report is
 [`status.json`](../work-corpus/corpus/reports/status.json). The report records
 the raw immutability result, provider coverage, FTS/relationship freshness,
 and organization/view counts separately. Its raw-immutability result is a
-current two-pass comparison covering all 2,751 inventoried files and
-59,544,967,619 bytes.
+current two-pass comparison covering all 2,758 inventoried files and
+59,546,347,641 bytes.
 
 ## Boundaries
 
