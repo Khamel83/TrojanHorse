@@ -8,6 +8,13 @@ sources, original labels remain provenance, and no grouped review rows remain
 pending. Checked items below record verified work.
 The residual scope is summarized in [Remaining Work After Ingestion](docs/REMAINING_WORK.md).
 
+The approved full-scale completion design and implementation plan are now
+recorded in [the canonical completion spec](docs/superpowers/specs/2026-09-07-canonical-work-corpus-completion.md)
+and [its implementation plan](docs/superpowers/plans/2026-09-07-canonical-work-corpus-completion.md).
+The plan was executed in order on 2026-09-07. The only remaining deployment
+action is to install the checked-in Granola timer on a known host after setting
+its checkout path.
+
 Read [the plan](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md)
 and [review](docs/superpowers/reviews/2026-09-06-corpus-completion-opus-review.md).
 The adaptive throughput amendment is recorded in
@@ -90,7 +97,7 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
   existing APIs. Anchor current tasks to runtime's 14-day window or future events;
   keep old commitments historical. Unknown dates remain review items. Zero current
   tasks can be correct. Verify repeat execution does not duplicate derived records.
-  Evidence: 1,910 evidence records were scanned; task rows and current task rows
+  Evidence: 1,930 evidence records were scanned; task rows and current task rows
   remain 0. Two same-date organizer runs retained 1,243 relationship rows and
   identical entity/review counts.
 - [x] 10. Produce a concrete residual list: source IDs/locators, reason unresolved,
@@ -105,13 +112,13 @@ Start after milestone 1 is verified; resume from persisted checkpoints.
 
 - [x] 11. Refresh reports in dependency order and run appropriate tests. Verify
   source preservation, provenance, representative searches and derived links/tasks.
-  Historical 152-test results are not validation of new changes. Evidence: the
+  Historical test results are not validation of new changes. Evidence: the
   current report is generated after organization and first-pass triage, both
-  indexes are fresh (72,138 FTS rows and 1,243 relationship rows), the
-  historical raw-immutability comparison remains passed, representative
-  Work-scope query checks remain recorded, the default All-scope and explicit
-  Work-scope query checks remain recorded, and the active 181-test suite is
-  run as part of final acceptance.
+  indexes are fresh (72,198 FTS rows and 1,243 relationship rows), and the
+  current raw-immutability comparison is passed for all 2,751 files.
+  Representative Work-scope and default All-scope query checks remain
+  recorded. The active suite passes 195 tests, with fatal Ruff, compile, and
+  diff-whitespace checks also passing.
 - [x] 12. Update README, glossary, status, spec and checklist with verified results.
   Commit scoped code/docs/tests and push under existing user authorization. Verify
   remote commit identity; leave raw data/runtime state outside Git.
@@ -129,8 +136,8 @@ See [the full audit](docs/TROJAN_HORSE_AUDIT.md) for evidence, findings, and
 the completion path.
 
 - [x] Reconcile live SQLite counts with the generated report: 2,751 source
-  records/source versions, 1,849 normalization records, 72,139 evidence rows,
-  72,138 FTS rows, 1,243 relationships, and 0 pending review rows.
+  records/source versions, 1,869 normalization records, 72,199 evidence rows,
+  72,198 FTS rows, 1,243 relationships, and 0 pending review rows.
 - [x] Separate the complete Granola REST archive from the incomplete but
   redundant MCP shadow: 559 REST notes imported/searchable, 559 summaries, 557
   transcripts, 2 summary-only notes.
@@ -138,41 +145,36 @@ the completion path.
   records imported/searchable, 231 Zoom groups, 230 succeeded, 1 partial, and
   0 eligible final media without a transcript or terminal status.
 - [x] Correct report terminology so source versions and normalization records
-  are separate metrics; mark the saved raw-immutability proof as historical
-  because it covers 1,414 files rather than the current 2,751-file inventory.
+  are separate metrics; record a fresh two-pass raw-preservation proof for all
+  2,751 current files; parse and index the 20 already-local `.eml` files; and
+  retain the 49 non-final Zoom `.zoom`/`.tmp` artifacts as inventory-only.
 - [x] Record the repository-level status: active `work-corpus/` tests pass;
-  the root legacy package/test runner, production configuration, scheduler,
-  health checks, and answer-synthesis product are not complete.
-- [ ] Make `work-corpus/` the single supported entry point and retire,
-  quarantine, or explicitly rebuild the legacy `TrojanHorse/`, `th`, and Atlas
-  bridge lane.
-- [ ] Add reproducible installation, optional-parser dependencies, CI, a
-  repository-wide test command, and a safe runtime/doctor check.
-- [ ] Run a fresh raw-preservation verification over the current 2,751-file
-  inventory and decide how to handle the 20 already-local `.eml` files and 49
-  non-final Zoom `.zoom`/`.tmp` artifacts.
-- [ ] Build the source-backed project, task, and career evidence views. The
-  current scan covered 1,910 evidence records but produced 0 task rows; this
-  is a missing downstream deliverable, not proof that raw evidence is absent.
-- [ ] Add a scheduled Granola delta path and monitoring after choosing the
-  operational host. The one-time REST archive is complete; a five-minute loop
-  is not currently configured or required by the archive gate.
+  the root legacy package/test runner is quarantined, while the active package
+  now has reproducible installation, CI, doctor, and raw verification paths.
+- [x] Make `work-corpus/` the single supported entry point and quarantine the
+  legacy `TrojanHorse/`, `th`, and Atlas bridge lane.
+- [x] Add reproducible installation, optional-parser dependencies, CI, a
+  repository-level test command, and safe `doctor` and `raw-verify` commands.
+- [x] Build the source-backed project, task, and career evidence views. The
+  current scan covers 1,930 evidence units for task proposals, produces 0
+  current task rows by design, and exposes 1,951 retained task candidates.
+- [x] Add the scheduled Granola delta path, lock, checkpoint, and five-minute
+  systemd template. The exact host checkout path remains an operator action.
+- [ ] Install and enable the Granola timer on a known host after replacing the
+  placeholder checkout path in the systemd service template.
 - [ ] Optionally refine generic topic labels, canonical people/organization
   aliases, and retained Zoom linkage states after the core views are usable.
 
 ### Owner input required to finish the product
 
-1. Confirm that the active product is the private local `work-corpus/` path and
-   that the old Atlas/RAG service is retired or quarantined.
-2. Decide whether the 20 `.eml` files already inside the local corpus should be
-   parsed locally and included in `All`, or intentionally remain inventory-only.
-   This question is about existing files, not mailbox access.
-3. Choose the first user-facing output to build: searchable evidence, a current
-   task view, project history, career evidence, or a small local assistant over
-   those views. No item-by-item queue review is required.
-4. Choose manual maintenance versus scheduled Granola delta ingestion. If
-   scheduled, the remaining input is the approved host/service location; the
-   Granola secret is already held outside this checkout.
+1. No product decision is currently required: the approved policy is the
+   unified local `work-corpus/` runtime, local `.eml` parsing, generic topic
+   labels, and source-backed views.
+2. The only deployment input is the target host and checkout path for enabling
+   the checked-in Granola timer. The Granola secret remains outside this
+   checkout.
+3. A later assistant-synthesis/UI pass can be prioritized after the current
+   evidence views are used; it is not required for archive/search completion.
 
 ## Explicitly deferred features
 

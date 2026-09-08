@@ -1,0 +1,12 @@
+[Unit]
+Description=TrojanHorse local Granola REST delta ingestion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Replace this path with the checkout path on the target host before enabling.
+WorkingDirectory=/path/to/TrojanHorse
+ExecStart=/path/to/TrojanHorse/work-corpus/scripts/run_granola_delta.sh
+NoNewPrivileges=true
+PrivateTmp=true

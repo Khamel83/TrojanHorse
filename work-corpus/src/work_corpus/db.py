@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Union
 
@@ -421,7 +421,7 @@ def mark_noncurrent_normalized_documents_retained(
                 AND s.source_version_id IS NOT NULL
                 AND s.source_version_id<>''
                 AND s.kind NOT IN (
-                    'media', 'email', 'email_data', 'mcp', 'unknown'
+                    'media', 'email_data', 'mcp', 'unknown'
                 )
                 {classification_guard}
           )
@@ -1097,6 +1097,57 @@ def connect(
         con.rollback()
         con.close()
         raise
+
+
+def recover_stale_runs(
+    con: sqlite3.Connection,
+    *,
+    stale_after_hours: int = 24,
+    now: Optional[datetime] = None,
+) -> int:
+    """Mark abandoned pipeline runs without changing source evidence."""
+    if stale_after_hours <= 0:
+        raise ValueError("stale_after_hours must be positive")
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    cutoff = current - timedelta(hours=stale_after_hours)
+    recovered = 0
+    rows = con.execute(
+        "SELECT run_id, started_at FROM pipeline_run WHERE status='running'"
+    ).fetchall()
+    for row in rows:
+        started_at = str(row["started_at"] or "").strip()
+        try:
+            parsed = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        if parsed >= cutoff:
+            continue
+        con.execute(
+            """
+            UPDATE pipeline_run
+            SET completed_at=?, status='abandoned', details_json=?
+            WHERE run_id=? AND status='running'
+            """,
+            (
+                now_iso(),
+                json.dumps(
+                    {
+                        "reason": "stale pipeline run recovered",
+                        "stale_after_hours": stale_after_hours,
+                    },
+                    sort_keys=True,
+                ),
+                row["run_id"],
+            ),
+        )
+        recovered += 1
+    if recovered:
+        con.commit()
+    return recovered
 
 
 def upsert_source_record(

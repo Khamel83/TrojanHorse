@@ -1,9 +1,9 @@
 # TrojanHorse: Local Work Corpus
 
-> Current work: the one-time Granola REST archive, deterministic organization,
-> and the unified-corpus first pass are complete for the captured local
-> sources. The older MCP UUID shadow feed is separately measurable but is no
-> longer the archive completion gate. See
+> Current work: the local archive, `.eml` normalization, deterministic
+> organization, source-backed views, and the unified-corpus first pass are
+> complete for the captured local sources. The older MCP UUID shadow feed is
+> separately measurable but is no longer the archive completion gate. See
 > [TODO](TODO.md), the [remaining-work map](docs/REMAINING_WORK.md), and the
 > [first-pass review sheet](work-corpus/corpus/reports/first_pass_review.md).
 
@@ -12,8 +12,9 @@ does not use Atlas, a mailbox, or cloud processing. Existing raw files stay
 unchanged; authorized provider captures are appended as new raw files. The
 local corpus under this project is the archive target; this workflow does not
 move, delete, or rewrite source material outside TrojanHorse. Existing local
-`.eml` files are inventoried as corpus evidence, but are not yet normalized by
-the active parser; mailbox access remains out of scope.
+`.eml` files are parsed locally as corpus evidence; mailbox access remains out
+of scope. New Granola maintenance uses a bounded REST delta runner and keeps
+the provider response as a local append-only raw capture.
 The reviewed design, inventory, and implementation plan are the
 authoritative project documents:
 
@@ -26,6 +27,8 @@ authoritative project documents:
 - [Current operational status](docs/LOCAL_WORK_CORPUS_STATUS.md)
 - [Remaining work after ingestion](docs/REMAINING_WORK.md)
 - [Full repository audit](docs/TROJAN_HORSE_AUDIT.md)
+- [Canonical completion specification](docs/superpowers/specs/2026-09-07-canonical-work-corpus-completion.md)
+- [Canonical completion implementation plan](docs/superpowers/plans/2026-09-07-canonical-work-corpus-completion.md)
 
 ## Current local corpus workflow
 
@@ -34,8 +37,9 @@ writes provenance-backed derived records outside `data/`, searches the unified
 private corpus by default, and keeps Work as an explicit optional filter. It
 records review or blocked states instead of hiding uncertainty. It does not
 read a mailbox, call Atlas, or use cloud transcription. The older root
-`TrojanHorse/`, `bridge/`, `th`, and `run_tests.sh` lane is historical and is
-not the active runtime; see the [full audit](docs/TROJAN_HORSE_AUDIT.md).
+`TrojanHorse/`, `bridge/`, and `th` lane is historical and is not the active
+runtime; `run_tests.sh` is only a compatibility wrapper for the active test
+suite. See the [full audit](docs/TROJAN_HORSE_AUDIT.md).
 User-authorized Granola and Wispr Flow responses are captured locally before
 import and are not written back to their providers.
 
@@ -52,6 +56,9 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . query --scope Work "p
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . mcp-import
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . granola-progress
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . organize --run-date 2026-09-07 --first-pass
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . views
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . doctor
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . raw-verify
 ```
 
 For a one-time complete Granola archive, run the read-only API client on
@@ -77,35 +84,57 @@ transcript endpoint for oversized notes, and paces requests below the
 documented sustained limit. API note IDs use `not_...`, so the report keeps
 REST coverage separate from the MCP connector's UUID IDs.
 
+For ongoing maintenance, use the bounded delta runner. It reads
+`GRANOLA_API_KEY` from the environment, applies an overlap to the last
+successful provider `updated_at`, writes a mode-0600 raw capture, and runs
+inventory, import, normalization, organization, views, and reporting before
+advancing its derived checkpoint:
+
+```bash
+work-corpus --root . granola-delta
+# or, on a host with the secrets broker:
+work-corpus/scripts/run_granola_delta.sh
+```
+
+The checked-in systemd units are templates only:
+`work-corpus/ops/systemd/work-corpus-granola-delta.service` and
+`work-corpus/ops/systemd/work-corpus-granola-delta.timer`. Set the checkout
+path on the target host before enabling them.
+
 The current acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
 [the human-readable report](work-corpus/corpus/reports/what_we_have_and_need.md),
 [the organization acceptance state](work-corpus/state/organization_acceptance.json),
 [the residual ledger](work-corpus/corpus/reports/residual_ledger.csv),
 [the grouped first-pass sheet](work-corpus/corpus/reports/first_pass_review.md),
 [the accepted generic topic labels](work-corpus/corpus/reports/first_pass_topic_labels.csv),
+[the project evidence view](work-corpus/corpus/reports/project_evidence.md),
+[the task candidate view](work-corpus/corpus/reports/task_candidates.md),
+[the career evidence ledger](work-corpus/corpus/reports/career_evidence_ledger.md),
 [the transcription queue](work-corpus/state/transcription_queue.csv), and
 [the raw immutability result](work-corpus/state/raw_immutability.json). The
 exact Granola checkpoint is [granola_detail_progress.json](work-corpus/state/mcp/granola_detail_progress.json);
 the local acceptance ledgers are [granola_acceptance.json](work-corpus/state/granola_acceptance.json)
 and [adapter_acceptance.json](work-corpus/state/adapter_acceptance.json).
 
-At the latest verified checkpoint (2026-09-07 20:38 PDT), the local run observes
-2,751 source files (55.5 GB) and 2,751 source versions. It has 1,849
-normalization records (773 current normalized and 1,076 prior-good retained),
-with 902 source versions not represented by a normalization record because they
+At the latest verified checkpoint (2026-09-07 22:03 PDT), the local run observes
+2,751 source files (55.5 GB) and 2,751 source versions. It has 1,869
+normalization records (793 current normalized and 1,076 prior-good retained),
+with 882 source versions not represented by a normalization record because they
 are media, metadata, unknown/intermediate artifacts, or excluded records. The
-FTS index has 72,138 rows, with 231 tracked Zoom groups and 230 successful plus
-1 partial local transcription result; all 29 OneNote files have 295 extracted
-pages. The
-Granola REST archive contains 559 unique notes across 19 list pages, with 559
-summaries and 557 transcripts; all 559 REST IDs are imported and searchable.
-The deterministic organization pass produced 9 explicit projects and 27
-evidence-backed project links. The unified first pass resolved 4,479 review
-rows, closed the 68 grouped exception rows, and recorded 48 ambiguous titles
-as generic topic labels without inferring identities. Wispr Flow now has 13/13
-capture and retrieval dates, with start, end, and provider-modified dates mapped
-for all 12 meeting records; the one scratchpad has provider-modified metadata
-but no event date in its source object.
+database has 72,199 evidence rows and 72,198 FTS rows, with 231 tracked Zoom
+groups and 230 successful plus 1 partial local transcription result; all 29
+OneNote files have 295 extracted pages. The Granola REST archive contains 559
+unique notes across 19 list pages, with 559 summaries and 557 transcripts; all
+559 REST IDs are imported and searchable. The 20 local `.eml` files now have
+20 normalized documents, 60 evidence units, 60 FTS rows, and 20 email-header
+date observations. The deterministic organization pass produced 9 explicit
+projects and 27 evidence-backed project links, while the views expose 1,951
+task candidates and 71,834 career evidence units; current task rows remain 0.
+The unified first pass has 0 pending review rows and records 48 ambiguous
+titles as generic topic labels without inferring identities. Wispr Flow has
+13/13 capture and retrieval dates, with start, end, and provider-modified dates
+mapped for all 12 meeting records; the one scratchpad has provider-modified
+metadata but no event date in its source object.
 See [the current status document](docs/LOCAL_WORK_CORPUS_STATUS.md) for exact
 residuals and proof boundaries.
 

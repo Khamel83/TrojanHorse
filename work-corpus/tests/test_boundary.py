@@ -134,6 +134,7 @@ def test_cli_command_set_has_no_email_or_atlas_command():
     commands = _command_names(parser)
 
     assert commands == {
+        "doctor",
         "inventory",
         "normalize",
         "zoom-scan",
@@ -142,7 +143,10 @@ def test_cli_command_set_has_no_email_or_atlas_command():
         "query",
         "mcp-import",
         "granola-progress",
+        "granola-delta",
         "organize",
+        "views",
+        "raw-verify",
     }
     assert "email-import" not in commands
     assert "promote-to-atlas" not in commands

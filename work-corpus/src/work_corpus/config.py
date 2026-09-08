@@ -113,6 +113,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "granola_inbox": "data/mcp/granola",
         "wispr_flow_inbox": "data/mcp/wispr_flow",
         "supported_providers": ["granola", "wispr_flow"],
+        "granola_delta_overlap_seconds": 300,
     },
 }
 

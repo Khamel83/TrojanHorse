@@ -158,6 +158,8 @@ def build_capture(
     list_pages: Sequence[Mapping[str, Any]],
     capture_id: str,
     captured_at: Optional[str] = None,
+    mode: str = "archive",
+    updated_after: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the local raw capture envelope used by the existing importer."""
     raw_notes = [dict(note) for note in notes]
@@ -174,6 +176,8 @@ def build_capture(
             "api_base_url": API_BASE_URL,
             "list_page_size": LIST_PAGE_SIZE,
             "transcript_page_size": TRANSCRIPT_PAGE_SIZE,
+            "mode": mode,
+            "updated_after": updated_after,
             "list_pages": [dict(page) for page in list_pages],
             "note_count": len(raw_notes),
         },
@@ -224,10 +228,15 @@ class GranolaApiClient:
                 self._sleep(delay)
         raise AssertionError("unreachable")
 
-    def list_notes(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def list_notes(
+        self,
+        updated_after: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         notes: List[Dict[str, Any]] = []
         pages: List[Dict[str, Any]] = []
         params: Dict[str, str] = {"page_size": str(LIST_PAGE_SIZE)}
+        if updated_after:
+            params["updated_after"] = str(updated_after)
         for page_number in range(1, 1001):
             payload = self._get("/v1/notes", params)
             batch = payload.get("notes")
@@ -250,6 +259,8 @@ class GranolaApiClient:
             if not cursor:
                 raise GranolaApiError("Granola list response hasMore without cursor")
             params = {"page_size": str(LIST_PAGE_SIZE), "cursor": str(cursor)}
+            if updated_after:
+                params["updated_after"] = str(updated_after)
         raise GranolaApiError("Granola list pagination exceeded safety limit")
 
     def fetch_note(self, note_id: str) -> Dict[str, Any]:
@@ -296,10 +307,11 @@ def run_backfill(
     *,
     capture_id: str,
     captured_at: Optional[str] = None,
+    updated_after: Optional[str] = None,
     progress_stream: Any = sys.stderr,
 ) -> Dict[str, Any]:
     """Fetch every currently listed API note and return one capture."""
-    listed_notes, list_pages = client.list_notes()
+    listed_notes, list_pages = client.list_notes(updated_after=updated_after)
     fetched: List[Dict[str, Any]] = []
     total = len(listed_notes)
     for index, listed_note in enumerate(listed_notes, start=1):
@@ -314,6 +326,8 @@ def run_backfill(
         list_pages=list_pages,
         capture_id=capture_id,
         captured_at=captured_at,
+        mode="delta" if updated_after else "archive",
+        updated_after=updated_after,
     )
 
 

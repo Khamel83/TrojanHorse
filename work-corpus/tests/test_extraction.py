@@ -151,6 +151,98 @@ def test_macos_duplicate_suffix_keeps_markdown_source_parseable(tmp_path: Path):
     assert result.metadata["payload_status"] == "missing"
 
 
+def test_eml_parser_keeps_headers_body_and_attachment_metadata(tmp_path: Path):
+    config = load_config(tmp_path)
+    path = tmp_path / "meeting-summary.eml"
+    path.write_bytes(
+        b"From: Christina <christina@example.test>\n"
+        b"To: Omar <omar@example.test>\n"
+        b"Date: Tue, 03 Sep 2024 14:30:00 -0700\n"
+        b"Subject: Weekly strategy meeting\n"
+        b"Message-ID: <meeting-123@example.test>\n"
+        b"MIME-Version: 1.0\n"
+        b"Content-Type: multipart/mixed; boundary=boundary\n"
+        b"\n"
+        b"--boundary\n"
+        b"Content-Type: text/plain; charset=utf-8\n"
+        b"\n"
+        b"Please review the plan.\n"
+        b"Signed URL: https://example.test/item?sig=secret\n"
+        b"api_key=should-not-be-indexed\n"
+        b"--boundary\n"
+        b"Content-Type: application/octet-stream\n"
+        b"Content-Disposition: attachment; filename=plan.bin\n"
+        b"Content-Transfer-Encoding: base64\n"
+        b"\n"
+        b"c2Vuc2l0aXZlIGF0dGFjaG1lbnQgYnl0ZXM=\n"
+        b"--boundary--\n",
+    )
+
+    result = normalize_module.extract_source(
+        path,
+        "email",
+        ".eml",
+        config,
+        source_system="capacities",
+        relative_path="data/notes/meeting-summary.eml",
+    )
+
+    assert result.parser == "email_eml:v1"
+    assert result.metadata["event_date"] == "2024-09-03"
+    assert result.metadata["source_date_basis"] == "email_header_date"
+    assert [part.locator for part in result.parts] == [
+        "headers",
+        "body",
+        "attachments",
+    ]
+    assert "Weekly strategy meeting" in result.text
+    assert "Please review the plan." in result.text
+    assert "plan.bin" in result.text
+    assert "sensitive attachment bytes" not in result.text
+    assert "[REDACTED_SIGNED_URL]" in result.text
+    assert "[REDACTED_SECRET]" in result.text
+
+
+def test_normalize_includes_local_eml_and_records_email_date(tmp_path: Path):
+    source_path = tmp_path / "data" / "notes" / "Notes" / "meeting-summary.eml"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_bytes(
+        b"Date: Tue, 03 Sep 2024 14:30:00 -0700\n"
+        b"Subject: Action item\n"
+        b"Content-Type: text/plain; charset=utf-8\n\n"
+        b"Please review the plan.\n"
+    )
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "eml.sqlite")
+    try:
+        inventory_module.inventory(config, con)
+        result = normalize_module.normalize_all(config, con)
+        row = _source_row(con, "data/notes/Notes/meeting-summary.eml")
+        normalized = con.execute(
+            "SELECT parser, status FROM normalized_document WHERE source_id=?",
+            (row["source_id"],),
+        ).fetchone()
+        evidence_count = con.execute(
+            "SELECT COUNT(*) FROM evidence_record WHERE source_version_id=?",
+            (row["source_version_id"],),
+        ).fetchone()[0]
+        date_row = con.execute(
+            "SELECT date_value, basis FROM date_observation WHERE source_version_id=?",
+            (row["source_version_id"],),
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert result["errors"] == 0
+    assert normalized["parser"] == "email_eml:v1"
+    assert normalized["status"] == "normalized"
+    assert evidence_count == 3
+    assert dict(date_row) == {
+        "date_value": "2024-09-03",
+        "basis": "email_header_date",
+    }
+
+
 def test_formal_pdf_parser_keeps_page_locator(tmp_path: Path):
     pypdf = pytest.importorskip("pypdf")
     config = load_config(tmp_path)

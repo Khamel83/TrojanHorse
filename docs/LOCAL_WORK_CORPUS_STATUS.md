@@ -1,7 +1,7 @@
 # Local Work Corpus Status
 
 Status date: 2026-09-07
-Latest report: `2026-09-07T20:38:38-07:00`
+Latest report: `2026-09-07T22:03:10-07:00`
 
 ## Current completion boundary
 
@@ -16,10 +16,10 @@ and the [completion handoff](superpowers/plans/2026-09-06-corpus-completion-hand
 The local evidence base is complete for the currently captured Granola REST,
 Granola MCP shadow, Wispr Flow, Capacities, Notion, OneNote, and Zoom sources
 at the capture/inventory boundary. That does not mean every physical file has a
-normalized text record: 902 source versions are media, metadata,
+normalized text record: 882 source versions are media, metadata,
 unknown/intermediate artifacts, or excluded records. The 20 local `.eml` files
-are inventoried but are not yet parsed by the active runtime. Mailbox access is
-still outside the system.
+are now parsed and searchable by the active runtime; mailbox access is still
+outside the system.
 The REST archive is the Granola completion gate: 559 unique API notes are
 imported and searchable, with 559 summaries and 557 transcripts. The older MCP
 UUID feed remains a measurable but incomplete shadow. It does not block the
@@ -27,9 +27,10 @@ archive.
 
 The deterministic `organize` command was run twice with the same date. It
 produced 9 explicit Project entities, 27 evidence-backed project source links,
-0 people, 0 organizations, 1,910 scanned task proposals, and 0 current task
-rows. Ambiguous records remain in the residual ledger rather than being
-silently canonicalized. The default query scope is now `All`: every nonblank
+0 people, 0 organizations, 1,930 scanned task proposals, and 0 current task
+rows. The derived views contain 27 project-evidence rows, 1,951 task-candidate
+rows, and 71,834 career-evidence rows. Ambiguous records remain in the
+residual ledger rather than being silently canonicalized. The default query scope is now `All`: every nonblank
 parseable source is searchable, with original Work, Personal, Mixed, Unknown,
 and sensitivity labels preserved as provenance. `Work` remains an optional
 narrow filter.
@@ -38,14 +39,16 @@ narrow filter.
 
 - 2,751 physical source files are inventoried, totaling 55.5 GB.
 - 2,751 source versions are represented.
-- 1,849 normalization records exist: 773 are current normalized outputs and
-  1,076 are retained prior-good outputs. 902 source versions have no
+- 1,869 normalization records exist: 793 are current normalized outputs and
+  1,076 are retained prior-good outputs. 882 source versions have no
   normalization record because they are media, metadata, unknown/intermediate
   artifacts, or excluded records.
 - Normalization reports 0 errors and 0 unsupported files.
-- The FTS index has 72,138 rows and the relationship index has 1,243 rows;
+- The FTS index has 72,198 rows and the relationship index has 1,243 rows;
   both are fresh.
-- Raw files remain outside Git and are not rewritten by the corpus runtime.
+- Raw files remain outside Git and are not rewritten by the corpus runtime. A
+  current two-pass verification passed for all 2,751 files and 59,544,967,619
+  bytes (`comparison_scope=current_inventory_counts`).
 
 ## Source status
 
@@ -76,11 +79,13 @@ transcripts, and the paginated transcript endpoint for oversized notes. It
 preserved the raw response locally and imported all 559 REST IDs. The two notes
 with empty transcript arrays remain explicit summary-only records.
 
-The previous MCP heartbeat is not required for the completed REST archive. If
-future steady-state delivery is needed, use an API delta pull with
-`updated_after` or a separately reviewed webhook receiver where the account
-plan and a public HTTPS receiver support them. No provider write-back was
-created here.
+The previous MCP heartbeat is not required for the completed REST archive. A
+checked-in `granola-delta` runner now provides the steady-state path: it uses
+the REST `updated_after` filter, writes an append-only mode-0600 capture, runs
+the local stages, and advances its overlap watermark only after those stages
+succeed. The systemd timer template is set to five minutes, but it is not yet
+enabled because the target host and checkout path are not recorded in
+`homelab.yaml`. No provider write-back was created here.
 
 The optional MCP shadow workflow processes up to ten pending meeting IDs on a
 clean detail pass, serializes transcript requests, and uses five IDs after an
@@ -115,14 +120,15 @@ and keeps historical task statements out of the current-task view.
 ## Full-system audit boundary
 
 The corpus pipeline is mechanically usable for the captured local archive, but
-the repository as a whole is not yet a finished assistant or service. The
-active CLI provides inventory, normalization, local transcription, exact FTS
-search, deterministic organization, and reports. It does not yet provide a
-local answer-synthesis service, project/task/career deliverables, a scheduled
-Granola delta path, production monitoring, or a clean repository-wide install
-and test entry point. The older root package and Atlas bridge remain historical
+the repository as a whole is not yet a finished assistant or deployed service.
+The active package provides reproducible installation, CI, inventory, local
+transcription, exact FTS search, deterministic organization, source-backed
+project/task/career views, reports, `doctor`, current raw verification, and a
+tested Granola delta runner. The remaining product edge is local
+answer-synthesis/API/UI; the remaining operations edge is enabling the timer
+on a known host. The older root package and Atlas bridge remain historical
 code and are not part of the active boundary. See the [full audit](TROJAN_HORSE_AUDIT.md)
-for the ordered completion path and the owner decisions.
+for the ordered completion path and owner input.
 
 ## Reproduction and verification
 
@@ -138,9 +144,9 @@ The current report is [`status.html`](../work-corpus/corpus/reports/status.html)
 and the machine-readable report is
 [`status.json`](../work-corpus/corpus/reports/status.json). The report records
 the raw immutability result, provider coverage, FTS/relationship freshness,
-and organization counts separately. Its raw-immutability result is explicitly
-marked as historical because the saved comparison covers 1,414 files, while
-the current inventory contains 2,751 files.
+and organization/view counts separately. Its raw-immutability result is a
+current two-pass comparison covering all 2,751 inventoried files and
+59,544,967,619 bytes.
 
 ## Boundaries
 

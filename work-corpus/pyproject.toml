@@ -9,6 +9,19 @@ description = "Local-first work evidence corpus bootstrap"
 requires-python = ">=3.9"
 dependencies = []
 
+[project.optional-dependencies]
+documents = [
+    "pypdf>=5.0",
+    "python-docx>=1.1",
+    "python-pptx>=1.0",
+    "openpyxl>=3.1",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
 [project.scripts]
 work-corpus = "work_corpus.cli:main"
 

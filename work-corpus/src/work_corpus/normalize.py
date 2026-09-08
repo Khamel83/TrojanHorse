@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import csv
-import html
+from email import policy
+from email.message import Message
+from email.parser import BytesParser
+from email.utils import parsedate_to_datetime
 import io
 import json
 import posixpath
@@ -35,6 +38,7 @@ from .util import (
     sha256_text,
     slugify,
     stable_evidence_id,
+    stable_id,
     vtt_or_srt_to_markdown,
 )
 
@@ -42,6 +46,7 @@ from .util import (
 # Bumped after broadening pointer-only Capacities metadata detection. Existing
 # derived files must be rebuilt instead of being treated as unchanged.
 PARSER_VERSION = "v2"
+EMAIL_PARSER_VERSION = "v1"
 TIMESTAMP_LINE = re.compile(
     r"^\s*(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}\s*-->"
     r"\s*(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}"
@@ -363,6 +368,105 @@ def _text_parts(path: Path, max_text: int) -> List[ExtractedPart]:
     return [ExtractedPart("document", read_text_guess(path, max_bytes=max_text))]
 
 
+def _email_payload(part: Message) -> str:
+    try:
+        value = part.get_content()
+        if isinstance(value, str):
+            return value
+    except Exception:
+        pass
+    raw = part.get_payload(decode=True)
+    if raw is None:
+        value = part.get_payload()
+        return value if isinstance(value, str) else ""
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return raw.decode(charset, errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
+
+
+def _email_date(value: str) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    return parsed.date().isoformat() if parsed else None
+
+
+def _email_parts(path: Path, max_bytes: int) -> ExtractionResult:
+    raw = path.read_bytes()
+    if len(raw) > max_bytes:
+        raise RuntimeError(
+            f"email source exceeds configured limit ({len(raw)} > {max_bytes} bytes)"
+        )
+    message = BytesParser(policy=policy.default).parsebytes(raw)
+    plain_parts: List[str] = []
+    html_parts: List[str] = []
+    attachments: List[Dict[str, Any]] = []
+    for part in message.walk():
+        if part.is_multipart():
+            continue
+        filename = part.get_filename()
+        disposition = (part.get_content_disposition() or "").casefold()
+        content_type = part.get_content_type()
+        if disposition == "attachment" or filename:
+            payload = part.get_payload(decode=True)
+            attachments.append(
+                {
+                    "name": str(filename or ""),
+                    "content_type": content_type,
+                    "size_bytes": len(payload) if payload is not None else 0,
+                }
+            )
+            continue
+        if content_type == "text/plain":
+            plain_parts.append(_email_payload(part))
+        elif content_type == "text/html":
+            html_parts.append(_email_payload(part))
+    body = "\n\n".join(part.strip() for part in plain_parts if part.strip())
+    if not body and html_parts:
+        body = html_to_text("\n".join(html_parts))
+    body = body[:max_bytes]
+
+    date_header = str(message.get("Date") or "").strip()
+    event_date = _email_date(date_header)
+    header_lines = [
+        f"Subject: {str(message.get('Subject') or '').strip()}",
+        f"From: {str(message.get('From') or '').strip()}",
+        f"To: {'; '.join(str(value).strip() for value in message.get_all('To', []))}",
+        f"Cc: {'; '.join(str(value).strip() for value in message.get_all('Cc', []))}",
+        f"Date: {date_header}",
+        f"Message-ID: {str(message.get('Message-ID') or '').strip()}",
+    ]
+    attachment_lines = [
+        f"- {item['name'] or '(unnamed)'} — {item['content_type']}; "
+        f"{item['size_bytes']} bytes"
+        for item in attachments
+    ]
+    return _result(
+        "email_eml:v1",
+        [
+            ExtractedPart("headers", "\n".join(header_lines)),
+            ExtractedPart("body", body),
+            ExtractedPart(
+                "attachments",
+                "\n".join(attachment_lines)
+                if attachment_lines
+                else "Attachments: none",
+            ),
+        ],
+        parser_version=EMAIL_PARSER_VERSION,
+        metadata={
+            "event_date": event_date or "",
+            "source_date_basis": "email_header_date" if event_date else "",
+            "attachment_count": len(attachments),
+        },
+    )
+
+
 def _caption_parts(path: Path, max_text: int) -> List[ExtractedPart]:
     lines = read_text_guess(path, max_bytes=max_text).replace("\ufeff", "").splitlines()
     parts: List[ExtractedPart] = []
@@ -558,6 +662,7 @@ def _result(
     *,
     status: str = "normalized",
     metadata: Optional[Mapping[str, Any]] = None,
+    parser_version: str = PARSER_VERSION,
 ) -> ExtractionResult:
     locator_counts: Dict[str, int] = {}
     cleaned_parts: List[ExtractedPart] = []
@@ -578,6 +683,7 @@ def _result(
     return ExtractionResult(
         text=body + ("\n" if body else ""),
         parser=parser,
+        parser_version=parser_version,
         parts=cleaned or (ExtractedPart("document", ""),),
         status=status,
         metadata=dict(metadata or {}),
@@ -742,6 +848,9 @@ def extract_source(
     )
     max_text = int(config.get("normalization", "max_text_file_mb", 200)) * 1024 * 1024
     max_rows = int(config.get("normalization", "max_table_rows", 100000))
+
+    if ext == ".eml":
+        return _email_parts(path, max_text)
 
     if ext in {".one", ".onepkg"}:
         converted = convert_one(config, path)
@@ -1047,8 +1156,11 @@ def _derived_text(
     extracted: ExtractionResult,
 ) -> Tuple[str, str]:
     metadata = _row_metadata(row)
-    date_basis = metadata.get("source_date_basis") or (
-        "filename_hint" if row["date_hint"] else "not_observed"
+    extracted_metadata = dict(extracted.metadata)
+    date_basis = (
+        extracted_metadata.get("source_date_basis")
+        or metadata.get("source_date_basis")
+        or ("filename_hint" if row["date_hint"] else "not_observed")
     )
     locator = extracted.parts[0].locator if len(extracted.parts) == 1 else "multi"
     header = provenance_header(
@@ -1058,7 +1170,7 @@ def _derived_text(
             "source_system": row["source_system"],
             "original_path": row["absolute_path"],
             "relative_path": row["relative_path"],
-            "original_date": row["date_hint"] or "",
+            "original_date": extracted_metadata.get("event_date") or row["date_hint"] or "",
             "source_date_basis": date_basis,
             "file_type": row["extension"] or row["kind"],
             "parser": extracted.parser,
@@ -1145,6 +1257,41 @@ def _task_date_basis(source_date_basis: str) -> str:
     }.get(source_date_basis, source_date_basis)
 
 
+def _record_date_observation(
+    con: sqlite3.Connection,
+    *,
+    source_version_id: str,
+    evidence_id: str,
+    date_value: str,
+    basis: str,
+) -> None:
+    if not date_value or not basis:
+        return
+    observation_id = stable_id(
+        "date-observation",
+        source_version_id,
+        evidence_id,
+        date_value,
+        basis,
+    )
+    con.execute(
+        """
+        INSERT OR IGNORE INTO date_observation (
+            observation_id, evidence_id, source_version_id, date_value,
+            basis, precision, confidence, created_at
+        ) VALUES (?, ?, ?, ?, ?, 'day', 0.95, ?)
+        """,
+        (
+            observation_id,
+            evidence_id,
+            source_version_id,
+            date_value,
+            basis,
+            now_iso(),
+        ),
+    )
+
+
 def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
     include_unclassified_sources = bool(
         config.get(
@@ -1192,7 +1339,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                 AND v.content_sha256=s.content_sha256
           )
           AND s.kind NOT IN (
-              'media', 'email', 'email_data', 'mcp', 'unknown',
+            'media', 'email_data', 'mcp', 'unknown',
               'discovery', 'artifact'
           )
         ORDER BY s.source_system, s.relative_path
@@ -1266,10 +1413,15 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
             """,
             (source_version_id,),
         ).fetchone()
+        expected_parser_version = (
+            EMAIL_PARSER_VERSION
+            if str(row["extension"] or "").casefold() == ".eml"
+            else PARSER_VERSION
+        )
         if (
             existing
             and existing["status"] in {"normalized", "metadata", "prior_good_retained"}
-            and existing["parser_version"] == PARSER_VERSION
+            and existing["parser_version"] == expected_parser_version
             and existing["normalized_path"]
             and Path(existing["normalized_path"]).exists()
         ):
@@ -1301,6 +1453,7 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                 line_count=text.count("\n") + 1,
                 content_sha256=sha256_text(text),
             )
+            date_recorded = False
             for part in extracted.parts:
                 part_text = scrub_derived_text(part.text).strip()
                 evidence_id = record_evidence(
@@ -1324,12 +1477,26 @@ def normalize_all(config: Config, con: sqlite3.Connection) -> Dict[str, int]:
                         (evidence_id,),
                     )
                     continue
-                task_proposals = extract_task_proposals(
+                if not date_recorded and extracted.metadata.get("event_date"):
+                    _record_date_observation(
+                        con,
+                        source_version_id=source_version_id,
+                        evidence_id=evidence_id,
+                        date_value=str(extracted.metadata["event_date"]),
+                        basis=str(
+                            extracted.metadata.get("source_date_basis")
+                            or "event_date"
+                        ),
+                    )
+                    date_recorded = True
+                extract_task_proposals(
                     con,
                     part_text,
                     source_id=row["source_id"],
                     source_evidence_id=evidence_id,
-                    source_event_date=row["date_hint"],
+                    source_event_date=(
+                        extracted.metadata.get("event_date") or row["date_hint"]
+                    ),
                     source_date_basis=_task_date_basis(_date_basis),
                     run_date=date.today(),
                     scope=row["classification"] or "Unknown",

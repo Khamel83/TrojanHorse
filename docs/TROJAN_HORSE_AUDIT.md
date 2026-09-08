@@ -2,38 +2,39 @@
 
 Audit date: 2026-09-07
 
-Repository: `main` at `2fc4519bd01ce4f94fb6cf1450e2350a25feca64` at audit start
+Repository: `main`; audit performed against the working tree after reviewed
+completion design commit `aab25e5`
 Scope: repository, active runtime, local SQLite state, generated acceptance
 reports, provider-capture ledgers, tests, and operations configuration. Raw
 source content and secrets were not copied into this document.
 
 The report checkpoint used for the current counts was generated at
-`2026-09-07T20:38:38-07:00`.
+`2026-09-07T22:03:10-07:00`.
 
 ## Executive verdict
 
-TrojanHorse has a functioning local evidence-archive foundation for the
-currently captured sources. Inventory, provenance, normalization, local Zoom
-transcription, exact full-text search, deterministic organization, and
-acceptance reporting are implemented and have current local evidence.
+TrojanHorse now has a functioning local evidence archive for the captured
+sources, a current preservation proof, deterministic organization, and
+source-backed project/task/career views. The active `work-corpus/` package is
+the only supported runtime; the old Atlas/RAG lane is explicitly quarantined.
 
-TrojanHorse is not finished as an end-user assistant or continuously operated
-service. The remaining work is not “read 1,500 review rows.” The approved first
-pass already closed those queues without forcing uncertain identities or
-privacy decisions. The remaining work is product and operations work:
-
-1. establish one supported runtime and retire or quarantine the broken legacy
-   Atlas/RAG lane;
-2. make installation, tests, health checks, and scheduled maintenance
-   reproducible;
-3. decide how to handle the 20 already-local `.eml` files and verify the
-   current raw tree;
-4. build the project, task, career-evidence, and/or local assistant views that
-   turn the archive into a usable product.
-
-The one-time Granola REST archive is complete for its current API listing. The
+The archive/search completion boundary is met. The one-time Granola REST
+archive is complete for its current API listing, the 20 local `.eml` files are
+normalized and searchable, and no grouped review queue remains open. The
 older MCP UUID shadow is incomplete, but it is redundant and is not an archive
 blocker.
+
+The remaining work is deliberately small and separate from ingestion:
+
+1. install and enable the checked-in Granola delta timer on a known host and
+   checkout path;
+2. if TrojanHorse is intended to be an assistant rather than a search-and-ledger
+   tool, build a local answer-synthesis/API/UI layer over the evidence views;
+3. optionally refine generic labels, aliases, and retained Zoom linkage states.
+
+This does not require the owner to inspect 1,500 task/date/decision rows one by
+one. The approved first pass closed those queues without forcing uncertain
+identities, privacy decisions, or current-task claims.
 
 ## Evidence basis
 
@@ -46,24 +47,25 @@ The decisive checks were:
 
 - SQLite `quick_check`: `ok`.
 - SQLite foreign-key check: `0` violations.
-- Active package tests: `181 passed`.
-- Active package compile check: passed.
+- Active package suite: `195 passed`.
+- Fatal Ruff check, Python compilation, and `git diff --check`: passed.
+- Editable install smoke in an isolated temporary virtual environment: passed,
+  including `work-corpus --help` and an active boundary test. The host's
+  externally-managed Homebrew Python correctly rejected a system install; no
+  system environment was modified.
 - A representative real query for “Weekly Strategy Meeting” returned results
   in both `All` and `Work` scopes without raw fallback.
-- Root `python3 -m pytest -q`: collection fails because the root package
-  `trojanhorse` is not importable.
-- Repository-wide Ruff check: not clean (`800` reported findings in the audit
-  run).
-- The current raw-immutability ledger is `passed`, but its comparison is from
-  2026-09-04 and covers only 1,414 files. It is not a current 2,751-file proof.
+- Current raw two-pass verification: `passed`, with all 2,751 files and
+  59,544,967,619 bytes matching and zero added, removed, or changed paths.
+- Current pipeline rows: `0` running and `1` pre-existing stale row recovered
+  to `abandoned`.
 
 ## What is built
 
 ### Active local corpus runtime
 
-The supported implementation is `work-corpus/`, installed editable in the
-local `/Volumes/2TB_SSD/Tools/work-corpus-venv` environment. Its CLI currently
-provides:
+The supported implementation is `work-corpus/`, installable from the
+repository root as `trojanhorse-work-corpus`. Its CLI currently provides:
 
 - inventory and source-root classification;
 - source-version identity and append-only provenance, with content hashes where
@@ -76,11 +78,15 @@ provides:
 - a read-only Granola REST archive client;
 - exact FTS search with explicit `All` and `Work` scopes;
 - deterministic project links, task-proposal scanning, review ledgers, and
-  acceptance reports.
+  acceptance reports;
+- source-backed project, task-candidate, and career-evidence views;
+- local `doctor` and two-pass `raw-verify` checks; and
+- a tested, locked, overlap-watermarked Granola REST delta runner with a
+  five-minute systemd template.
 
-The runtime does not provide a web/API answer-synthesis service, embeddings,
+The runtime does not yet provide a web/API answer-synthesis service, embeddings,
 semantic ranking, or an interactive assistant. Its current query path is exact
-search plus SQLite relationship traversal.
+search plus SQLite relationship traversal and deterministic evidence views.
 
 ### Current corpus accounting
 
@@ -88,13 +94,15 @@ search plus SQLite relationship traversal.
 | --- | ---: | --- |
 | Physical source files | 2,751 | All are present in the live inventory; 2,731 are substantive and 20 are Finder metadata. |
 | Source versions | 2,751 | One current source-version row per inventoried source record. |
-| Current normalized outputs | 773 | Current parser outputs. |
-| Normalization records | 1,849 | 773 current outputs plus 1,076 retained prior-good outputs. |
-| Source versions without a normalization record | 902 | Media, metadata, unknown/intermediate artifacts, or intentionally excluded records. |
-| Evidence records | 72,139 | Source-backed derived evidence units. |
-| FTS rows | 72,138 | Fresh exact-search index. The one-row difference is not treated as an error. |
+| Current normalized outputs | 793 | Current parser outputs, including all 20 local `.eml` files. |
+| Normalization records | 1,869 | 793 current outputs plus 1,076 retained prior-good outputs. |
+| Source versions without a normalization record | 882 | Media, metadata, unknown/intermediate artifacts, or intentionally excluded records. |
+| Evidence records | 72,199 | Source-backed derived evidence units. |
+| FTS rows | 72,198 | Fresh exact-search index. The one-row difference is not treated as an error. |
 | Relationship rows | 1,243 | Fresh deterministic relationship index. |
 | Pending `review_item` rows | 0 | No grouped review queue remains open. |
+| Pipeline rows | 0 running; 1 abandoned | A pre-existing stale run was recovered without changing raw data. |
+| Project/task/career view rows | 27 / 1,951 / 71,834 | Rebuildable source-backed ledgers; current task rows remain 0. |
 | Zoom linkage groups marked `needs_review` | 52 | Non-destructive meeting association uncertainty; not a raw-data deletion. |
 
 Current source-system counts are: Capacities 1,722; Granola 39; inventory
@@ -131,10 +139,11 @@ run.
   was available.
 - 48 ambiguous titles were recorded as generic topic labels. No identity was
   inferred from a title alone.
-- 1,910 evidence records were scanned for explicit task proposals.
-- 0 task rows and 0 current task rows were created. This is consistent with
-  the current date rules, but it means a usable task view is not yet a finished
-  downstream product.
+- 1,930 evidence records were scanned for explicit task proposals.
+- 0 task rows and 0 current task rows were created under the existing date and
+  scope rules. The task view retains 1,951 current, historical, and
+  scope-review candidates, so the zero current-task result is visible rather
+  than a dropped-data condition.
 - 4,479 review rows were resolved by the approved first pass; 622 provisional
   display candidates were selected; the residual ledger has 0 pending entries.
 
@@ -144,48 +153,23 @@ unified `All` policy are already recorded decisions.
 
 ## What is not finished
 
-### P0 — make the repository safe and reproducible
+### P0 — one operator action
 
-1. **One canonical entry point.** The active product is `work-corpus/`, but the
-   root `pyproject.toml` still declares a lowercase `trojanhorse` package that
-   is not present. `TrojanHorse/__init__.py` imports missing modules including
-   `processor.py`, `rag.py`, `meeting_synthesizer.py`, and `index_db.py`.
-   The root tests therefore fail at collection. The old `th` commands,
-   `run_tests.sh`, workday scripts, and Atlas bridge must be retired,
-   quarantined, or deliberately rebuilt.
-2. **Reproducible install and verification.** A fresh checkout does not expose
-   `work-corpus` on the default shell path, and its `pyproject.toml` does not
-   install optional PDF/Office parsers or a test runner. Add one supported
-   setup, a lock or pinned dependency policy, active tests in CI, and a safe
-   `doctor`/health command.
-3. **Current raw proof.** The existing raw-immutability pass is valid for the
-   1,414-file historical snapshot only. Run a fresh preservation check against
-   the current 2,751-file tree. Do not claim current raw immutability until
-   that check exists.
-4. **Captured local format gap.** Twenty `.eml` files inside the captured
-   Capacities trees are inventoried and hashed, but the active normalizer
-   hard-excludes `kind=email`. Mailbox access is not required; the open work is
-   local parsing or an explicit archive-only decision. The 49 non-final Zoom
-   artifacts need the same explicit policy, but they must not be fed to the
-   final-media transcription path automatically.
-5. **Run bookkeeping.** One historical `query` pipeline row remains marked
-   `running`. Add stale-run recovery or a doctor check before using pipeline
-   history as an operational health signal.
+1. **Activate the maintenance timer.** Copy
+   `work-corpus/ops/systemd/work-corpus-granola-delta.service` and `.timer` to
+   the chosen host, replace `/path/to/TrojanHorse`, confirm the service uses
+   the host's active Python environment, then enable the timer. This is not
+   done in the audit because `homelab.yaml` does not identify the production
+   host or checkout path. The runner, lock, overlap watermark, raw capture,
+   ordered local stages, and failure behavior are implemented and tested.
 
-### P1 — turn the archive into the intended product
+### P1 — optional assistant product layer
 
-1. Build source-backed project history, current task candidates, and career
-   evidence views. The archive exists; these user-facing derived outputs do
-   not.
-2. Validate the task extractor against a bounded set of source-backed examples
-   so that `0` task rows is a deliberate result rather than an unmeasured
-   conservative parser.
-3. Add local answer synthesis over the evidence and derived views if the goal
-   is an assistant rather than a search/reporting tool. Keep raw corpus content
-   local and preserve source locators in every answer.
-4. Add the maintenance workflow for new provider data: Granola delta capture,
-   local inventory/import/normalize/report, checkpointing, and failure alerts.
-   The one-time archive does not need another full historical pull.
+1. **Build answer synthesis/API/UI if desired.** The source-backed views and
+   exact search are ready inputs. A local answer layer still needs to retrieve
+   evidence, preserve source locators, separate source facts from inferences,
+   and keep raw corpus text local. This is product implementation, not missing
+   ingestion.
 
 ### P2 — optional refinement
 
@@ -193,8 +177,8 @@ unified `All` policy are already recorded decisions.
 - Resolve the 52 retained Zoom linkage states where the value justifies it.
 - Add embeddings or semantic ranking only after exact search and relationship
   traversal show a measured need.
-- Improve Ruff/type coverage and increase test coverage in the lower-covered
-  modules (`normalize`, `granola_api`, `transcription`, and `doctor`).
+- Increase coverage in lower-covered modules (`normalize`, `granola_api`,
+  `transcription`, and `doctor`) as normal maintenance.
 - Remove empty legacy SQLite tables only as a separate migration decision; they
   are not currently a runtime blocker.
 - Complete the MCP shadow only if it serves a use case not covered by REST.
@@ -205,61 +189,41 @@ There are two defensible finish lines:
 
 ### Archive/search finish line
 
-This is substantially met for the captured sources: raw files are present,
-provider captures are local, Granola REST records are imported/searchable,
-eligible Zoom media has terminal transcription outcomes, normalization and FTS
-are fresh, and deterministic organization has completed without pending review
-items. The caveats are the historical raw-preservation proof and the 20 local
-`.eml` files not yet in normalized search.
+This is met for the captured sources: raw files are present, provider captures
+are local, Granola REST records are imported/searchable, eligible Zoom media
+has terminal transcription outcomes, all 20 local `.eml` files are normalized
+and searchable, normalization and FTS are fresh, current raw preservation has
+a two-pass proof, and deterministic organization has completed without pending
+review items. The MCP UUID feed remains a redundant shadow with explicit gaps.
 
 ### Usable private assistant finish line
 
-This requires four bounded work packages:
-
-1. **Boundary and packaging:** make `work-corpus/` canonical, quarantine the
-   legacy lane, add reproducible setup/CI/doctor, and fix stale operational
-   metadata.
-2. **Completeness closure:** verify the current raw tree and either parse the
-   local `.eml` files or record an explicit archive-only reason; classify the
-   non-final Zoom artifacts without sending them to the wrong processor.
-3. **Product views:** implement and test project, task, career-evidence, and
-   answer-synthesis outputs over source-backed evidence.
-4. **Maintenance:** implement a scheduled or manually invoked Granola delta
-   workflow with observable receipts and a safe local rerun path.
-
-This is several focused implementation passes, not a single remaining
-checkbox. It does not require manually reading the existing review queues.
+This requires the local assistant/API/UI layer, plus one deployment action to
+activate the already-tested Granola timer on a known host. It does not require
+manually reading the existing review queues.
 
 ## Owner input required
 
-The following are the only decisions that materially affect the next build:
-
-1. **Canonical product:** confirm that the private local `work-corpus/` runtime
-   is the product and the old Atlas/RAG service is retired or quarantined.
-2. **Local `.eml` treatment:** should the 20 already-local files be parsed
-   locally and included in `All`, or intentionally remain inventory-only? This
-   does not authorize mailbox access.
-3. **First deliverable:** which comes first—project history, a current task
-   view, career evidence, or a small local assistant over all three? The
-   recommended sequence is evidence-backed views first, assistant synthesis
-   second.
-4. **Maintenance mode:** manual runs or scheduled Granola delta ingestion? If
-   scheduled, the remaining owner input is the approved host/service location;
-   the Granola secret is already held outside this checkout.
-
-The previously supplied decisions are already sufficient for the rest: generic
-topic labels are acceptable, the unified `All` corpus is the default, the one
-partial Zoom result is accepted, and no item-by-item review is required.
+Only one operational input remains: the target host and checkout path for
+enabling the timer. The product policy decisions are already recorded:
+`work-corpus/` is canonical, local `.eml` files are included in `All`, generic
+topic labels are acceptable, the one partial Zoom result is accepted, and no
+item-by-item review is required. The assistant/API/UI layer can be prioritized
+later without reopening ingestion.
 
 ## Cadence note
 
-The five-minute question is an operations choice, not a completion gate. The
-one-time REST archive used paginated listing and per-note retrieval with pacing
-and retry handling. The repository does not currently run a recurring delta
-job. A future cadence should be chosen from the provider's supported delta or
-webhook behavior, rate limits, desired freshness, and local resource cost. A
-single initial full pull is already complete; the remaining implementation is
-the durable delta/monitoring path, not another historical archive pull.
+The five-minute interval is an operations choice, not a provider requirement.
+Granola documents an `updated_after` filter, opaque cursor pagination, and a
+maximum list page size of 30 in its [List Notes API documentation](https://docs.granola.ai/api-reference/list-notes).
+Its [API introduction](https://docs.granola.ai/introduction) documents a
+5-request-per-second sustained limit, a 25-request burst per five seconds, and
+rate-limit responses. The checked-in runner uses the delta filter, keeps pages
+at 30, paces requests, honors retry timing, and overlaps the watermark by five
+minutes. That makes five minutes a reasonable freshness target for this local
+archive, while a slower interval can reduce local work and a webhook would be
+a separate provider/account deployment decision. The initial full pull is
+already complete; future runs should be deltas, not another historical pull.
 
 ## Security and deployment boundary
 
@@ -271,9 +235,9 @@ the durable delta/monitoring path, not another historical archive pull.
   mailbox access, cloud transcription, or external raw-corpus model call is
   part of the active path.
 - `homelab.yaml` still says lifecycle `development`, monitoring `standby`,
-  production host `unknown`, and health checks `[]`. `docs/OPERATIONS.md` is
-  referenced but does not exist. There is no evidence of a deployed production
-  service or scheduled maintenance.
+  production host `unknown`, and health checks `[]`. `docs/OPERATIONS.md` now
+  documents the supported commands and timer template, but there is no
+  evidence of a deployed production service or scheduled maintenance.
 - The remote repository is therefore source code and policy, not a cloneable
   copy of the private corpus. A fresh clone needs the local data and machine
   configuration before it can reproduce the current report.
@@ -284,12 +248,11 @@ the durable delta/monitoring path, not another historical archive pull.
 
 - The active package follows the local-only/raw-preservation boundary in its
   implemented paths and has a meaningful test suite.
-- The repository-wide engineering surface is not clean: the root packaging,
-  scripts, runbook, CI, and homelab operations metadata still describe an older
-  system. This is the highest standards issue because it permits an operator to
-  run the wrong architecture.
-- Lint is not an acceptance gate today, and the active runtime's lower-covered
-  modules need more tests before it should be called production-ready.
+- The active repository entry point, test configuration, runbook, CI, and
+  legacy boundary now describe one supported architecture. The old package and
+  bridge remain present only as quarantined historical material.
+- Fatal Ruff rules are an acceptance gate. Broader style/type coverage and
+  production monitoring remain normal follow-up work.
 
 ### Specification
 
@@ -299,11 +262,12 @@ the durable delta/monitoring path, not another historical archive pull.
   first-pass policy.
 - The specification's old count wording was inaccurate; the canonical metric is
   now source versions versus normalization records.
-- The 20 local `.eml` files expose a boundary mismatch between “mailbox access
-  is outside scope” and “all captured local evidence should be searchable.”
-  That needs one explicit owner decision or a local parser implementation.
-- The broader goal of a local work assistant remains incomplete because there
-  is no answer-synthesis layer and no finished project/task/career output.
+- The 20 local `.eml` files are now parsed locally, with body/header/attachment
+  metadata locators and separate email-header date observations. Mailbox access
+  remains outside scope.
+- Project, task-candidate, and career-evidence ledgers are implemented as
+  rebuildable source-backed views. The broader goal of a local work assistant
+  remains incomplete only because answer synthesis/API/UI has not been built.
 
 ## Canonical documents
 
@@ -311,6 +275,10 @@ the durable delta/monitoring path, not another historical archive pull.
 - [Current corpus status](LOCAL_WORK_CORPUS_STATUS.md)
 - [Remaining work](REMAINING_WORK.md)
 - [Boundary ADR](adr/0001-local-work-corpus-boundary.md)
+- [Completion specification](superpowers/specs/2026-09-07-canonical-work-corpus-completion.md)
+- [Completion implementation plan](superpowers/plans/2026-09-07-canonical-work-corpus-completion.md)
+- [Operations runbook](OPERATIONS.md)
+- [Legacy boundary](LEGACY_ATLAS.md)
 - [Reviewed design](superpowers/specs/2026-09-04-local-work-corpus-design.md)
 - [Local generated report](../work-corpus/corpus/reports/what_we_have_and_need.md)
 - [Machine report](../work-corpus/corpus/reports/status.json)

@@ -6,11 +6,13 @@ Historical context is preserved in docs/superpowers/plans/2026-09-06-context-his
 
 The current operational checkpoint is recorded in
 `docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md`. Ingestion,
-deterministic organization, and the approved unified-corpus first pass are
-complete for the captured local sources. The repository-level audit is in
-`docs/TROJAN_HORSE_AUDIT.md`: the archive/search foundation is operational, but
-the end-user assistant, reproducible operations, and legacy-lane cleanup are
-not complete. Optional semantic refinement remains a separate downstream step.
+deterministic organization, the approved unified-corpus first pass, source-backed
+views, and the tested Granola delta path are complete for the captured local
+sources. The repository-level audit is in `docs/TROJAN_HORSE_AUDIT.md`: the
+active runtime is packaged, tested, and locally verifiable; the remaining
+operations action is enabling the timer on a known host, and the remaining
+product layer is local answer synthesis/API/UI. Optional semantic refinement
+remains a separate downstream step.
 
 ## Language
 
@@ -68,6 +70,14 @@ pages up to thirty notes at a time, fetches each note and transcript, and
 preserves the API `not_...` identity in a local raw capture. REST coverage is
 reported separately from MCP UUID coverage because the two interfaces expose
 different provider identifiers.
+
+**Granola delta run**: A read-only maintenance pass using the REST
+`updated_after` filter. It captures changed notes locally, reruns the local
+stages, and advances an overlap watermark only after those stages succeed.
+
+**Email-header date**: A date parsed from an `.eml` `Date` header. It is a
+source-backed observation and is kept separate from a filename or inventory
+path date.
 
 **Organization pass**: A local deterministic pass that reconciles available
 payloads, applies existing scope/sensitivity/date rules, creates only explicit

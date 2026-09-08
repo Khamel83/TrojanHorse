@@ -10,16 +10,20 @@ import traceback
 from typing import Any, Dict, Optional
 
 from .config import Config, load_config
-from .db import connect
+from .db import connect, recover_stale_runs
+from .doctor import doctor
+from .granola_delta import run_delta
 from .granola_progress import write_granola_progress
 from .inventory import inventory
 from .mcp_ingest import ingest_mcp_sources
 from .normalize import normalize_all
 from .organization import organize_all
 from .query import rebuild_search_index, search
+from .raw_verify import verify_raw_immutability
 from .report import build_report
 from .transcription import transcribe_jobs
 from .util import atomic_write_json, ensure_dir, now_iso, stable_id
+from .views import build_views
 from .zoom import scan_zoom
 
 
@@ -44,6 +48,7 @@ def bootstrap(config: Config) -> None:
 
 
 def _record_start(con, command: str) -> str:
+    recover_stale_runs(con)
     run_id = stable_id("run", command, now_iso(), str(time.time_ns()))
     con.execute(
         "INSERT INTO pipeline_run (run_id, command, started_at, status) VALUES (?, ?, ?, 'running')",
@@ -97,6 +102,8 @@ def run_pipeline(config: Config, con, full_hash: bool = False) -> Dict[str, Any]
         )
         details["zoom_after_transcription"] = scan_zoom(config, con)
 
+    details["organization"] = organize_all(config, con)
+    details["views"] = build_views(config, con)
     details["report"] = build_report(config, con)
     return details
 
@@ -141,6 +148,7 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("report", help="Rebuild status reports from SQLite state.")
+    sub.add_parser("views", help="Rebuild source-backed project, task, and career views.")
     query = sub.add_parser("query", help="Query local work evidence.")
     query.add_argument("question", nargs="+", help="Question or exact search text.")
     query.add_argument("--limit", type=int, default=20)
@@ -165,6 +173,16 @@ def _parser() -> argparse.ArgumentParser:
         "granola-progress",
         help="Reconcile exact Granola capture, import, and search progress.",
     )
+    granola_delta = sub.add_parser(
+        "granola-delta",
+        help="Fetch one bounded Granola REST delta and run local maintenance.",
+    )
+    granola_delta.add_argument(
+        "--updated-after",
+        default=None,
+        help="Explicit ISO-8601 seed for the first bounded run.",
+    )
+    granola_delta.add_argument("--overlap-seconds", type=int, default=None)
     organize = sub.add_parser(
         "organize",
         help="Build deterministic derived entities, links, task proposals, and residuals.",
@@ -178,6 +196,11 @@ def _parser() -> argparse.ArgumentParser:
         "--first-pass",
         action="store_true",
         help="Apply safe defaults and write a small exception response sheet.",
+    )
+    sub.add_parser("doctor", help="Run safe local runtime and SQLite diagnostics.")
+    sub.add_parser(
+        "raw-verify",
+        help="Hash the raw tree twice and verify it did not change between scans.",
     )
     return parser
 
@@ -235,6 +258,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.command == "granola-progress":
             details = write_granola_progress(config, con)
             details["index_verification"] = _record_index_checkpoint(config, con)
+        elif args.command == "granola-delta":
+            details = run_delta(
+                config,
+                updated_after=args.updated_after,
+                overlap_seconds=args.overlap_seconds,
+            )
         elif args.command == "organize":
             run_date = date.fromisoformat(args.run_date) if args.run_date else None
             details = organize_all(
@@ -244,13 +273,24 @@ def main(argv: Optional[list[str]] = None) -> int:
                 first_pass=args.first_pass,
             )
             details["index_verification"] = _record_index_checkpoint(config, con)
+            details["views"] = build_views(config, con)
             details["report"] = build_report(config, con)
+        elif args.command == "views":
+            details = build_views(config, con)
+        elif args.command == "doctor":
+            doctor(config, con, exclude_run_id=run_id)
+            details = {
+                "doctor_json": str(config.state_dir / "doctor.json"),
+                "doctor_text": str(config.state_dir / "doctor.txt"),
+            }
+        elif args.command == "raw-verify":
+            details = verify_raw_immutability(config)
         else:
             parser.error(f"unknown command: {args.command}")
 
         _record_end(con, run_id, "complete", details)
         print(json.dumps(details, indent=2, ensure_ascii=False, default=str))
-        if args.command in {"report", "transcribe", "organize"}:
+        if args.command in {"report", "transcribe", "organize", "views"}:
             print(f"\nOpen: {config.corpus_dir / 'reports' / 'status.html'}")
         return 0
     except KeyboardInterrupt:

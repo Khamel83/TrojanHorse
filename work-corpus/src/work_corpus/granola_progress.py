@@ -189,8 +189,8 @@ def _rest_api_progress(
     con: sqlite3.Connection,
     root: Path,
 ) -> Dict[str, Any]:
-    """Report the newest complete REST backfill separately from MCP IDs."""
-    paths = sorted(root.glob("granola-api-backfill-*.json"))
+    """Report the newest REST capture separately from MCP IDs."""
+    paths = sorted(root.glob("granola-api-*.json"))
     valid: List[Tuple[Path, Mapping[str, Any]]] = []
     for path in paths:
         payload = _load_capture(path)
@@ -203,6 +203,7 @@ def _rest_api_progress(
         return {
             "status": "not_recorded",
             "capture_file_count": len(paths),
+            "mode": "",
             "note_count": 0,
             "unique_note_id_count": 0,
             "summary_count": 0,
@@ -217,6 +218,7 @@ def _rest_api_progress(
     raw_notes = payload.get("notes")
     meetings = payload.get("meetings")
     capture = payload.get("_capture")
+    mode = str(capture.get("mode") or "archive").strip().casefold() if isinstance(capture, Mapping) else "archive"
     notes = [note for note in raw_notes if isinstance(note, Mapping)] if isinstance(raw_notes, list) else []
     normalized = [item for item in meetings if isinstance(item, Mapping)] if isinstance(meetings, list) else []
     note_ids = {
@@ -228,18 +230,27 @@ def _rest_api_progress(
     errors = capture.get("errors", []) if isinstance(capture, Mapping) else []
     list_pages = capture.get("list_pages", []) if isinstance(capture, Mapping) else []
     complete = bool(
-        notes
-        and len(notes) == len(note_ids)
+        len(notes) == len(note_ids)
         and len(normalized) == len(note_ids)
         and len(imported_ids) == len(note_ids)
         and len(searchable_ids) == len(note_ids)
         and not errors
     )
     return {
-        "status": "complete" if complete else "incomplete",
+        "status": (
+            "complete"
+            if complete and mode != "delta"
+            else "delta_complete"
+            if complete and mode == "delta"
+            else "incomplete"
+        ),
         "capture_file_count": len(paths),
+        "mode": mode,
         "capture_file": path.relative_to(config.root).as_posix(),
         "capture_id": _safe_capture_id(payload.get("capture_id")),
+        "requested_updated_after": (
+            capture.get("updated_after") if isinstance(capture, Mapping) else None
+        ),
         "note_count": len(notes),
         "unique_note_id_count": len(note_ids),
         "summary_count": sum(

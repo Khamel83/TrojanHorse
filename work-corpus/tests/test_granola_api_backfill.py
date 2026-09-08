@@ -113,3 +113,38 @@ def test_client_uses_transcript_endpoint_after_413():
         ("/v1/notes/not_12345678901234", {}),
         ("/v1/notes/not_12345678901234/transcript", {"page_size": "100"}),
     ]
+
+
+def test_list_notes_sends_updated_after_on_every_cursor_page():
+    calls: List[tuple[str, Mapping[str, str]]] = []
+    note_one = {"id": "one", "updated_at": "2026-09-07T10:00:00Z"}
+    note_two = {"id": "two", "updated_at": "2026-09-07T10:01:00Z"}
+
+    def requester(path: str, params: Mapping[str, str]) -> Mapping[str, Any]:
+        calls.append((path, params))
+        if path == "/v1/notes":
+            if params.get("cursor") == "next-page":
+                return {"notes": [note_two], "hasMore": False, "cursor": None}
+            return {"notes": [note_one], "hasMore": True, "cursor": "next-page"}
+        return {}
+
+    client = GranolaApiClient("test-key", requester=requester)
+
+    notes, pages = client.list_notes(updated_after="2026-09-07T09:55:00Z")
+
+    assert [note["id"] for note in notes] == ["one", "two"]
+    assert len(pages) == 2
+    assert calls == [
+        (
+            "/v1/notes",
+            {"page_size": "30", "updated_after": "2026-09-07T09:55:00Z"},
+        ),
+        (
+            "/v1/notes",
+            {
+                "page_size": "30",
+                "cursor": "next-page",
+                "updated_after": "2026-09-07T09:55:00Z",
+            },
+        ),
+    ]
