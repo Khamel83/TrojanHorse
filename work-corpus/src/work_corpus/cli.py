@@ -17,6 +17,7 @@ from .answering import (
     GatewaySensitiveBackend,
     OllamaBackend,
     answer as answer_question,
+    compare_answers,
 )
 from .config import Config, load_config
 from .db import connect, recover_stale_runs
@@ -332,38 +333,22 @@ def _run_read_only_answer(args: Any, root: Path) -> int:
                 allow_sensitive_remote=args.allow_sensitive_remote,
             )
         else:
-            local = answer_question(
+            result = compare_answers(
                 con,
                 question,
-                backend="evidence",
-                scope=args.scope,
-                limit=args.limit,
-            )
-            remote = answer_question(
-                con,
-                question,
-                backend="g2k-sensitive",
-                scope=args.scope,
-                limit=args.limit,
-                completion_backend=GatewaySensitiveBackend(
+                local_backend=OllamaBackend(
+                    args.model,
+                    args.ollama_url,
+                    args.timeout,
+                ),
+                remote_backend=GatewaySensitiveBackend(
                     args.gateway_helper.expanduser(),
                     args.timeout,
                 ),
+                scope=args.scope,
+                limit=args.limit,
                 allow_sensitive_remote=True,
             )
-            result = {
-                "question": question,
-                "status": "compared",
-                "answer_kind": "comparison",
-                "local": local,
-                "remote": remote,
-                "packet_sha256": remote.get("packet_sha256"),
-                "warnings": list(
-                    dict.fromkeys(
-                        [*local.get("warnings", []), *remote.get("warnings", [])]
-                    )
-                ),
-            }
         print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
         return 0
     except Exception as exc:

@@ -76,6 +76,27 @@ class _SpyBackend:
         return answering.Completion(self.text)
 
 
+def _prepared_hit(
+    *,
+    label: str = "canonical",
+    evidence_id: str = "evidence-1",
+    source_id: str = "source-1",
+    source_version_id: str = "version-1",
+    snippet: str = "Project Atlas was approved.",
+) -> dict[str, str]:
+    return {
+        "label": label,
+        "evidence_status": label,
+        "evidence_id": evidence_id,
+        "source_id": source_id,
+        "source_version_id": source_version_id,
+        "locator": "document:1",
+        "source_system": "synthetic",
+        "scope": "Work",
+        "snippet": snippet,
+    }
+
+
 def test_answer_evidence_only_returns_citable_local_provenance(tmp_path: Path):
     con = db.connect(tmp_path / "state.sqlite")
     try:
@@ -323,3 +344,62 @@ def test_answer_does_not_change_database_bytes_or_rows(tmp_path: Path):
         after_con.close()
     assert database.read_bytes() == before_bytes
     assert after_rows == before_rows
+
+
+def test_compare_answers_searches_once_and_shares_one_remote_safe_packet():
+    search_result = {
+        "question": "What happened to Project Atlas?",
+        "results": [
+            _prepared_hit(
+                snippet=(
+                    "Project Atlas was approved. Contact maya@example.test. "
+                    "Private file /Users/Omar Smith/private.sqlite."
+                )
+            )
+        ],
+        "source_facts": [
+            _prepared_hit(
+                snippet=(
+                    "Project Atlas was approved. Contact maya@example.test. "
+                    "Private file /Users/Omar Smith/private.sqlite."
+                )
+            )
+        ],
+        "inferences": [],
+        "conflicts": [],
+        "missing": [],
+    }
+    calls: list[dict[str, object]] = []
+
+    def fake_search(*_args: object, **kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return search_result
+
+    local = _SpyBackend(
+        '{"answer":"local","citations":["S1"],"stance":"supported"}'
+    )
+    remote = _SpyBackend(
+        '{"answer":"remote","citations":["S1"],"stance":"supported"}'
+    )
+
+    original_search = answering.search
+    answering.search = fake_search  # type: ignore[assignment]
+    try:
+        result = answering.compare_answers(
+            object(),
+            "What happened to Project Atlas?",
+            local_backend=local,
+            remote_backend=remote,
+            allow_sensitive_remote=True,
+        )
+    finally:
+        answering.search = original_search
+
+    assert len(calls) == 1
+    assert local.calls == 1
+    assert remote.calls == 1
+    assert local.messages[-1]["content"] == remote.messages[-1]["content"]
+    assert "maya@example.test" not in local.messages[-1]["content"]
+    assert "/Users/Omar Smith/private.sqlite" not in local.messages[-1]["content"]
+    assert result["local_packet_sha256"] == result["remote_packet_sha256"]
+    assert result["packet_sha256_equal"] is True

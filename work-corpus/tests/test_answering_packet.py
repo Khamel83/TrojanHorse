@@ -4,7 +4,11 @@ import copy
 import hashlib
 import json
 
-from work_corpus.answering import AnswerEvidence, prepare_evidence
+from work_corpus.answering import (
+    AnswerEvidence,
+    EvidenceOnlyBackend,
+    prepare_evidence,
+)
 
 
 def _hit(index: int, *, snippet: str) -> dict[str, str]:
@@ -301,6 +305,91 @@ def test_remote_packet_redacts_quoted_and_colon_terminated_dotfile_paths():
         assert sensitive not in prepared.packet
     for leaked_suffix in ("id_rsa", ".env", "settings.json"):
         assert leaked_suffix not in prepared.packet
+
+
+def test_remote_packet_replaces_complete_spaced_database_and_dotfile_paths():
+    paths = (
+        "/Users/Omar Smith/private.sqlite",
+        "/Users/Omar Smith/.config/settings.json",
+        r"C:\Users\Omar Smith\private.sqlite",
+        r"C:\Users\Omar Smith\.config\settings.json",
+        r"\\server\shared folder\private.sqlite",
+        r"\\server\shared folder\.config\settings.json",
+    )
+    search_result = {
+        "question": "Which Project Atlas files did Maya review?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f'Quote "{paths[0]}": "{paths[1]}": '
+                    f'"{paths[2]}": "{paths[3]}": '
+                    f'"{paths[4]}": "{paths[5]}": '
+                    f"Adjacent {paths[0]} {paths[2]} {paths[4]}. "
+                    "Project Atlas remains approved."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert "Project Atlas remains approved" in prepared.packet
+    for path in paths:
+        assert path not in prepared.packet
+    for leaked_suffix in (
+        "private.sqlite",
+        ".sqlite",
+        ".config/settings.json",
+        ".config\\settings.json",
+        ".json",
+        "settings.json",
+    ):
+        assert leaked_suffix not in prepared.packet
+
+
+def test_remote_packet_does_not_redact_ordinary_words_for_short_provenance_ids():
+    hit = _hit(
+        1,
+        snippet="Project Atlas is safe; evidence is available.",
+    )
+    hit.update(
+        evidence_id="e",
+        source_id="s",
+        source_version_id="v",
+        source_path="s",
+        relative_path="e",
+        absolute_path="v",
+    )
+
+    prepared = prepare_evidence(
+        {
+            "question": "Is Project Atlas safe?",
+            "results": [hit],
+        },
+        remote_safe=True,
+    )
+
+    assert "Project Atlas is safe; evidence is available." in prepared.packet
+    assert "[REDACTED_IDENTIFIER]" not in prepared.packet
+
+
+def test_evidence_only_backend_emits_source_facts_without_inference_snippets():
+    source_fact = _hit(1, snippet="Project Atlas was approved by the source.")
+    inference = _hit(2, snippet="Inference says Project Atlas may expand next quarter.")
+    inference["label"] = "inference"
+    inference["evidence_status"] = "inference"
+    prepared = prepare_evidence(
+        {
+            "question": "What happened to Project Atlas?",
+            "results": [source_fact, inference],
+        }
+    )
+
+    completion = EvidenceOnlyBackend(prepared).complete([])
+
+    assert "Project Atlas was approved by the source." in completion.text
+    assert "Inference says Project Atlas may expand next quarter." not in completion.text
 
 
 def test_remote_packet_uses_context_for_compact_uk_phones():

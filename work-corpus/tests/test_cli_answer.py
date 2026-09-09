@@ -109,3 +109,45 @@ def test_cli_answer_compare_requires_sensitive_opt_in(
     ) == 1
     assert "sensitive" in capsys.readouterr().err.casefold()
     assert database.exists()
+
+
+def test_cli_answer_compare_delegates_to_shared_read_only_orchestration(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+):
+    database = _database(tmp_path)
+    before = database.read_bytes()
+    seen: dict[str, object] = {}
+
+    def fake_compare(con: object, question: str, **kwargs: object) -> dict[str, object]:
+        seen.update(con=con, question=question, **kwargs)
+        return {
+            "status": "compared",
+            "answer_kind": "comparison",
+            "packet_sha256": "digest",
+            "local_packet_sha256": "digest",
+            "remote_packet_sha256": "digest",
+            "packet_sha256_equal": True,
+        }
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(cli, "bootstrap", lambda _config: pytest.fail("bootstrap called"))
+        monkeypatch.setattr(cli, "_record_start", lambda *_args: pytest.fail("pipeline run recorded"))
+        monkeypatch.setattr(cli, "answer_question", lambda *_args, **_kwargs: pytest.fail("answer lane rebuilt"))
+        monkeypatch.setattr(cli, "compare_answers", fake_compare)
+        assert cli.main(
+            [
+                "--root",
+                str(tmp_path),
+                "answer-compare",
+                "What happened to Project Atlas?",
+                "--allow-sensitive-remote",
+            ]
+        ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["packet_sha256_equal"] is True
+    assert seen["question"] == "What happened to Project Atlas?"
+    assert type(seen["local_backend"]).__name__ == "OllamaBackend"
+    assert type(seen["remote_backend"]).__name__ == "GatewaySensitiveBackend"
+    assert seen["allow_sensitive_remote"] is True
+    assert database.read_bytes() == before

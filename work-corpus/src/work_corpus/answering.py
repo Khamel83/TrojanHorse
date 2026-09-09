@@ -120,6 +120,32 @@ _UNC_PATH_RE = re.compile(
     rf"|(?:{_PATH_COMPONENT}[\\/])+"
     rf")"
 )
+_PATH_REDACTION_SUFFIX_RE = re.compile(
+    r"\[REDACTED_PATH\](?:(?:[\\/]|\.)(?:[^\s<>\"':,;!?)])+)+"
+)
+_SAFE_PROVENANCE_TOKEN_RE = re.compile(
+    r"^(?:evidence|source|version)(?:[-_:][A-Za-z0-9][A-Za-z0-9._:-]*)+$",
+    re.IGNORECASE,
+)
+_SOURCE_FACT_LABELS = frozenset(
+    {
+        "canonical",
+        "derived_reviewed",
+        "derived_unreviewed",
+        "raw_work",
+        "raw_source",
+    }
+)
+
+
+def _is_source_fact_evidence(evidence: "AnswerEvidence") -> bool:
+    label = str(evidence.hit.get("label") or "").casefold().strip()
+    if label in _SOURCE_FACT_LABELS:
+        return True
+    if label not in {"source fact", "source_fact", "fact"}:
+        return False
+    status = str(evidence.hit.get("evidence_status") or "").casefold().strip()
+    return status in _SOURCE_FACT_LABELS
 
 
 @dataclass(frozen=True)
@@ -510,6 +536,8 @@ class EvidenceOnlyBackend:
         # ``messages`` are intentionally ignored.  They may contain model or
         # user text that resembles an evidence packet and is never trusted.
         for citation_id, evidence in self.citation_map.items():
+            if not _is_source_fact_evidence(evidence):
+                continue
             snippet = str(evidence.packet_entry.get("snippet") or "").strip()
             if snippet:
                 entries.append((citation_id, snippet))
@@ -1062,6 +1090,22 @@ def _local_entry(citation_id: str, hit: Mapping[str, Any]) -> Dict[str, Any]:
     return entry
 
 
+def _is_safe_known_sensitive(value: str) -> bool:
+    """Accept only distinctive identifiers or explicit provenance tokens."""
+    token = value.strip()
+    if len(token) < 4:
+        return False
+    if token.startswith(("/", "\\\\")) or re.match(r"^[A-Za-z]:[\\/]", token):
+        return True
+    if _SAFE_PROVENANCE_TOKEN_RE.fullmatch(token):
+        return True
+    if len(token) >= 8 and any(
+        character.isdigit() or character in "-_:./" for character in token
+    ):
+        return True
+    return False
+
+
 def _remote_text(
     value: Any,
     *,
@@ -1092,6 +1136,14 @@ def _remote_text(
             text = pattern.sub("[REDACTED_{}]".format(kind.upper()), text)
             findings.append(f"{citation_id}:{field}:{kind}")
 
+    complete_path_text = _PATH_REDACTION_SUFFIX_RE.sub(
+        "[REDACTED_PATH]",
+        text,
+    )
+    if complete_path_text != text:
+        text = complete_path_text
+        findings.append(f"{citation_id}:{field}:path")
+
     contextual_phone_text = _COMPACT_UK_PHONE_CONTEXT_RE.sub(
         lambda match: f"{match.group('context')}[REDACTED_PHONE]",
         text,
@@ -1111,11 +1163,20 @@ def _remote_text(
         findings.append(f"{citation_id}:{field}:phone")
 
     for sensitive in sorted(
-        {str(item) for item in known_sensitive if item},
+        {str(item).strip() for item in known_sensitive if str(item).strip()},
         key=lambda item: (-len(item), item),
     ):
-        if sensitive in text:
-            text = text.replace(sensitive, "[REDACTED_IDENTIFIER]")
+        if not _is_safe_known_sensitive(sensitive):
+            continue
+        sensitive_pattern = re.compile(
+            rf"(?<![\w]){re.escape(sensitive)}(?![\w])"
+        )
+        text_with_identifier = sensitive_pattern.sub(
+            "[REDACTED_IDENTIFIER]",
+            text,
+        )
+        if text_with_identifier != text:
+            text = text_with_identifier
             findings.append(f"{citation_id}:{field}:identifier")
     return text
 
@@ -1483,56 +1544,18 @@ def _fallback_answer(
     result["warnings"].append("model completion failed; evidence-only fallback returned")
 
 
-def answer(
-    con: Any,
-    question: str,
+def _answer_prepared(
+    search_result: Mapping[str, Any],
+    prepared: PreparedEvidence,
     *,
-    backend: str = "evidence",
-    scope: str = DEFAULT_SCOPE,
-    limit: int = DEFAULT_MAX_HITS,
+    backend: str,
     completion_backend: Optional[CompletionBackend] = None,
-    allow_sensitive_remote: bool = False,
+    question: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Answer one question from the immutable local search result.
-
-    Search is explicitly read-only: ``rebuild_index=False`` prevents the
-    ordinary query path from mutating derived FTS state.  Only the selected
-    completion backend can leave the process, and the sensitive gateway lane
-    requires an explicit caller opt-in.
-    """
-    if not isinstance(backend, str) or backend not in {
-        "evidence",
-        "ollama",
-        "g2k-sensitive",
-    }:
-        raise ValueError("backend must be evidence, ollama, or g2k-sensitive")
-    if backend == "g2k-sensitive" and not allow_sensitive_remote:
-        raise ValueError("g2k-sensitive backend requires allow_sensitive_remote=True")
-    if (
-        not isinstance(limit, int)
-        or isinstance(limit, bool)
-        or limit < 1
-        or limit > DEFAULT_MAX_HITS
-    ):
-        raise ValueError(f"limit must be between 1 and {DEFAULT_MAX_HITS}")
-
-    # ``search`` performs the canonical input validation.  Calling it before
-    # packet preparation also keeps the packet question normalized.
-    search_result = search(
-        con,
-        question,
-        scope=scope,
-        limit=limit,
-        raw_fallback=True,
-        rebuild_index=False,
-    )
-    normalized_question = str(search_result.get("question") or question).strip()
-    remote_safe = backend == "g2k-sensitive"
-    prepared = prepare_evidence(
-        search_result,
-        remote_safe=remote_safe,
-        max_hits=limit,
-    )
+    """Run one answer lane against an already prepared immutable packet."""
+    normalized_question = str(
+        search_result.get("question") or question or ""
+    ).strip()
     result = _base_answer_result(
         question=normalized_question,
         backend=backend,
@@ -1577,6 +1600,8 @@ def answer(
 
     selected: CompletionBackend
     if backend == "evidence":
+        # Never allow an injected completion backend to replace the trusted
+        # source-fact formatter.
         selected = EvidenceOnlyBackend(prepared)
     elif completion_backend is not None:
         selected = completion_backend
@@ -1629,3 +1654,157 @@ def answer(
         result["status"] = "synthesized"
         result["answer_kind"] = "model"
     return result
+
+
+def answer(
+    con: Any,
+    question: str,
+    *,
+    backend: str = "evidence",
+    scope: str = DEFAULT_SCOPE,
+    limit: int = DEFAULT_MAX_HITS,
+    completion_backend: Optional[CompletionBackend] = None,
+    allow_sensitive_remote: bool = False,
+) -> Dict[str, Any]:
+    """Answer one question from the immutable local search result.
+
+    Search is explicitly read-only: ``rebuild_index=False`` prevents the
+    ordinary query path from mutating derived FTS state.  Only the selected
+    completion backend can leave the process, and the sensitive gateway lane
+    requires an explicit caller opt-in.
+    """
+    if not isinstance(backend, str) or backend not in {
+        "evidence",
+        "ollama",
+        "g2k-sensitive",
+    }:
+        raise ValueError("backend must be evidence, ollama, or g2k-sensitive")
+    if backend == "g2k-sensitive" and not allow_sensitive_remote:
+        raise ValueError("g2k-sensitive backend requires allow_sensitive_remote=True")
+    if (
+        not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or limit < 1
+        or limit > DEFAULT_MAX_HITS
+    ):
+        raise ValueError(f"limit must be between 1 and {DEFAULT_MAX_HITS}")
+
+    # ``search`` performs the canonical input validation.  Calling it before
+    # packet preparation also keeps the packet question normalized.
+    search_result = search(
+        con,
+        question,
+        scope=scope,
+        limit=limit,
+        raw_fallback=True,
+        rebuild_index=False,
+    )
+    prepared = prepare_evidence(
+        search_result,
+        remote_safe=backend == "g2k-sensitive",
+        max_hits=limit,
+    )
+    return _answer_prepared(
+        search_result,
+        prepared,
+        backend=backend,
+        completion_backend=completion_backend,
+        question=question,
+    )
+
+
+def compare_answers(
+    con: Any,
+    question: str,
+    *,
+    local_backend: Union[str, CompletionBackend] = "ollama",
+    remote_backend: Optional[Union[str, CompletionBackend]] = None,
+    scope: str = DEFAULT_SCOPE,
+    limit: int = DEFAULT_MAX_HITS,
+    allow_sensitive_remote: bool = False,
+) -> Dict[str, Any]:
+    """Compare two lanes against one search result and remote-safe packet."""
+    if not allow_sensitive_remote:
+        raise ValueError("answer comparison requires allow_sensitive_remote=True")
+    if (
+        not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or limit < 1
+        or limit > DEFAULT_MAX_HITS
+    ):
+        raise ValueError(f"limit must be between 1 and {DEFAULT_MAX_HITS}")
+
+    local_completion_backend: Optional[CompletionBackend] = None
+    if isinstance(local_backend, str):
+        if local_backend not in {"evidence", "ollama"}:
+            raise ValueError("local_backend must be evidence or ollama")
+        local_backend_name = local_backend
+    else:
+        local_completion_backend = local_backend
+        local_backend_name = (
+            "evidence"
+            if getattr(local_backend, "name", "") == "evidence"
+            else "ollama"
+        )
+
+    remote_completion_backend: Optional[CompletionBackend] = None
+    if isinstance(remote_backend, str):
+        if remote_backend != "g2k-sensitive":
+            raise ValueError("remote_backend must be g2k-sensitive")
+    elif remote_backend is not None:
+        remote_completion_backend = remote_backend
+
+    # One read-only search feeds one remote-safe packet.  Both lanes receive
+    # the same packet and citation map, so their digests can be compared.
+    search_result = search(
+        con,
+        question,
+        scope=scope,
+        limit=limit,
+        raw_fallback=True,
+        rebuild_index=False,
+    )
+    prepared = prepare_evidence(
+        search_result,
+        remote_safe=True,
+        max_hits=limit,
+    )
+    local = _answer_prepared(
+        search_result,
+        prepared,
+        backend=local_backend_name,
+        completion_backend=local_completion_backend,
+        question=question,
+    )
+    remote = _answer_prepared(
+        search_result,
+        prepared,
+        backend="g2k-sensitive",
+        completion_backend=remote_completion_backend,
+        question=question,
+    )
+    local_digest = local.get("packet_sha256")
+    remote_digest = remote.get("packet_sha256")
+    digest_equal = local_digest == remote_digest == prepared.packet_sha256
+    warnings = list(
+        dict.fromkeys(
+            [*local.get("warnings", []), *remote.get("warnings", [])]
+        )
+    )
+    return {
+        "question": str(search_result.get("question") or question).strip(),
+        "status": "compared",
+        "answer_kind": "comparison",
+        "local": local,
+        "remote": remote,
+        "packet_sha256": prepared.packet_sha256,
+        "local_packet_sha256": local_digest,
+        "remote_packet_sha256": remote_digest,
+        "packet_digests": {
+            "local": local_digest,
+            "remote": remote_digest,
+        },
+        "packet_digest_equal": digest_equal,
+        "packet_sha256_equal": digest_equal,
+        "warnings": warnings,
+    }
