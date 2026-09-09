@@ -160,7 +160,8 @@ def test_remote_packet_redacts_non_http_urls_spaced_paths_and_international_phon
 
 def test_remote_packet_redacts_trailing_unc_and_unprefixed_phone_forms_without_losing_prose():
     trailing_posix_path = "/Users/Omar/data/"
-    unc_path = r"\\server\share\foo"
+    trailing_windows_path = "C:\\Users\\Omar\\data\\"
+    unc_path = "\\\\server\\share\\foo\\"
     search_result = {
         "question": "What did Maya approve for Project Atlas?",
         "results": [
@@ -168,9 +169,14 @@ def test_remote_packet_redacts_trailing_unc_and_unprefixed_phone_forms_without_l
                 1,
                 snippet=(
                     "Maya copied /Users/Omar Smith then approved Project Atlas. "
-                    f"Trailing directory {trailing_posix_path}; UNC {unc_path}; "
+                    "Maya copied /Users/Lina Stone because Maya approved Project Atlas. "
+                    f"Trailing POSIX directory {trailing_posix_path}; "
+                    f"Windows directory {trailing_windows_path}; UNC {unc_path}; "
                     "local call 020 7946 0958; international call "
-                    "44 20 7946 0958."
+                    "44 20 7946 0958; contiguous local call 02079460958; "
+                    "contiguous international call 442079460958; "
+                    "another local call 01632960001; another international "
+                    "call 441632960001."
                 ),
             )
         ],
@@ -181,12 +187,18 @@ def test_remote_packet_redacts_trailing_unc_and_unprefixed_phone_forms_without_l
 
     assert "Maya" in prepared.packet
     assert "then approved Project Atlas" in prepared.packet
+    assert "because Maya approved Project Atlas" in prepared.packet
     assert packet["evidence"][0]["locator"] == "line:11"
     for sensitive in (
         trailing_posix_path,
+        trailing_windows_path,
         unc_path,
         "020 7946 0958",
         "44 20 7946 0958",
+        "02079460958",
+        "442079460958",
+        "01632960001",
+        "441632960001",
     ):
         assert sensitive not in prepared.packet
 

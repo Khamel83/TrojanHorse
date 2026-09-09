@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import sqlite3
-import struct
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, List, Optional, Tuple, Union
+from typing import Any, Iterable, List, Optional, Union
 
 from .util import (
     ensure_dir,
@@ -20,23 +18,6 @@ from .util import (
 
 
 SCHEMA_VERSION = 2
-
-_WAL_HEADER_BYTES = 32
-_WAL_FRAME_HEADER_BYTES = 24
-_WAL_MAGICS = frozenset((0x377F0682, 0x377F0683))
-_WAL_VERSION = 3_007_000
-
-
-@dataclass(frozen=True)
-class _ReadOnlyWalState:
-    """Validated WAL sidecar state observed around a read-only open."""
-
-    wal_exists: bool
-    shm_exists: bool
-    wal_signature: Optional[Tuple[int, int, str]]
-    shm_signature: Optional[Tuple[int, int]]
-    frame_count: Optional[int]
-
 
 SCHEMA = r"""
 PRAGMA foreign_keys = ON;
@@ -1062,119 +1043,6 @@ def _migrate_mcp_items(con: sqlite3.Connection) -> None:
     )
 
 
-def _read_only_sidecar(path: Path, suffix: str) -> Path:
-    return path.with_name(path.name + suffix)
-
-
-def _wal_signature_and_frames(
-    wal_path: Path,
-) -> Tuple[Tuple[int, int, str], int]:
-    """Hash and structurally validate one WAL without changing it."""
-    try:
-        before = wal_path.stat()
-        digest = hashlib.sha256()
-        header = bytearray()
-        total_bytes = 0
-        with wal_path.open("rb") as stream:
-            while True:
-                chunk = stream.read(1024 * 1024)
-                if not chunk:
-                    break
-                if len(header) < _WAL_HEADER_BYTES:
-                    needed = _WAL_HEADER_BYTES - len(header)
-                    header.extend(chunk[:needed])
-                digest.update(chunk)
-                total_bytes += len(chunk)
-        after = wal_path.stat()
-    except OSError as exc:
-        raise sqlite3.OperationalError(
-            "read-only database WAL could not be inspected safely"
-        ) from exc
-
-    before_stat = (before.st_size, before.st_mtime_ns)
-    after_stat = (after.st_size, after.st_mtime_ns)
-    if before_stat != after_stat or total_bytes != before.st_size:
-        raise sqlite3.OperationalError(
-            "read-only database WAL changed during inspection"
-        )
-    if len(header) != _WAL_HEADER_BYTES:
-        raise sqlite3.OperationalError(
-            "read-only database has an incomplete WAL header"
-        )
-
-    magic = struct.unpack(">I", header[:4])[0]
-    version = struct.unpack(">I", header[4:8])[0]
-    page_size = struct.unpack(">I", header[8:12])[0]
-    if magic not in _WAL_MAGICS or version != _WAL_VERSION:
-        raise sqlite3.OperationalError(
-            "read-only database has an unsupported WAL format"
-        )
-    if page_size == 1:
-        page_size = 65_536
-    if page_size < 512 or page_size > 65_536 or page_size & (page_size - 1):
-        raise sqlite3.OperationalError(
-            "read-only database has an invalid WAL page size"
-        )
-
-    frame_bytes = _WAL_FRAME_HEADER_BYTES + page_size
-    payload_bytes = before.st_size - _WAL_HEADER_BYTES
-    if payload_bytes < frame_bytes or payload_bytes % frame_bytes:
-        raise sqlite3.OperationalError(
-            "read-only database has incomplete WAL frames"
-        )
-
-    return (
-        (before.st_size, before.st_mtime_ns, digest.hexdigest()),
-        payload_bytes // frame_bytes,
-    )
-
-
-def _read_only_wal_state(path: Path) -> _ReadOnlyWalState:
-    wal_path = _read_only_sidecar(path, "-wal")
-    shm_path = _read_only_sidecar(path, "-shm")
-    wal_exists = wal_path.exists()
-    shm_exists = shm_path.exists()
-    if not wal_exists and not shm_exists:
-        return _ReadOnlyWalState(False, False, None, None, None)
-    if wal_exists != shm_exists or not wal_path.is_file() or not shm_path.is_file():
-        raise sqlite3.OperationalError(
-            "read-only database has incomplete WAL sidecars"
-        )
-
-    try:
-        shm_stat = shm_path.stat()
-    except OSError as exc:
-        raise sqlite3.OperationalError(
-            "read-only database WAL shared memory could not be inspected safely"
-        ) from exc
-    if shm_stat.st_size < 32:
-        raise sqlite3.OperationalError(
-            "read-only database has incomplete WAL shared memory"
-        )
-
-    wal_signature, frame_count = _wal_signature_and_frames(wal_path)
-    return _ReadOnlyWalState(
-        True,
-        True,
-        wal_signature,
-        (shm_stat.st_mode, shm_stat.st_size),
-        frame_count,
-    )
-
-
-def _assert_read_only_wal_state(path: Path, expected: _ReadOnlyWalState) -> None:
-    try:
-        current = _read_only_wal_state(path)
-    except sqlite3.OperationalError as exc:
-        raise sqlite3.OperationalError(
-            "read-only database WAL state changed during open"
-        ) from exc
-    if current != expected:
-        raise sqlite3.OperationalError(
-            "read-only database WAL state changed during open"
-        )
-
-
 def connect(
     path: Path,
     read_only: bool = False,
@@ -1183,26 +1051,37 @@ def connect(
 ) -> sqlite3.Connection:
     path = Path(path)
     if read_only:
-        # ``mode=ro`` is important here: checking existence before opening is
-        # not enough because sqlite3 would otherwise create a missing file.
-        # ``query_only`` adds a second guard against accidental writes by an
-        # answer or inspection path.
-        # An active WAL must be opened without ``immutable=1`` so committed
-        # frames remain visible.  Immutable mode is reserved for a database
-        # with no WAL sidecars, where it avoids SQLite creating them.
-        wal_state = _read_only_wal_state(path)
-        query = "mode=ro" if wal_state.wal_exists else "mode=ro&immutable=1"
-        uri = f"{path.absolute().as_uri()}?{query}"
+        # SQLite can create or update WAL shared-memory state while opening a
+        # read-only connection.  Reject any sidecar before SQLite sees the
+        # database; immutable mode is safe only for a database with no WAL
+        # state at all.
+        sidecars = (
+            path.with_name(path.name + "-wal"),
+            path.with_name(path.name + "-shm"),
+        )
+        if any(sidecar.exists() or sidecar.is_symlink() for sidecar in sidecars):
+            raise sqlite3.OperationalError(
+                "read-only database has active or incomplete WAL sidecars"
+            )
+
+        uri = f"{path.absolute().as_uri()}?mode=ro&immutable=1"
         con = sqlite3.connect(uri, uri=True)
         con.row_factory = sqlite3.Row
         try:
-            _assert_read_only_wal_state(path, wal_state)
+            if any(
+                sidecar.exists() or sidecar.is_symlink() for sidecar in sidecars
+            ):
+                raise sqlite3.OperationalError(
+                    "read-only database WAL sidecars appeared during open"
+                )
             con.execute("PRAGMA foreign_keys=ON")
             con.execute("PRAGMA query_only=ON")
-            # Start the read transaction while the validated WAL snapshot is
-            # current.  Later callers see this same committed snapshot.
-            con.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
-            _assert_read_only_wal_state(path, wal_state)
+            if any(
+                sidecar.exists() or sidecar.is_symlink() for sidecar in sidecars
+            ):
+                raise sqlite3.OperationalError(
+                    "read-only database WAL sidecars appeared during open"
+                )
             return con
         except Exception:
             con.close()

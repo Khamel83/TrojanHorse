@@ -176,9 +176,7 @@ def test_read_only_wal_connect_does_not_mutate_a_read_only_database_directory(
     assert after_directory == before_directory
 
 
-def test_read_only_wal_connect_reads_committed_frames_without_new_sidecars(
-    tmp_path,
-):
+def test_read_only_wal_connect_rejects_active_sidecars_without_mutation(tmp_path):
     database = tmp_path / "state.sqlite"
     writer = connect(database)
     try:
@@ -195,35 +193,28 @@ def test_read_only_wal_connect_reads_committed_frames_without_new_sidecars(
             for suffix in ("-shm", "-wal")
         }
         assert all(sidecar.exists() for sidecar in sidecars)
-        before_names = {item.name for item in database.parent.iterdir()}
-        before_wal_size = next(
-            sidecar.stat().st_size
-            for sidecar in sidecars
-            if sidecar.name.endswith("-wal")
-        )
+        before_files = {
+            item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
+            for item in database.parent.iterdir()
+        }
         before_directory = (
             database.parent.stat().st_mode,
             database.parent.stat().st_mtime_ns,
         )
 
-        read_only = connect(database, read_only=True)
-        try:
-            assert read_only.execute(
-                "SELECT value FROM wal_visibility_probe"
-            ).fetchone()[0] == "visible"
-        finally:
-            read_only.close()
+        with pytest.raises(sqlite3.OperationalError, match="WAL"):
+            connect(database, read_only=True)
 
-        assert {item.name for item in database.parent.iterdir()} == before_names
-        assert next(
-            sidecar.stat().st_size
-            for sidecar in sidecars
-            if sidecar.name.endswith("-wal")
-        ) == before_wal_size
-        assert (
+        after_files = {
+            item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
+            for item in database.parent.iterdir()
+        }
+        after_directory = (
             database.parent.stat().st_mode,
             database.parent.stat().st_mtime_ns,
-        ) == before_directory
+        )
+        assert after_files == before_files
+        assert after_directory == before_directory
     finally:
         writer.close()
 

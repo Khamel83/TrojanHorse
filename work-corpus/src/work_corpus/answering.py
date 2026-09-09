@@ -32,6 +32,8 @@ _PHONE_RE = re.compile(
     r"|(?:\(\d{3}\)|\d{3})[\s.-]*\d{3}[\s.-]*\d{4}"
     r"|0\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
     r"|\d{2}[ \t.-]\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
+    r"|0[1-9]\d{9}"
+    r"|44[1-9]\d{9}"
     r")(?![\w])"
 )
 _REMOTE_URL_RE = re.compile(
@@ -42,39 +44,36 @@ _REMOTE_URL_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
-_PATH_TOKEN = r"[^\s<>\"'/,;!?\\:]+"
-# Keep the component non-greedy so a natural-language boundary can terminate
-# a spaced path before the rest of the answer prose.
-_PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*?"
-_PATH_PROSE_STOP = (
-    r"(?:and|or|but|then|while|after|before|approved|copied|kept|sent|"
-    r"shared|reviewed|opened|saved|from|to|for|with|on|in|at|as|the|a|an)\b"
-)
-_PATH_BOUNDARY = rf"(?=[,;.!?)]|$|[ \t]+{_PATH_PROSE_STOP})"
+# A path component may contain spaces.  A bounded two-word terminal covers
+# names such as ``/Users/Omar Smith`` and stops before a lowercase prose token
+# without a stop-word allowlist.  The single-token form also stops before the
+# next ordinary word, which keeps prose after a path out of the replacement.
+_PATH_TOKEN = r"[^\s<>\"'/,;!?\\:.]+(?:\.[^\s<>\"'/,;!?\\:.]+)*"
+_PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*"
 _PATH_TERMINAL = (
-    rf"(?:{_PATH_COMPONENT}\.[A-Za-z0-9]{{1,32}}"
-    rf"(?![A-Za-z0-9_-])|{_PATH_COMPONENT}{_PATH_BOUNDARY})"
+    rf"(?:"
+    rf"(?=[A-Z]){_PATH_TOKEN}[ \t]+(?=[A-Z0-9]){_PATH_TOKEN}"
+    rf"(?=$|[,;.!?)]|[ \t]+[a-z])"
+    rf"|{_PATH_TOKEN}(?=$|[,;.!?)]|[ \t]+(?=[A-Za-z0-9]))"
+    rf")"
 )
 _POSIX_PATH_RE = re.compile(
     rf"(?<![\w:])(?:"
     rf"/(?:{_PATH_COMPONENT}/)*{_PATH_TERMINAL}/?"
     rf"|/(?:{_PATH_COMPONENT}/)+"
-    rf")",
-    re.IGNORECASE,
+    rf")"
 )
 _WINDOWS_PATH_RE = re.compile(
     rf"(?<![\w])[A-Za-z]:[\\/](?:"
     rf"(?:{_PATH_COMPONENT}[\\/])*{_PATH_TERMINAL}[\\/]?"
     rf"|(?:{_PATH_COMPONENT}[\\/])+"
-    rf")",
-    re.IGNORECASE,
+    rf")"
 )
 _UNC_PATH_RE = re.compile(
     rf"(?<![\w])(?:\\\\|//)(?:"
     rf"(?:{_PATH_COMPONENT}[\\/])+{_PATH_TERMINAL}[\\/]?"
     rf"|(?:{_PATH_COMPONENT}[\\/])+"
-    rf")",
-    re.IGNORECASE,
+    rf")"
 )
 
 
