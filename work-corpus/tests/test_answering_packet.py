@@ -203,6 +203,76 @@ def test_remote_packet_redacts_trailing_unc_and_unprefixed_phone_forms_without_l
         assert sensitive not in prepared.packet
 
 
+def test_remote_packet_redacts_dotfile_paths_without_leaking_suffixes():
+    posix_ssh_path = "/Users/Omar/.ssh/id_rsa"
+    posix_env_path = "/tmp/.env"
+    windows_path = "C:\\Users\\Omar\\.ssh\\id_rsa"
+    unc_path = "\\\\server\\share\\.config\\settings.json"
+    search_result = {
+        "question": "Which Project Atlas files did Maya review?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f"Reviewed {posix_ssh_path}, {posix_env_path}, "
+                    f"{windows_path}, and {unc_path}. Project Atlas remains approved."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert "Project Atlas remains approved" in prepared.packet
+    for sensitive in (
+        posix_ssh_path,
+        posix_env_path,
+        windows_path,
+        unc_path,
+    ):
+        assert sensitive not in prepared.packet
+    for leaked_suffix in (
+        ".ssh/id_rsa",
+        ".env",
+        ".ssh\\id_rsa",
+        ".config\\settings.json",
+    ):
+        assert leaked_suffix not in prepared.packet
+
+
+def test_remote_packet_preserves_numeric_evidence_while_redacting_uk_phones():
+    timestamp = "2026090812"
+    ticket = "1234567890"
+    phones = (
+        "02079460958",
+        "01632960001",
+        "442079460958",
+        "441632960001",
+    )
+    search_result = {
+        "question": "What did Maya approve for Project Atlas?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f"Meeting timestamp {timestamp}; ticket {ticket}; "
+                    "calls "
+                    + "; ".join(phones)
+                    + ". Maya approved Project Atlas."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert timestamp in prepared.packet
+    assert ticket in prepared.packet
+    assert "Maya approved Project Atlas" in prepared.packet
+    for phone in phones:
+        assert phone not in prepared.packet
+
+
 def test_prepare_evidence_bounds_hits_snippets_and_total_packet():
     search_result = {
         "question": "Which Project Atlas notes mention Maya?",

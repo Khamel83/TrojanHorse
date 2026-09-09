@@ -29,11 +29,11 @@ _EMAIL_RE = re.compile(
 _PHONE_RE = re.compile(
     r"(?<![\w])(?:"
     r"\+\d{1,3}(?:[ \t().-]*\d){6,12}"
-    r"|(?:\(\d{3}\)|\d{3})[\s.-]*\d{3}[\s.-]*\d{4}"
+    r"|(?:\(\d{3}\)|\d{3})[\s.-]+\d{3}[\s.-]+\d{4}"
     r"|0\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
     r"|\d{2}[ \t.-]\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
-    r"|0[1-9]\d{9}"
-    r"|44[1-9]\d{9}"
+    r"|0[127]\d{9}"
+    r"|44[127]\d{9}"
     r")(?![\w])"
 )
 _REMOTE_URL_RE = re.compile(
@@ -48,7 +48,7 @@ _REMOTE_URL_RE = re.compile(
 # names such as ``/Users/Omar Smith`` and stops before a lowercase prose token
 # without a stop-word allowlist.  The single-token form also stops before the
 # next ordinary word, which keeps prose after a path out of the replacement.
-_PATH_TOKEN = r"[^\s<>\"'/,;!?\\:.]+(?:\.[^\s<>\"'/,;!?\\:.]+)*"
+_PATH_TOKEN = r"(?:\.+)?[^\s<>\"'/,;!?\\:.]+(?:\.[^\s<>\"'/,;!?\\:.]+)*"
 _PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*"
 _PATH_TERMINAL = (
     rf"(?:"
