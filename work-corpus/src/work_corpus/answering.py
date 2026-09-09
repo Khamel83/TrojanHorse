@@ -248,6 +248,46 @@ BackendMalformedError = CompletionResponseError
 BackendModelError = CompletionModelError
 
 
+def _call_backend_safely(
+    operation: Callable[[], Completion],
+    *,
+    timeout_message: str,
+    transport_message: str,
+    response_message: str,
+    model_message: str,
+) -> Completion:
+    """Run an adapter and expose no exception object from its dependencies."""
+    result: Optional[Completion] = None
+    failure: Optional[CompletionError] = None
+    try:
+        result = operation()
+    except (TimeoutError, socket.timeout, subprocess.TimeoutExpired):
+        failure = CompletionTimeoutError(timeout_message)
+    except CompletionTimeoutError:
+        failure = CompletionTimeoutError(timeout_message)
+    except CompletionModelError:
+        failure = CompletionModelError(model_message)
+    except CompletionResponseError:
+        failure = CompletionResponseError(response_message)
+    except CompletionTransportError:
+        failure = CompletionTransportError(transport_message)
+    except CompletionError:
+        failure = CompletionTransportError(transport_message)
+    except Exception:
+        failure = CompletionTransportError(transport_message)
+
+    if failure is not None:
+        # Raising after the except block prevents Python from retaining the
+        # dependency exception as ``__context__``.  The fresh exception also
+        # has no provider output or TimeoutExpired attributes.
+        failure.__cause__ = None
+        failure.__context__ = None
+        raise failure
+    if result is None:
+        raise CompletionTransportError(transport_message)
+    return result
+
+
 def _validate_timeout(value: Union[int, float], name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be a positive finite number")
@@ -350,6 +390,15 @@ def _allowed_citation_ids(allowed_citations: Any) -> set[str]:
     return result
 
 
+def _strict_object_pairs(pairs: List[tuple[str, Any]]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate object key")
+        result[key] = value
+    return result
+
+
 def parse_completion(
     text: str,
     allowed_citations: Any,
@@ -359,10 +408,14 @@ def parse_completion(
     """Parse one strict answer object without turning model text into evidence."""
     if not isinstance(text, str) or len(text) > MAX_COMPLETION_RESPONSE_CHARS:
         raise CompletionParseError("completion is too large")
+    parsed: Any = None
+    parse_failed = False
     try:
-        parsed = json.loads(text)
-    except (TypeError, ValueError) as exc:
-        raise CompletionParseError("completion is not valid JSON") from exc
+        parsed = json.loads(text, object_pairs_hook=_strict_object_pairs)
+    except (TypeError, ValueError):
+        parse_failed = True
+    if parse_failed:
+        raise CompletionParseError("completion is not valid JSON")
 
     if not isinstance(parsed, dict) or set(parsed) != {
         "answer",
@@ -402,55 +455,49 @@ def parse_completion(
     }
 
 
-def _packet_from_messages(
-    messages: Sequence[Mapping[str, str]],
-) -> Optional[Mapping[str, Any]]:
-    """Recover an evidence packet only when a caller supplied raw JSON data."""
-    for message in reversed(messages):
-        content = message.get("content") if isinstance(message, Mapping) else None
-        if not isinstance(content, str):
-            continue
-        try:
-            packet = json.loads(content)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(packet, Mapping) and isinstance(packet.get("evidence"), list):
-            return packet
-    return None
-
-
 class EvidenceOnlyBackend:
     """Format prepared evidence directly without invoking a model."""
 
     name = "evidence"
 
-    def __init__(self, prepared_evidence: Optional[PreparedEvidence] = None):
-        self.prepared_evidence = prepared_evidence
+    def __init__(
+        self,
+        prepared_evidence: Optional[
+            Union[PreparedEvidence, Mapping[str, AnswerEvidence]]
+        ] = None,
+        *,
+        citation_map: Optional[Mapping[str, AnswerEvidence]] = None,
+    ):
+        if prepared_evidence is not None and citation_map is not None:
+            raise TypeError("provide prepared evidence or citation_map, not both")
+        trusted = prepared_evidence if prepared_evidence is not None else citation_map
+        if trusted is None:
+            raise TypeError("prepared evidence or citation_map is required")
+        if isinstance(trusted, PreparedEvidence):
+            trusted_map = trusted.citation_map
+        elif isinstance(trusted, Mapping):
+            trusted_map = trusted
+        else:
+            raise TypeError("prepared evidence or citation_map is required")
+        if not all(
+            isinstance(citation_id, str)
+            and isinstance(evidence, AnswerEvidence)
+            for citation_id, evidence in trusted_map.items()
+        ):
+            raise TypeError("prepared evidence or citation_map is required")
+        self.citation_map = trusted_map
 
     def complete(
         self,
         messages: Sequence[Mapping[str, str]],
-        *,
-        prepared_evidence: Optional[PreparedEvidence] = None,
     ) -> Completion:
-        prepared = prepared_evidence or self.prepared_evidence
         entries: List[tuple[str, str]] = []
-        if prepared is not None:
-            for citation_id, evidence in prepared.citation_map.items():
-                snippet = str(evidence.packet_entry.get("snippet") or "").strip()
-                if snippet:
-                    entries.append((citation_id, snippet))
-        else:
-            packet = _packet_from_messages(_normalise_messages(messages))
-            if packet is not None:
-                for item in packet.get("evidence", []):
-                    if not isinstance(item, Mapping):
-                        continue
-                    citation_id = item.get("citation_id")
-                    snippet = item.get("snippet")
-                    if isinstance(citation_id, str) and isinstance(snippet, str):
-                        if snippet.strip():
-                            entries.append((citation_id, snippet.strip()))
+        # ``messages`` are intentionally ignored.  They may contain model or
+        # user text that resembles an evidence packet and is never trusted.
+        for citation_id, evidence in self.citation_map.items():
+            snippet = str(evidence.packet_entry.get("snippet") or "").strip()
+            if snippet:
+                entries.append((citation_id, snippet))
 
         citations = [citation_id for citation_id, _snippet in entries]
         if entries:
@@ -574,6 +621,37 @@ def _safe_metadata_value(value: Any) -> Any:
     return None
 
 
+_USAGE_COUNTER_KEYS = frozenset(
+    {
+        "input",
+        "output",
+        "total",
+        "input_tokens",
+        "output_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "prompt_eval_count",
+        "eval_count",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    }
+)
+
+
+def _usage_counters(value: Mapping[str, Any]) -> Dict[str, Union[int, float]]:
+    """Copy only known non-negative scalar usage counters."""
+    counters: Dict[str, Union[int, float]] = {}
+    for key in sorted(_USAGE_COUNTER_KEYS):
+        counter = value.get(key)
+        if isinstance(counter, bool) or not isinstance(counter, (int, float)):
+            continue
+        if not math.isfinite(float(counter)) or counter < 0:
+            continue
+        counters[key] = counter
+    return counters
+
+
 class OllamaBackend:
     """Call a loopback Ollama chat endpoint with bounded JSON prompts."""
 
@@ -594,6 +672,15 @@ class OllamaBackend:
         self._request_fn = request_fn or _default_ollama_request
 
     def complete(self, messages: Sequence[Mapping[str, str]]) -> Completion:
+        return _call_backend_safely(
+            lambda: self._complete(messages),
+            timeout_message="ollama timeout",
+            transport_message="ollama transport failure",
+            response_message="ollama response is malformed",
+            model_message="ollama model error",
+        )
+
+    def _complete(self, messages: Sequence[Mapping[str, str]]) -> Completion:
         bounded_messages = _bounded_messages(_normalise_messages(messages))
         payload: Dict[str, Any] = {
             "model": self.model,
@@ -608,24 +695,24 @@ class OllamaBackend:
                 payload,
                 self.timeout_seconds,
             )
-        except CompletionTimeoutError as exc:
-            raise CompletionTimeoutError("ollama timeout") from exc
-        except CompletionModelError as exc:
-            raise CompletionModelError("ollama model error") from exc
-        except CompletionResponseError as exc:
-            raise CompletionResponseError("ollama response is malformed") from exc
-        except CompletionTransportError as exc:
-            raise CompletionTransportError("ollama transport failure") from exc
-        except CompletionError as exc:
-            raise CompletionTransportError("ollama transport failure") from exc
-        except (TimeoutError, socket.timeout) as exc:
-            raise CompletionTimeoutError("ollama timeout") from exc
+        except CompletionTimeoutError:
+            raise CompletionTimeoutError("ollama timeout")
+        except CompletionModelError:
+            raise CompletionModelError("ollama model error")
+        except CompletionResponseError:
+            raise CompletionResponseError("ollama response is malformed")
+        except CompletionTransportError:
+            raise CompletionTransportError("ollama transport failure")
+        except CompletionError:
+            raise CompletionTransportError("ollama transport failure")
+        except (TimeoutError, socket.timeout):
+            raise CompletionTimeoutError("ollama timeout")
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (TimeoutError, socket.timeout)):
-                raise CompletionTimeoutError("ollama timeout") from exc
-            raise CompletionTransportError("ollama transport failure") from exc
-        except Exception as exc:
-            raise CompletionTransportError("ollama transport failure") from exc
+                raise CompletionTimeoutError("ollama timeout")
+            raise CompletionTransportError("ollama transport failure")
+        except Exception:
+            raise CompletionTransportError("ollama transport failure")
 
         data = _decode_json_response(response, backend="ollama")
         if data.get("error") is not None:
@@ -667,7 +754,8 @@ def _default_gateway_runner(
     return subprocess.run(
         list(command),
         input=prompt,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
         text=True,
         timeout=timeout_seconds,
         check=False,
@@ -700,10 +788,22 @@ def _runner_result(result: Any) -> tuple[int, str, str]:
         stdout = getattr(result, "stdout", "")
         stderr = getattr(result, "stderr", "")
 
+    if stdout is None:
+        stdout = ""
+    if stderr is None:
+        stderr = ""
     if isinstance(stdout, bytearray):
         stdout = bytes(stdout)
     if isinstance(stderr, bytearray):
         stderr = bytes(stderr)
+    if isinstance(stderr, bytes):
+        if len(stderr) > MAX_COMPLETION_RESPONSE_CHARS:
+            raise CompletionResponseError("gateway stderr exceeds the maximum size")
+    elif isinstance(stderr, str):
+        if len(stderr.encode("utf-8")) > MAX_COMPLETION_RESPONSE_CHARS:
+            raise CompletionResponseError("gateway stderr exceeds the maximum size")
+    else:
+        raise CompletionTransportError("gateway runner returned an invalid result")
     if isinstance(stdout, bytes):
         try:
             stdout = stdout.decode("utf-8")
@@ -742,6 +842,8 @@ def _gateway_completion(
     stdout: str,
 ) -> tuple[str, Mapping[str, Any]]:
     malformed_line = False
+    completion_text: Optional[str] = None
+    completion_metadata: Optional[Mapping[str, Any]] = None
     for line in stdout.splitlines():
         if not line.strip():
             continue
@@ -771,13 +873,18 @@ def _gateway_completion(
         if isinstance(message.get("id"), (str, int)):
             metadata["message_id"] = message["id"]
         if isinstance(message.get("usage"), Mapping):
-            metadata["usage"] = _safe_metadata_value(message["usage"])
+            usage = _usage_counters(message["usage"])
+            if usage:
+                metadata["usage"] = usage
         for key in ("finish_reason", "stop_reason"):
             if isinstance(message.get(key), (str, int, float, bool)):
                 metadata[key] = message[key]
-        return text, metadata
+        completion_text = text
+        completion_metadata = metadata
     if malformed_line:
         raise CompletionResponseError("gateway response is malformed")
+    if completion_text is not None and completion_metadata is not None:
+        return completion_text, completion_metadata
     raise CompletionResponseError("gateway response has no assistant message")
 
 
@@ -799,6 +906,19 @@ class GatewaySensitiveBackend:
         self._runner = runner or _default_gateway_runner
 
     def complete(self, messages: Sequence[Mapping[str, str]]) -> Completion:
+        return _call_backend_safely(
+            lambda: self._complete(messages),
+            timeout_message="gateway timeout",
+            transport_message=(
+                "gateway transport failure or process exit status was nonzero"
+            ),
+            response_message=(
+                "gateway response is malformed or stderr exceeded its bound"
+            ),
+            model_message="gateway model error",
+        )
+
+    def _complete(self, messages: Sequence[Mapping[str, str]]) -> Completion:
         prompt = _messages_prompt(messages)
         shell_script = (
             'source "$1"; '
@@ -814,18 +934,18 @@ class GatewaySensitiveBackend:
         ]
         try:
             result = self._runner(command, prompt, self.timeout_seconds)
-        except (TimeoutError, socket.timeout, subprocess.TimeoutExpired) as exc:
-            raise CompletionTimeoutError("gateway timeout") from exc
-        except CompletionTimeoutError as exc:
-            raise CompletionTimeoutError("gateway timeout") from exc
-        except CompletionResponseError as exc:
-            raise CompletionResponseError("gateway response is malformed") from exc
-        except CompletionTransportError as exc:
-            raise CompletionTransportError("gateway transport failure") from exc
-        except CompletionError as exc:
-            raise CompletionTransportError("gateway transport failure") from exc
-        except Exception as exc:
-            raise CompletionTransportError("gateway transport failure") from exc
+        except (TimeoutError, socket.timeout, subprocess.TimeoutExpired):
+            raise CompletionTimeoutError("gateway timeout")
+        except CompletionTimeoutError:
+            raise CompletionTimeoutError("gateway timeout")
+        except CompletionResponseError:
+            raise CompletionResponseError("gateway response is malformed")
+        except CompletionTransportError:
+            raise CompletionTransportError("gateway transport failure")
+        except CompletionError:
+            raise CompletionTransportError("gateway transport failure")
+        except Exception:
+            raise CompletionTransportError("gateway transport failure")
 
         code, stdout, _stderr = _runner_result(result)
         if code != 0:

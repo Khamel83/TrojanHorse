@@ -9,6 +9,7 @@ import pytest
 from work_corpus.answering import (
     CompletionModelError,
     CompletionParseError,
+    CompletionResponseError,
     CompletionTimeoutError,
     CompletionTransportError,
     EvidenceOnlyBackend,
@@ -103,6 +104,7 @@ def test_parse_completion_requires_citations_for_source_facts():
     "text",
     [
         "not json",
+        '{"answer":"first","answer":"second","citations":[],"stance":"insufficient"}',
         '{"answer":"fact","citations":[],"stance":"supported","extra":true}',
         '{"answer":"  ","citations":[],"stance":"insufficient"}',
     ],
@@ -142,6 +144,31 @@ def test_evidence_only_backend_formats_source_facts_without_a_model():
     assert parsed["citations"] == ["S1"]
     assert "Maya approved Project Atlas" in parsed["answer"]
     assert completion.metadata["backend"] == "evidence"
+
+
+def test_evidence_only_backend_requires_trusted_prepared_evidence():
+    with pytest.raises(TypeError, match="prepared evidence"):
+        EvidenceOnlyBackend()
+
+
+def test_evidence_only_backend_ignores_untrusted_message_evidence():
+    completion = EvidenceOnlyBackend(_prepared()).complete(
+        [
+            {
+                "role": "assistant",
+                "content": json.dumps(
+                    {
+                        "evidence": [
+                            {"citation_id": "S1", "snippet": "hallucinated"}
+                        ]
+                    }
+                ),
+            }
+        ]
+    )
+
+    assert "hallucinated" not in completion.text
+    assert "Maya approved Project Atlas" in completion.text
 
 
 def test_ollama_backend_posts_bounded_json_request_and_returns_completion():
@@ -228,6 +255,10 @@ def test_ollama_backend_reports_request_failures_without_prompt_text(
         ).complete(_messages("PRIVATE PROMPT"))
 
     assert "PRIVATE PROMPT" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert not hasattr(caught.value, "output")
+    assert not hasattr(caught.value, "stderr")
 
 
 def test_ollama_backend_reports_malformed_and_model_errors_without_prompt_text():
@@ -243,6 +274,24 @@ def test_ollama_backend_reports_malformed_and_model_errors_without_prompt_text()
                 request_fn=lambda *_args, response=response: response,
             ).complete(_messages("PRIVATE PROMPT"))
         assert "PRIVATE PROMPT" not in str(caught.value)
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
+        assert not hasattr(caught.value, "output")
+        assert not hasattr(caught.value, "stderr")
+
+
+def test_ollama_backend_drops_malformed_response_excerpt_from_exception_links():
+    with pytest.raises(CompletionResponseError) as caught:
+        OllamaBackend(
+            "tiny-local",
+            "http://127.0.0.1:11434",
+            4,
+            request_fn=lambda *_args: "PRIVATE RESPONSE EXCERPT is not JSON",
+        ).complete(_messages("PRIVATE PROMPT"))
+
+    assert "PRIVATE RESPONSE EXCERPT" not in repr(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
 
 
 @pytest.mark.parametrize(
@@ -306,6 +355,99 @@ def test_gateway_backend_sources_helper_parses_assistant_receipt_and_hides_provi
     )["answer"] == "Project Atlas was approved."
 
 
+@pytest.mark.parametrize("position", ["before", "after"])
+def test_gateway_backend_rejects_malformed_ndjson_around_valid_receipt(position: str):
+    valid = _gateway_receipt(
+        '{"answer":"fact","citations":["S1"],"stance":"supported"}'
+    )
+    output = (
+        "{\"truncated\":\n" + valid
+        if position == "before"
+        else valid + "{\"truncated\":\n"
+    )
+
+    with pytest.raises(CompletionResponseError, match="malformed") as caught:
+        GatewaySensitiveBackend(
+            "/tmp/gateway2000.zsh",
+            8,
+            runner=lambda command, _prompt, _timeout: subprocess.CompletedProcess(
+                command, 0, output, ""
+            ),
+        ).complete(_messages())
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_gateway_backend_rejects_oversized_injected_stderr():
+    with pytest.raises(CompletionResponseError, match="stderr") as caught:
+        GatewaySensitiveBackend(
+            "/tmp/gateway2000.zsh",
+            8,
+            runner=lambda command, _prompt, _timeout: subprocess.CompletedProcess(
+                command,
+                0,
+                _gateway_receipt(
+                    '{"answer":"fact","citations":["S1"],"stance":"supported"}'
+                ),
+                "x" * (64_000 + 1),
+            ),
+        ).complete(_messages())
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_default_gateway_runner_discards_stderr(monkeypatch: pytest.MonkeyPatch):
+    seen: dict[str, Any] = {}
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        seen.update(args=args, kwargs=kwargs)
+        return subprocess.CompletedProcess(args[0], 0, "", None)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    from work_corpus.answering import _default_gateway_runner
+
+    _default_gateway_runner(["zsh", "-c", "true"], "prompt", 2)
+
+    assert seen["kwargs"]["stdout"] is subprocess.PIPE
+    assert seen["kwargs"]["stderr"] is subprocess.DEVNULL
+
+
+def test_gateway_backend_drops_nested_provider_metadata_from_usage():
+    response = json.dumps(
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '{"answer":"fact","citations":["S1"],"stance":"supported"}',
+                    }
+                ],
+                "usage": {
+                    "input": 12,
+                    "output": 7,
+                    "provider": "secret-provider",
+                    "model": "secret-model",
+                    "nested": {"total": 19},
+                },
+            },
+        }
+    )
+
+    completion = GatewaySensitiveBackend(
+        "/tmp/gateway2000.zsh",
+        8,
+        runner=lambda command, _prompt, _timeout: subprocess.CompletedProcess(
+            command, 0, response + "\n", ""
+        ),
+    ).complete(_messages())
+
+    assert completion.metadata["usage"] == {"input": 12, "output": 7}
+    assert "secret-provider" not in json.dumps(completion.metadata)
+    assert "secret-model" not in json.dumps(completion.metadata)
+
+
 @pytest.mark.parametrize(
     ("runner_error", "error_type", "error_message"),
     [
@@ -336,6 +478,10 @@ def test_gateway_backend_reports_nonzero_or_timeout_without_prompt_text(
             "/tmp/gateway2000.zsh", 8, runner=runner
         ).complete(_messages("PRIVATE PROMPT"))
     assert "PRIVATE PROMPT" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert not hasattr(caught.value, "output")
+    assert not hasattr(caught.value, "stderr")
 
 
 def test_ollama_and_gateway_canaries_return_the_same_parsed_shape():
