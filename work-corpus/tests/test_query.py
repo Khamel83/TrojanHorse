@@ -350,6 +350,36 @@ def test_query_rebuild_only_scrubs_rows_with_sensitive_markers(
     assert seen == ["api_key=secret-value"]
 
 
+def test_search_can_skip_index_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    con = connect(tmp_path / "skip-rebuild.sqlite")
+    try:
+        _add_source(
+            con,
+            tmp_path,
+            name="skip-rebuild.md",
+            scope="Work",
+            text="skip-rebuild-marker",
+        )
+
+        def fail_rebuild(_con):
+            raise AssertionError("index rebuild should be disabled")
+
+        monkeypatch.setattr(query_module, "rebuild_search_index", fail_rebuild)
+        result = search(
+            con,
+            "skip-rebuild-marker",
+            raw_fallback=False,
+            rebuild_index=False,
+        )
+    finally:
+        con.close()
+
+    assert result["result_count"] == 1
+    assert result["results"][0]["label"] == "canonical"
+
+
 def test_search_applies_limit_before_materializing_common_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

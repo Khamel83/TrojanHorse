@@ -1046,9 +1046,27 @@ def _migrate_mcp_items(con: sqlite3.Connection) -> None:
 
 def connect(
     path: Path,
+    read_only: bool = False,
     *,
     skip_classifications: Optional[Iterable[str]] = None,
 ) -> sqlite3.Connection:
+    path = Path(path)
+    if read_only:
+        # ``mode=ro`` is important here: checking existence before opening is
+        # not enough because sqlite3 would otherwise create a missing file.
+        # ``query_only`` adds a second guard against accidental writes by an
+        # answer or inspection path.
+        uri = f"{path.absolute().as_uri()}?mode=ro"
+        con = sqlite3.connect(uri, uri=True)
+        con.row_factory = sqlite3.Row
+        try:
+            con.execute("PRAGMA foreign_keys=ON")
+            con.execute("PRAGMA query_only=ON")
+            return con
+        except Exception:
+            con.close()
+            raise
+
     ensure_dir(path.parent)
     con = sqlite3.connect(str(path))
     con.row_factory = sqlite3.Row

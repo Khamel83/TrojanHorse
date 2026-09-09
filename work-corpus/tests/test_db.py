@@ -91,6 +91,40 @@ def test_schema_contains_provenance_tables_and_fts(tmp_path):
         con.close()
 
 
+def test_read_only_connect_requires_an_existing_database(tmp_path):
+    database = tmp_path / "missing" / "state.sqlite"
+
+    with pytest.raises(sqlite3.OperationalError):
+        connect(database, read_only=True)
+
+    assert not database.exists()
+    assert not database.parent.exists()
+
+
+def test_read_only_connect_preserves_schema_and_rejects_mutation(tmp_path):
+    database = tmp_path / "state.sqlite"
+    con = connect(database)
+    con.close()
+    before = database.read_bytes()
+
+    read_only = connect(database, read_only=True)
+    try:
+        assert isinstance(read_only, sqlite3.Connection)
+        assert isinstance(
+            read_only.execute("SELECT 1 AS value").fetchone(), sqlite3.Row
+        )
+        assert read_only.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            read_only.execute(
+                "INSERT INTO schema_meta (schema_version, migrated_at) "
+                "VALUES (999, 'test')"
+            )
+    finally:
+        read_only.close()
+
+    assert database.read_bytes() == before
+
+
 def test_schema_has_no_email_career_claim_or_decision_table(tmp_path):
     con = connect(tmp_path / "state.sqlite")
     try:

@@ -869,6 +869,7 @@ def search(
     limit: int = DEFAULT_LIMIT,
     raw_fallback: bool = True,
     diagnostic: bool = False,
+    rebuild_index: bool = True,
 ) -> Dict[str, Any]:
     """Search local evidence in exact, FTS, relationship, then raw order.
 
@@ -884,7 +885,10 @@ def search(
         raise QueryValidationError("limit must be a positive integer")
 
     # Keep existing derived FTS rows safe before either MATCH or display.
-    rebuild_search_index(con)
+    # Read-only answer paths can rely on ingestion-time scrubbing and avoid
+    # attempting a derived-state write.
+    if rebuild_index:
+        rebuild_search_index(con)
 
     hits: List[Dict[str, Any]] = []
     hits.extend(
