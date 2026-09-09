@@ -136,7 +136,7 @@ def test_remote_packet_redacts_non_http_urls_spaced_paths_and_international_phon
                 1,
                 snippet=(
                     "Maya and Omar approved Project Atlas. Visit "
-                    "www.example.com/private and ftp://private.example/file; "
+                    "www.example.com/private and ftp://private.example/file.sqlite; "
                     f"POSIX {posix_path}; Windows {windows_path}; "
                     "call +44 20 7946 0958 or +61 2 9374 4000."
                 ),
@@ -153,7 +153,7 @@ def test_remote_packet_redacts_non_http_urls_spaced_paths_and_international_phon
     assert packet["evidence"][0]["locator"] == "line:11"
     for sensitive in (
         "www.example.com/private",
-        "ftp://private.example/file",
+        "ftp://private.example/file.sqlite",
         posix_path,
         windows_path,
         "+44 20 7946 0958",
@@ -346,6 +346,51 @@ def test_remote_packet_replaces_complete_spaced_database_and_dotfile_paths():
         "settings.json",
     ):
         assert leaked_suffix not in prepared.packet
+
+
+def test_remote_packet_replaces_lowercase_spaced_absolute_database_and_dotfile_paths():
+    paths = (
+        "/private/tmp/my db.sqlite",
+        "/private/tmp/my .env",
+        r"C:\tmp\my db.sqlite",
+        r"C:\tmp\my .env",
+        r"\\server\shared folder\my db.sqlite",
+        r"\\server\shared folder\my .env",
+    )
+    search_result = {
+        "question": "Which records were approved?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f'Quoted "{paths[0]}": "{paths[1]}": '
+                    f'"{paths[2]}": "{paths[3]}": '
+                    f'"{paths[4]}": "{paths[5]}": '
+                    f"Adjacent {paths[0]} {paths[1]} {paths[2]} "
+                    f"{paths[3]} {paths[4]} {paths[5]}. "
+                    "Project Atlas remains approved."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert "Project Atlas remains approved" in prepared.packet
+    for path in paths:
+        assert path not in prepared.packet
+    for leaked_component in (
+        "private",
+        "tmp",
+        "my",
+        "db.sqlite",
+        ".sqlite",
+        ".env",
+        "server",
+        "shared folder",
+        "folder",
+    ):
+        assert leaked_component not in prepared.packet
 
 
 def test_remote_packet_does_not_redact_ordinary_words_for_short_provenance_ids():

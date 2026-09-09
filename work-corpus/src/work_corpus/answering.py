@@ -120,6 +120,21 @@ _UNC_PATH_RE = re.compile(
     rf"|(?:{_PATH_COMPONENT}[\\/])+"
     rf")"
 )
+# Match an absolute path through a dotfile or extension before URL redaction
+# can mistake the final component for a hostname.  The lazy body ends at the
+# first bounded filename boundary, preserving prose after the path.
+_SPACED_ABSOLUTE_PATH_BODY = r"[^<>\"':,;!?)\r\n]"
+_SPACED_ABSOLUTE_PATH_RE = re.compile(
+    rf"(?:"
+    rf"(?<![\w:/\\])/{_SPACED_ABSOLUTE_PATH_BODY}*?"
+    rf"\.[A-Za-z0-9](?:[A-Za-z0-9_-]*\.)*[A-Za-z0-9_-]*"
+    rf"|(?<![\w])[A-Za-z]:[\\/]{_SPACED_ABSOLUTE_PATH_BODY}*?"
+    rf"\.[A-Za-z0-9](?:[A-Za-z0-9_-]*\.)*[A-Za-z0-9_-]*"
+    rf"|(?<![\w:/\\])(?:\\\\|//){_SPACED_ABSOLUTE_PATH_BODY}*?"
+    rf"\.[A-Za-z0-9](?:[A-Za-z0-9_-]*\.)*[A-Za-z0-9_-]*"
+    rf")(?=$|[\s<>\"':,;!?)]|\.)",
+    re.IGNORECASE,
+)
 _PATH_REDACTION_SUFFIX_RE = re.compile(
     r"\[REDACTED_PATH\](?:(?:[\\/]|\.)(?:[^\s<>\"':,;!?)])+)+"
 )
@@ -1118,6 +1133,10 @@ def _remote_text(
     text = redact_snippet(original)
     if text != original:
         findings.append(f"{citation_id}:{field}:url_or_secret")
+
+    if _SPACED_ABSOLUTE_PATH_RE.search(text):
+        text = _SPACED_ABSOLUTE_PATH_RE.sub("[REDACTED_PATH]", text)
+        findings.append(f"{citation_id}:{field}:path")
 
     remote_url_text = _REMOTE_URL_RE.sub("[REDACTED_URL]", text)
     if remote_url_text != text:
