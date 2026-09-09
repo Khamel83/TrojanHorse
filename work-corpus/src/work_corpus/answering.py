@@ -29,12 +29,17 @@ _EMAIL_RE = re.compile(
 _PHONE_RE = re.compile(
     r"(?<![\w])(?:"
     r"\+\d{1,3}(?:[ \t().-]*\d){6,12}"
-    r"|(?:\(\d{3}\)|\d{3})[\s.-]+\d{3}[\s.-]+\d{4}"
+    r"|(?:\(\d{3}\)[\s.-]*|\d{3}[\s.-]+)\d{3}[\s.-]+\d{4}"
     r"|0\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
     r"|\d{2}[ \t.-]\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
-    r"|0[127]\d{9}"
-    r"|44[127]\d{9}"
     r")(?![\w])"
+)
+_COMPACT_UK_PHONE_RE = r"(?:0[127]\d{9}|44[127]\d{9})"
+_COMPACT_UK_PHONE_CONTEXT_RE = re.compile(
+    rf"(?P<context>\b(?:calls?|phones?|tel|mobile|contact|number)\b"
+    rf"(?:[ \t]*(?:the|is|at|us|me|number)\b)*[ \t:.-]*?)"
+    rf"(?P<number>{_COMPACT_UK_PHONE_RE})(?![\w])",
+    re.IGNORECASE,
 )
 _REMOTE_URL_RE = re.compile(
     r"(?<![@\w./\\:-])(?:"
@@ -53,8 +58,8 @@ _PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*"
 _PATH_TERMINAL = (
     rf"(?:"
     rf"(?=[A-Z]){_PATH_TOKEN}[ \t]+(?=[A-Z0-9]){_PATH_TOKEN}"
-    rf"(?=$|[,;.!?)]|[ \t]+[a-z])"
-    rf"|{_PATH_TOKEN}(?=$|[,;.!?)]|[ \t]+(?=[A-Za-z0-9]))"
+    rf"(?=$|[,;.!?)]|[\"']|:|[ \t]+[a-z])"
+    rf"|{_PATH_TOKEN}(?=$|[,;.!?)]|[\"']|:|[ \t]+(?=[A-Za-z0-9]))"
     rf")"
 )
 _POSIX_PATH_RE = re.compile(
@@ -287,6 +292,14 @@ def _remote_text(
         if pattern.search(text):
             text = pattern.sub("[REDACTED_{}]".format(kind.upper()), text)
             findings.append(f"{citation_id}:{field}:{kind}")
+
+    contextual_phone_text = _COMPACT_UK_PHONE_CONTEXT_RE.sub(
+        lambda match: f"{match.group('context')}[REDACTED_PHONE]",
+        text,
+    )
+    if contextual_phone_text != text:
+        text = contextual_phone_text
+        findings.append(f"{citation_id}:{field}:phone")
 
     for sensitive in sorted(
         {str(item) for item in known_sensitive if item},

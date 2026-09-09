@@ -256,8 +256,7 @@ def test_remote_packet_preserves_numeric_evidence_while_redacting_uk_phones():
                 1,
                 snippet=(
                     f"Meeting timestamp {timestamp}; ticket {ticket}; "
-                    "calls "
-                    + "; ".join(phones)
+                    + "; ".join(f"call {phone}" for phone in phones)
                     + ". Maya approved Project Atlas."
                 ),
             )
@@ -270,6 +269,77 @@ def test_remote_packet_preserves_numeric_evidence_while_redacting_uk_phones():
     assert ticket in prepared.packet
     assert "Maya approved Project Atlas" in prepared.packet
     for phone in phones:
+        assert phone not in prepared.packet
+
+
+def test_remote_packet_redacts_quoted_and_colon_terminated_dotfile_paths():
+    posix_path = "/Users/Omar/.ssh/id_rsa"
+    windows_path = "C:\\Users\\Omar\\.ssh\\id_rsa"
+    unc_path = "\\\\server\\share\\.config\\settings.json"
+    search_result = {
+        "question": "Which Project Atlas files did Maya review?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f'Quoted POSIX "{posix_path}"; '
+                    f'quoted Windows "{windows_path}"; '
+                    f'quoted UNC "{unc_path}". '
+                    f"Colon POSIX: {posix_path}: "
+                    f"Windows: {windows_path}: UNC: {unc_path}: "
+                    "Project Atlas remains approved."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert "Quoted POSIX" in prepared.packet
+    assert "Project Atlas remains approved" in prepared.packet
+    for sensitive in (posix_path, windows_path, unc_path):
+        assert sensitive not in prepared.packet
+    for leaked_suffix in ("id_rsa", ".env", "settings.json"):
+        assert leaked_suffix not in prepared.packet
+
+
+def test_remote_packet_uses_context_for_compact_uk_phones():
+    ticket = "07123456789"
+    timestamp = "441234567890"
+    contextual_phones = (
+        "02079460958",
+        "01632960001",
+        "442079460958",
+        "441632960001",
+    )
+    us_phone = "(415)555-2671"
+    search_result = {
+        "question": "What did Maya approve for Project Atlas?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f"Ticket {ticket}; timestamp {timestamp}; "
+                    "call "
+                    + contextual_phones[0]
+                    + "; phone "
+                    + contextual_phones[1]
+                    + "; tel "
+                    + contextual_phones[2]
+                    + "; mobile "
+                    + contextual_phones[3]
+                    + f"; US {us_phone}. Maya approved Project Atlas."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert ticket in prepared.packet
+    assert timestamp in prepared.packet
+    assert "Maya approved Project Atlas" in prepared.packet
+    for phone in (*contextual_phones, us_phone):
         assert phone not in prepared.packet
 
 
