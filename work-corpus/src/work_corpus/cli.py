@@ -9,6 +9,15 @@ import time
 import traceback
 from typing import Any, Dict, Optional
 
+from .answering import (
+    DEFAULT_ANSWER_TIMEOUT_SECONDS,
+    DEFAULT_GATEWAY_HELPER,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_URL,
+    GatewaySensitiveBackend,
+    OllamaBackend,
+    answer as answer_question,
+)
 from .config import Config, load_config
 from .db import connect, recover_stale_runs
 from .doctor import doctor
@@ -168,6 +177,87 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Inspect excluded scopes locally and label them excluded_scope.",
     )
+
+    answer_parser = sub.add_parser(
+        "answer",
+        help="Answer one question from the local corpus without maintenance writes.",
+    )
+    answer_parser.add_argument("question", nargs="+", help="Question to answer.")
+    answer_parser.add_argument(
+        "--backend",
+        choices=("evidence", "ollama", "g2k-sensitive"),
+        default="evidence",
+    )
+    answer_parser.add_argument(
+        "--allow-sensitive-remote",
+        action="store_true",
+        help="Authorize the g2k-sensitive backend for this request.",
+    )
+    answer_parser.add_argument("--model", "--ollama-model", dest="model", default=DEFAULT_OLLAMA_MODEL)
+    answer_parser.add_argument(
+        "--ollama-url",
+        "--ollama-base-url",
+        "--base-url",
+        dest="ollama_url",
+        default=DEFAULT_OLLAMA_URL,
+        help="Loopback Ollama URL.",
+    )
+    answer_parser.add_argument(
+        "--timeout",
+        "--timeout-seconds",
+        dest="timeout",
+        type=float,
+        default=DEFAULT_ANSWER_TIMEOUT_SECONDS,
+    )
+    answer_parser.add_argument("--limit", type=int, default=8)
+    answer_parser.add_argument(
+        "--scope",
+        choices=("All", "Work"),
+        default="All",
+    )
+    answer_parser.add_argument(
+        "--gateway-helper",
+        type=Path,
+        default=Path(DEFAULT_GATEWAY_HELPER),
+        help="Sourced Gateway2000 shell helper path.",
+    )
+
+    compare_parser = sub.add_parser(
+        "answer-compare",
+        help="Compare local evidence with the explicitly authorized sensitive route.",
+    )
+    compare_parser.add_argument("question", nargs="+", help="Question to compare.")
+    compare_parser.add_argument(
+        "--allow-sensitive-remote",
+        action="store_true",
+        help="Required authorization for the g2k-sensitive route.",
+    )
+    compare_parser.add_argument("--model", "--ollama-model", dest="model", default=DEFAULT_OLLAMA_MODEL)
+    compare_parser.add_argument(
+        "--ollama-url",
+        "--ollama-base-url",
+        "--base-url",
+        dest="ollama_url",
+        default=DEFAULT_OLLAMA_URL,
+    )
+    compare_parser.add_argument(
+        "--timeout",
+        "--timeout-seconds",
+        dest="timeout",
+        type=float,
+        default=DEFAULT_ANSWER_TIMEOUT_SECONDS,
+    )
+    compare_parser.add_argument("--limit", type=int, default=8)
+    compare_parser.add_argument(
+        "--scope",
+        choices=("All", "Work"),
+        default="All",
+    )
+    compare_parser.add_argument(
+        "--gateway-helper",
+        type=Path,
+        default=Path(DEFAULT_GATEWAY_HELPER),
+    )
     sub.add_parser("mcp-import", help="Import Granola/Wispr Flow dumps.")
     sub.add_parser(
         "granola-progress",
@@ -205,10 +295,91 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _completion_backend_for_args(args: Any) -> Optional[Any]:
+    if args.backend == "evidence":
+        return None
+    if args.backend == "ollama":
+        return OllamaBackend(args.model, args.ollama_url, args.timeout)
+    return GatewaySensitiveBackend(args.gateway_helper.expanduser(), args.timeout)
+
+
+def _run_read_only_answer(args: Any, root: Path) -> int:
+    """Run answer commands without bootstrap, pipeline rows, or DB writes."""
+    con = None
+    try:
+        if args.command == "answer" and (
+            args.backend == "g2k-sensitive" and not args.allow_sensitive_remote
+        ):
+            raise ValueError(
+                "g2k-sensitive backend requires --allow-sensitive-remote"
+            )
+        if args.command == "answer-compare" and not args.allow_sensitive_remote:
+            raise ValueError("answer-compare requires --allow-sensitive-remote")
+        config = load_config(root)
+        con = connect(
+            config.state_dir / "work_corpus.sqlite",
+            read_only=True,
+        )
+        question = " ".join(args.question)
+        if args.command == "answer":
+            result = answer_question(
+                con,
+                question,
+                backend=args.backend,
+                scope=args.scope,
+                limit=args.limit,
+                completion_backend=_completion_backend_for_args(args),
+                allow_sensitive_remote=args.allow_sensitive_remote,
+            )
+        else:
+            local = answer_question(
+                con,
+                question,
+                backend="evidence",
+                scope=args.scope,
+                limit=args.limit,
+            )
+            remote = answer_question(
+                con,
+                question,
+                backend="g2k-sensitive",
+                scope=args.scope,
+                limit=args.limit,
+                completion_backend=GatewaySensitiveBackend(
+                    args.gateway_helper.expanduser(),
+                    args.timeout,
+                ),
+                allow_sensitive_remote=True,
+            )
+            result = {
+                "question": question,
+                "status": "compared",
+                "answer_kind": "comparison",
+                "local": local,
+                "remote": remote,
+                "packet_sha256": remote.get("packet_sha256"),
+                "warnings": list(
+                    dict.fromkeys(
+                        [*local.get("warnings", []), *remote.get("warnings", [])]
+                    )
+                ),
+            }
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return 0
+    except Exception as exc:
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if con is not None:
+            con.close()
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()
+    if args.command in {"answer", "answer-compare"}:
+        return _run_read_only_answer(args, root)
     config = load_config(root)
     bootstrap(config)
     con = connect(
