@@ -1,12 +1,34 @@
 # Local Work Corpus TODO
 
-Reviewed handoff for a clean Luna session. User approved both milestones in this
-order. Antigravity Opus 4.6 Thinking approved the supplied plan; its required
-index-API clarification is applied. The subsequent user-approved unified-corpus
-policy pass is also complete: the default query includes all nonblank parseable
-sources, original labels remain provenance, and no grouped review rows remain
-pending. Checked items below record verified work.
-The residual scope is summarized in [Remaining Work After Ingestion](docs/REMAINING_WORK.md).
+Updated: 2026-09-08. Reconciled the continuation handoff with repository docs
+after [Gemini 3.8 Flash High review](docs/superpowers/reviews/2026-09-08-todo-gemini-review.md)
+(verdict: APPROVE). This was a text-only documentation review; ingestion,
+runtime acceptance, and remote verification were not repeated.
+
+Ingestion, exact search, deterministic organization, and canonical Mac delta
+maintenance are complete at delivered commit
+`b8f08ad92ab8b95de7e2a5cc48947b5857a53237`. The handoff reports that
+`origin/main` matched that commit. Counts and verification results below are
+receipts from that acceptance checkpoint, not freshly measured totals.
+
+No ingestion blocker or mandatory historical review queue remains. The default
+query includes all nonblank parseable sources and preserves original labels as
+provenance. See [Remaining Work](docs/REMAINING_WORK.md),
+[Corpus Status](docs/LOCAL_WORK_CORPUS_STATUS.md),
+[Audit](docs/TROJAN_HORSE_AUDIT.md), and [Operations](docs/OPERATIONS.md).
+
+## Optional next work — not authorized for implementation by this update
+
+- [ ] If requested, design a local answer-synthesis/API/UI layer over existing
+  exact search and source-backed views. Keep raw text local, preserve source
+  locators in every answer, and reuse the existing corpus without a full copy.
+- [ ] If useful after the core views are used, refine the 48 generic topic labels,
+  canonical people/organization aliases, and 52 retained Zoom linkage states.
+  These accepted states do not reopen ingestion or require bulk manual review.
+- [ ] Consider semantic ranking only as a later optional refinement under the
+  same local-data boundary.
+
+## Completed work — historical acceptance receipts
 
 The approved full-scale completion design and implementation plan are now
 recorded in [the canonical completion spec](docs/superpowers/specs/2026-09-07-canonical-work-corpus-completion.md)
@@ -20,7 +42,7 @@ and [review](docs/superpowers/reviews/2026-09-06-corpus-completion-opus-review.m
 The adaptive throughput amendment is recorded in
 [its implementation plan](docs/superpowers/plans/2026-09-06-granola-adaptive-batching.md).
 The one-time Granola REST archive gate is now complete; the MCP UUID feed is
-retained as a separate shadow diagnostic. Checked items below have current
+retained as a separate shadow diagnostic. Checked items below have acceptance-checkpoint
 evidence, and the original completed Tasks 0–9 and historical gates remain documented in
 [the original plan](docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md).
 
@@ -163,8 +185,6 @@ the completion path.
   `~/Library/LaunchAgents/com.khamel83.work-corpus-granola-delta.plist` and
   its supervised first run exited 0 with a persisted checkpoint. The Linux
   systemd files remain optional templates for a host containing the corpus.
-- [ ] Optionally refine generic topic labels, canonical people/organization
-  aliases, and retained Zoom linkage states after the core views are usable.
 
 ### Owner input required to finish the product
 
@@ -184,12 +204,27 @@ structured decision feature development, automatic historical task backfill and
 polished career-document generation remain outside this handoff. Career evidence
 continues as a derived use of the same source-backed corpus.
 
-## Start Luna with this
+## Continuation instructions
 
-Execute TODO.md and its reviewed completion handoff in order. Finish ingestion and
-verify search first, then organize entities, relationships and supported tasks.
-Start by controlling the existing heartbeat and verifying saved captures actually
-reach inventory, import and search. Complete locally actionable work, apply the
-approved unified-corpus first pass, update docs, and verify the authorized push.
-Read AGENTS.md and actual CLI/API signatures; preserve unrelated files and raw
-evidence.
+Read this checklist and the canonical docs above. Preserve completed ingestion
+and organization gates. Start new product work only when requested; the optional
+assistant layer is the remaining substantive product edge.
+
+Use the installed `com.khamel83.work-corpus-granola-delta` LaunchAgent for
+bounded Granola maintenance. At the acceptance checkpoint it ran at load and
+every 300 seconds with last observed exit code 0. Changed-note polls append one
+mode-0600 raw capture and run six local stages. Overlap-only polls record a poll
+ID, retain the previous capture path, append no raw file, and skip the rebuild.
+The job retrieves its secret at runtime through the homelab broker over SSH.
+
+Do not run another historical Granola full pull, recreate the old MCP heartbeat
+to close ingestion, or create another full corpus copy. Scan the entire corpus
+with raw verification only when a fresh preservation receipt is needed. Preserve
+older overlap captures as valid raw evidence. Keep the full corpus on the Mac
+and preserve unrelated tracked edits and untracked bootstrap/corpus material.
+Provider write-back remains outside scope.
+
+The delivered acceptance included 200 passing tests, Ruff, compilation, shell
+syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
+overlap-only poll with no append or rebuild. Recheck only the layers affected by
+future changes; do not present these historical results as new test runs.
