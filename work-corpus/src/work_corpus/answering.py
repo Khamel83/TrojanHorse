@@ -295,6 +295,17 @@ class CompletionModelError(CompletionError):
 class CompletionParseError(CompletionError):
     """A model completion did not satisfy the strict answer contract."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        invalid_citations: Sequence[str] = (),
+    ) -> None:
+        super().__init__(message)
+        rejected = tuple(str(value) for value in invalid_citations)
+        self.invalid_citations = rejected
+        self.rejected_citation_ids = rejected
+
 
 # Friendly aliases allow callers to use either the completion-oriented names
 # above or the shorter backend names without creating a second error taxonomy.
@@ -494,8 +505,12 @@ def parse_completion(
         raise CompletionParseError("duplicate citation IDs are not allowed")
 
     allowed = _allowed_citation_ids(allowed_citations)
-    if any(citation not in allowed for citation in citations):
-        raise CompletionParseError("unknown citation ID")
+    rejected_citations = [citation for citation in citations if citation not in allowed]
+    if rejected_citations:
+        raise CompletionParseError(
+            "unknown citation ID",
+            invalid_citations=rejected_citations,
+        )
     if has_source_facts and not citations:
         raise CompletionParseError("source facts require at least one citation")
 
@@ -1654,10 +1669,13 @@ def _answer_prepared(
         )
     except Exception as exc:
         _fallback_answer(result, prepared, messages, has_conflict=has_conflict)
-        if isinstance(exc, CompletionParseError) and "unknown citation ID" in str(exc):
+        if isinstance(exc, CompletionParseError) and exc.invalid_citations:
             # Keep the rejected model content out of the result while making
             # the evaluation harness able to count the invalid citation.
-            result["invalid_citation_count"] = 1
+            rejected = list(exc.invalid_citations)
+            result["rejected_citation_ids"] = rejected
+            result["invalid_citations"] = rejected
+            result["invalid_citation_count"] = len(rejected)
             result["warnings"].append("completion rejected an invalid citation")
         return result
 
@@ -2087,6 +2105,15 @@ def _score_evaluation_case(
     elapsed_seconds: float,
 ) -> Dict[str, Any]:
     citation_ids, cited_source_ids, invalid_citations = _citation_source_ids(result)
+    rejected_citation_ids = result.get("rejected_citation_ids", ())
+    if not isinstance(rejected_citation_ids, Sequence) or isinstance(
+        rejected_citation_ids, (str, bytes)
+    ):
+        rejected_citation_ids = ()
+    rejected_citation_ids = [str(value) for value in rejected_citation_ids]
+    invalid_citations = list(
+        dict.fromkeys([*invalid_citations, *rejected_citation_ids])
+    )
     rejected_invalid_count = result.get("invalid_citation_count", 0)
     if not isinstance(rejected_invalid_count, int) or rejected_invalid_count < 0:
         rejected_invalid_count = 0
@@ -2139,6 +2166,7 @@ def _score_evaluation_case(
         "citation_precision": citation_precision,
         "citation_recall": citation_recall,
         "invalid_citations": invalid_citations,
+        "rejected_citation_ids": rejected_citation_ids,
         "invalid_citation_count": max(len(invalid_citations), rejected_invalid_count),
         "expected_status": expected_status,
         "expected_status_match": actual_status == expected_status,

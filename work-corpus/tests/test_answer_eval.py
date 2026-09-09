@@ -227,6 +227,59 @@ def test_evaluate_cases_scores_source_ids_status_abstention_and_terms(
     assert "synthetic" in report["backend_metadata"]["local"]["routes"]
 
 
+def test_multiple_unknown_citations_survive_fallback_and_evaluation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    hit = _hit()
+    search_result = {
+        "question": "unknown citations",
+        "results": [hit],
+        "source_facts": [hit],
+        "inferences": [],
+        "conflicts": [],
+        "missing": [],
+    }
+    monkeypatch.setattr(answering, "search", lambda *_args, **_kwargs: search_result)
+    backend = _Backend(
+        '{"answer":"Project Atlas was approved.",'
+        '"citations":["S404","S999"],"stance":"supported"}'
+    )
+
+    answer_result = answering.answer(
+        object(),
+        "unknown citations",
+        backend="ollama",
+        completion_backend=backend,
+    )
+
+    assert answer_result["status"] == "model_error"
+    assert answer_result["rejected_citation_ids"] == ["S404", "S999"]
+    assert answer_result["invalid_citation_count"] == 2
+
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text(
+        json.dumps(
+            {
+                "id": "unknown-citations",
+                "question": "unknown citations",
+                "expected_source_ids": ["source-1"],
+                "expected_status": "model_error",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report = answering.evaluate_cases(
+        object(),
+        cases_path,
+        backends={"local": backend},
+    )
+    metrics = report["cases"][0]["backends"]["local"]
+    assert metrics["rejected_citation_ids"] == ["S404", "S999"]
+    assert metrics["invalid_citation_count"] == 2
+
+
 def test_cli_answer_eval_is_read_only_and_emits_json(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
