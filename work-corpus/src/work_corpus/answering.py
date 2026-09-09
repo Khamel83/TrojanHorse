@@ -1695,7 +1695,10 @@ def _answer_prepared(
     result["stance"] = parsed["stance"]
     _set_citations(result, parsed["citations"])
     if has_conflict:
-        result["warnings"].append("completion acknowledged conflicting evidence")
+        result["warnings"].append(
+            "completion declared a mixed or insufficient stance for conflicting "
+            "evidence; source acknowledgement remains unverified"
+        )
     if parsed["stance"] == "insufficient":
         result["status"] = "insufficient_evidence"
         result["answer_kind"] = "model_abstention"
@@ -2143,15 +2146,8 @@ def _score_evaluation_case(
     answer_text = str(result.get("answer") or "")
     lowered_answer = answer_text.casefold()
     has_conflict = bool(result.get("conflicts"))
-    conflict_acknowledged = bool(
-        has_conflict
-        and (
-            str(result.get("stance") or "") in {"mixed", "insufficient"}
-            or any(
-                term in lowered_answer
-                for term in ("conflict", "disagree", "inconsistent", "different")
-            )
-        )
+    conflict_stance_declared = bool(
+        has_conflict and str(result.get("stance") or "") in {"mixed", "insufficient"}
     )
     expected_terms = [str(item) for item in case.get("expected_terms", [])]
     matched_terms = [term for term in expected_terms if term.casefold() in lowered_answer]
@@ -2177,7 +2173,8 @@ def _score_evaluation_case(
         "abstention_match": expected_abstention == actual_abstention,
         "correct_abstention": expected_abstention and actual_abstention,
         "conflict_expected": has_conflict,
-        "conflict_acknowledged": conflict_acknowledged,
+        "conflict_stance_declared": conflict_stance_declared,
+        "conflict_acknowledgement_verified": False if has_conflict else None,
         "expected_terms": expected_terms,
         "matched_terms": matched_terms,
         "missing_terms": missing_terms,

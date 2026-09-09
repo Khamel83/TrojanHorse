@@ -201,7 +201,8 @@ def test_evaluate_cases_scores_source_ids_status_abstention_and_terms(
             return answering.Completion("not-json", metadata={"route": "synthetic"})
         if '"question":"conflict"' in prompt:
             return answering.Completion(
-                '{"answer":"The sources disagree.","citations":["S1"],"stance":"mixed"}',
+                '{"answer":"The launch was approved unanimously; no disagreement exists.",'
+                '"citations":["S1"],"stance":"mixed"}',
                 metadata={"route": "synthetic"},
             )
         if '"question":"missing-citation"' in prompt:
@@ -219,7 +220,11 @@ def test_evaluate_cases_scores_source_ids_status_abstention_and_terms(
     assert by_id["supported"]["backends"]["local"]["citation_precision"] == 1.0
     assert by_id["supported"]["backends"]["local"]["citation_recall"] == 1.0
     assert by_id["none"]["backends"]["local"]["correct_abstention"] is True
-    assert by_id["conflict"]["backends"]["local"]["conflict_acknowledged"] is True
+    assert by_id["conflict"]["backends"]["local"]["conflict_stance_declared"] is True
+    assert (
+        by_id["conflict"]["backends"]["local"]["conflict_acknowledgement_verified"]
+        is False
+    )
     assert by_id["missing-citation"]["backends"]["local"]["citation_recall"] == 0.0
     assert by_id["missing-citation"]["backends"]["local"]["expected_status_match"] is True
     assert by_id["malformed"]["backends"]["local"]["expected_status_match"] is True
@@ -287,6 +292,9 @@ def test_cli_answer_eval_is_read_only_and_emits_json(
 ) -> None:
     database = tmp_path / "work-corpus" / "state" / "work_corpus.sqlite"
     database.parent.mkdir(parents=True)
+    lock_path = database.parent / "mcp" / "granola_rest_delta.lock"
+    lock_path.parent.mkdir(parents=True)
+    lock_path.touch()
     con = db.connect(database)
     con.close()
     cases_path = tmp_path / "cases.jsonl"

@@ -102,7 +102,8 @@ entities, relationships, or review items.
 
 The optional assistant edge is now implemented as a small CLI layer over the
 existing exact-search and source-backed views. It opens SQLite with the
-read-only immutable path, skips bootstrap and pipeline recording, and calls
+read-only immutable path under the shared maintenance lock, fails closed when
+the lock is missing, skips bootstrap and pipeline recording, and calls
 `search(..., rebuild_index=False)`. The default `answer` command is
 evidence-only; it returns source facts, inferences, conflicts, missing
 evidence, source/version locators, and a complete local citation map. A
@@ -113,13 +114,13 @@ installed small-model default `llama3.2:1b`.
 local sanitized, and `g2k-sensitive`. Only the sanitized packet can reach the
 gateway route, and the result exposes packet digests and sanitizer findings so
 the boundary can be checked. `answer-eval` reads ignored local JSONL cases and
-reports citation precision/recall, invalid citations, abstention, conflict
-acknowledgment, term coverage, latency, and route metadata. It deliberately
+reports citation precision/recall, invalid citations, abstention, declared
+conflict stance, term coverage, latency, and route metadata. It deliberately
 sets no automatic accuracy claim; source inspection remains authoritative.
 
 The 2026-09-09 bounded runtime check returned three source/version locators for
 a representative existing-corpus question and confirmed each relative source
-file locally. The sanitized packet was 4,254 bytes, retained three citations,
+file locally. The sanitized packet was 4,256 bytes, retained three citations,
 and contained none of the selected source IDs, versions, paths, URLs, e-mail
 addresses, or phone numbers. The local model and sensitive gateway were both
 exercised; when either returned an uncited, fenced, oversized, or timed-out

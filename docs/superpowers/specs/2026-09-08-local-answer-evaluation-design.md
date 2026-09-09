@@ -112,7 +112,8 @@ records. The harness reports, per backend:
 - source citation precision and recall;
 - invalid or unprovided citation count;
 - expected-status match and correct abstention;
-- conflict acknowledgement;
+- declared conflict stance, with semantic acknowledgement left to source
+  inspection;
 - expected-term coverage as a review aid, never as a proof of truth;
 - packet sanitizer findings, request duration, route/model metadata, and token
   usage where available.

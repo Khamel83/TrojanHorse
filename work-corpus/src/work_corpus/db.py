@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import sqlite3
@@ -18,6 +19,53 @@ from .util import (
 
 
 SCHEMA_VERSION = 2
+
+
+def _open_advisory_lock(
+    path: Path,
+    *,
+    shared: bool,
+    create: bool,
+):
+    """Open and hold the maintenance lock used by the corpus writers/readers."""
+    path = Path(path)
+    if path.is_symlink():
+        raise sqlite3.OperationalError("maintenance lock path must not be a symlink")
+    try:
+        handle = path.open("a+b" if create else "rb")
+    except FileNotFoundError as exc:
+        raise sqlite3.OperationalError("read-only maintenance lock path is missing") from exc
+    try:
+        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(handle.fileno(), mode)
+    except Exception:
+        handle.close()
+        raise
+    return handle
+
+
+def _release_advisory_lock(handle: Any) -> None:
+    if handle is None:
+        return
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+class _LockedConnection(sqlite3.Connection):
+    """SQLite connection that releases an optional maintenance lock on close."""
+
+    _lock_handle: Any = None
+
+    def close(self) -> None:
+        lock_handle = self._lock_handle
+        self._lock_handle = None
+        try:
+            super().close()
+        finally:
+            _release_advisory_lock(lock_handle)
+
 
 SCHEMA = r"""
 PRAGMA foreign_keys = ON;
@@ -1048,26 +1096,55 @@ def connect(
     read_only: bool = False,
     *,
     skip_classifications: Optional[Iterable[str]] = None,
+    read_only_lock_path: Optional[Path] = None,
+    write_lock_path: Optional[Path] = None,
 ) -> sqlite3.Connection:
     path = Path(path)
     if read_only:
         # SQLite can create or update WAL shared-memory state while opening a
         # read-only connection.  Reject any sidecar before SQLite sees the
-        # database; immutable mode is safe only for a database with no WAL
-        # state at all.
+        # database; immutable mode is safe only for a database with no journal
+        # state at all.  The maintenance runner and this reader coordinate
+        # through an advisory shared/exclusive lock when one is supplied.
+        if read_only_lock_path is None:
+            raise sqlite3.OperationalError(
+                "read-only database requires a maintenance lock path"
+            )
+        lock_handle = _open_advisory_lock(
+            read_only_lock_path,
+            shared=True,
+            create=False,
+        )
+
+        rollback_journal = path.with_name(path.name + "-journal")
         sidecars = (
             path.with_name(path.name + "-wal"),
             path.with_name(path.name + "-shm"),
         )
+        if rollback_journal.exists() or rollback_journal.is_symlink():
+            _release_advisory_lock(lock_handle)
+            raise sqlite3.OperationalError(
+                "read-only database has an active rollback journal"
+            )
         if any(sidecar.exists() or sidecar.is_symlink() for sidecar in sidecars):
+            _release_advisory_lock(lock_handle)
             raise sqlite3.OperationalError(
                 "read-only database has active or incomplete WAL sidecars"
             )
 
         uri = f"{path.absolute().as_uri()}?mode=ro&immutable=1"
-        con = sqlite3.connect(uri, uri=True)
+        try:
+            con = sqlite3.connect(uri, uri=True, factory=_LockedConnection)
+        except Exception:
+            _release_advisory_lock(lock_handle)
+            raise
+        con._lock_handle = lock_handle
         con.row_factory = sqlite3.Row
         try:
+            if rollback_journal.exists() or rollback_journal.is_symlink():
+                raise sqlite3.OperationalError(
+                    "read-only database rollback journal appeared during open"
+                )
             if any(
                 sidecar.exists() or sidecar.is_symlink() for sidecar in sidecars
             ):
@@ -1076,6 +1153,11 @@ def connect(
                 )
             con.execute("PRAGMA foreign_keys=ON")
             con.execute("PRAGMA query_only=ON")
+            con.execute("BEGIN")
+            if rollback_journal.exists() or rollback_journal.is_symlink():
+                raise sqlite3.OperationalError(
+                    "read-only database rollback journal appeared during open"
+                )
             if any(
                 sidecar.exists() or sidecar.is_symlink() for sidecar in sidecars
             ):
@@ -1088,7 +1170,20 @@ def connect(
             raise
 
     ensure_dir(path.parent)
-    con = sqlite3.connect(str(path))
+    lock_handle = None
+    if write_lock_path is not None:
+        ensure_dir(Path(write_lock_path).parent)
+        lock_handle = _open_advisory_lock(
+            write_lock_path,
+            shared=False,
+            create=True,
+        )
+    try:
+        con = sqlite3.connect(str(path), factory=_LockedConnection)
+    except Exception:
+        _release_advisory_lock(lock_handle)
+        raise
+    con._lock_handle = lock_handle
     con.row_factory = sqlite3.Row
     try:
         con.execute("PRAGMA foreign_keys=OFF")

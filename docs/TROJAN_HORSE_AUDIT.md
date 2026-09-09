@@ -161,14 +161,15 @@ unified `All` policy are already recorded decisions.
 ### Local answer layer and privacy verification
 
 The new answer path is read-only. It opens the corpus with the immutable SQLite
-URI, skips bootstrap and pipeline recording, and calls exact search without an
-FTS rebuild. Evidence-only answers expose source IDs, source versions, and
-locators. Optional local synthesis uses loopback Ollama; the checked-in default
-is the installed `llama3.2:1b` model.
+URI, rejects rollback/WAL sidecars, requires and shares the active Granola
+maintenance lock, starts a read transaction, skips bootstrap and pipeline
+recording, and calls exact search without an FTS rebuild. Evidence-only answers
+expose source IDs, source versions, and locators. Optional local synthesis uses
+loopback Ollama; the checked-in default is the installed `llama3.2:1b` model.
 
 The comparison path uses one search result and three lanes: local original,
 local sanitized, and `g2k-sensitive`. The original packet is never sent to the
-gateway. A bounded live check produced a 4,254-byte sanitized packet with three
+gateway. A bounded live check produced a 4,256-byte sanitized packet with three
 citations and no selected source IDs, version IDs, paths, URLs, e-mail
 addresses, or phone numbers. The database file size, mtime, evidence count,
 FTS count, and pipeline count were unchanged before and after the CLI call.

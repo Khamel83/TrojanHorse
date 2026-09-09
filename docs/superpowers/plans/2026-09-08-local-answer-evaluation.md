@@ -35,9 +35,10 @@ PYTHONPATH=work-corpus/src python3 -m pytest -q work-corpus/tests
 **Interfaces:**
 
 - `db.connect(path, read_only=False)` keeps existing callers unchanged. In
-  read-only mode it opens the existing SQLite file with `mode=ro`, skips
-  directory creation, migrations, and commits, and still exposes the normal
-  row factory and foreign-key checks.
+  read-only mode it requires the existing maintenance lock, opens the SQLite
+  file with `mode=ro`, skips directory creation, migrations, and commits, and
+  still exposes the normal row factory and foreign-key checks. Mutating CLI
+  connections hold the matching exclusive lock.
 - `query.search(..., rebuild_index=True)` preserves the current default and
   skips `rebuild_search_index` when `rebuild_index=False`.
 - `prepare_evidence(search_result, *, remote_safe=False, max_hits=8,
@@ -133,7 +134,8 @@ PYTHONPATH=work-corpus/src python3 -m pytest -q work-corpus/tests
   backend/route metadata, and warnings.
 - No-result questions return `status=no_evidence` and do not call a model.
   Conflicting or insufficient evidence returns `status=insufficient_evidence`
-  unless the completion explicitly acknowledges the conflict. Backend failure
+  unless the completion declares a `mixed` or `insufficient` stance; that
+  declaration remains unverified until source inspection. Backend failure
   returns `status=model_error` with an evidence-only fallback and no untrusted
   model text.
 - CLI commands:

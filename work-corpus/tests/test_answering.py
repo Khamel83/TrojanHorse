@@ -322,20 +322,35 @@ def test_answer_does_not_change_database_bytes_or_rows(tmp_path: Path):
     con = db.connect(database)
     _source(con, tmp_path, name="atlas", text="Project Atlas was approved.")
     con.close()
+    lock_path = database.parent / "mcp" / "granola_rest_delta.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.touch()
     before_bytes = database.read_bytes()
-    before_con = db.connect(database, read_only=True)
+    before_con = db.connect(
+        database,
+        read_only=True,
+        read_only_lock_path=lock_path,
+    )
     try:
         before_rows = before_con.execute(
             "SELECT COUNT(*) FROM evidence_record"
         ).fetchone()[0]
     finally:
         before_con.close()
-    read_only = db.connect(database, read_only=True)
+    read_only = db.connect(
+        database,
+        read_only=True,
+        read_only_lock_path=lock_path,
+    )
     try:
         answering.answer(read_only, "What happened to Project Atlas?")
     finally:
         read_only.close()
-    after_con = db.connect(database, read_only=True)
+    after_con = db.connect(
+        database,
+        read_only=True,
+        read_only_lock_path=lock_path,
+    )
     try:
         after_rows = after_con.execute(
             "SELECT COUNT(*) FROM evidence_record"

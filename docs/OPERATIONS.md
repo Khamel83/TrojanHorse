@@ -48,9 +48,12 @@ place. The current active database is `work-corpus/state/work_corpus.sqlite`.
 ## Read-only answers and evaluation
 
 The answer commands open the existing SQLite file with `mode=ro` and
-`immutable=1`, reject active WAL/SHM sidecars, skip bootstrap and pipeline
-recording, and call exact search without rebuilding the FTS index. They do not
-write corpus state.
+`immutable=1`, reject active rollback-journal or WAL/SHM sidecars, skip
+bootstrap and pipeline recording, and call exact search without rebuilding the
+FTS index. The reader requires the Granola delta lock and holds a shared lock
+for the full read transaction so supported maintenance writers cannot start
+during the answer; it fails closed if that lock is missing. They do not write
+corpus state.
 
 Use deterministic evidence-only output when a source-backed view is enough:
 
@@ -78,12 +81,17 @@ The sanitizer removes source IDs, source/version paths, URLs, e-mail
 addresses, phone numbers, and token-like values from the remote packet while
 retaining bounded evidence text, labels, dates, and locators. The result
 includes packet digests and findings so the boundary can be inspected. A
-strict answer parser rejects malformed, uncited, conflicting, or unsupported
-model output and returns trusted evidence fallback; it never turns model text
-into a source fact. Gateway route/provider identity and retention are not
-inferred from the helper name.
+strict structural parser rejects malformed JSON, unknown or duplicate
+citations, missing required citations, invalid stances, and
+conflict-incompatible stances, then returns trusted evidence fallback. It does
+not verify factual entailment or semantic conflict acknowledgement; source
+inspection remains required, and model text never becomes a source fact.
+Gateway route/provider identity and retention are not inferred from the helper
+name.
 
-For repeatable local review, keep cases and reports under ignored state paths:
+For repeatable local review, keep cases and reports under ignored state paths.
+Each `--output` report must use a new `answer-eval*.json` path; existing files
+and symlinks are rejected:
 
 ```bash
 work-corpus --root . answer-eval \

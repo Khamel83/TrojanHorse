@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import sqlite3
 from datetime import date
@@ -10,6 +11,12 @@ from work_corpus import db
 
 
 connect = db.connect
+
+
+def _read_lock(database):
+    lock_path = database.with_name(database.name + ".lock")
+    lock_path.touch()
+    return lock_path
 
 
 REQUIRED_TABLES = {
@@ -101,13 +108,26 @@ def test_read_only_connect_requires_an_existing_database(tmp_path):
     assert not database.parent.exists()
 
 
+def test_read_only_connect_fails_closed_without_maintenance_lock(tmp_path):
+    database = tmp_path / "state.sqlite"
+    con = connect(database)
+    con.close()
+
+    with pytest.raises(sqlite3.OperationalError, match="maintenance lock"):
+        connect(database, read_only=True)
+
+
 def test_read_only_connect_preserves_schema_and_rejects_mutation(tmp_path):
     database = tmp_path / "state.sqlite"
     con = connect(database)
     con.close()
     before = database.read_bytes()
 
-    read_only = connect(database, read_only=True)
+    read_only = connect(
+        database,
+        read_only=True,
+        read_only_lock_path=_read_lock(database),
+    )
     try:
         assert isinstance(read_only, sqlite3.Connection)
         assert isinstance(
@@ -140,6 +160,7 @@ def test_read_only_wal_connect_does_not_mutate_a_read_only_database_directory(
 
     for suffix in ("-shm", "-wal"):
         database.with_name(database.name + suffix).unlink(missing_ok=True)
+    lock_path = _read_lock(database)
 
     before_files = {
         item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
@@ -154,7 +175,11 @@ def test_read_only_wal_connect_does_not_mutate_a_read_only_database_directory(
     after_files = None
     after_directory = None
     try:
-        read_only = connect(database, read_only=True)
+        read_only = connect(
+            database,
+            read_only=True,
+            read_only_lock_path=lock_path,
+        )
         try:
             assert read_only.execute(
                 "SELECT value FROM wal_probe"
@@ -193,6 +218,7 @@ def test_read_only_wal_connect_rejects_active_sidecars_without_mutation(tmp_path
             for suffix in ("-shm", "-wal")
         }
         assert all(sidecar.exists() for sidecar in sidecars)
+        lock_path = _read_lock(database)
         before_files = {
             item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
             for item in database.parent.iterdir()
@@ -203,7 +229,11 @@ def test_read_only_wal_connect_rejects_active_sidecars_without_mutation(tmp_path
         )
 
         with pytest.raises(sqlite3.OperationalError, match="WAL"):
-            connect(database, read_only=True)
+            connect(
+                database,
+                read_only=True,
+                read_only_lock_path=lock_path,
+            )
 
         after_files = {
             item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
@@ -217,6 +247,90 @@ def test_read_only_wal_connect_rejects_active_sidecars_without_mutation(tmp_path
         assert after_directory == before_directory
     finally:
         writer.close()
+
+
+def test_read_only_connect_rejects_rollback_journal_without_mutation(tmp_path):
+    database = tmp_path / "state.sqlite"
+    writer = sqlite3.connect(database)
+    try:
+        writer.execute(
+            "CREATE TABLE rollback_visibility_probe (value TEXT NOT NULL)"
+        )
+        writer.commit()
+        assert writer.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute(
+            "INSERT INTO rollback_visibility_probe (value) VALUES ('pending')"
+        )
+        journal = database.with_name(database.name + "-journal")
+        assert journal.exists()
+        lock_path = _read_lock(database)
+        before_files = {
+            item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
+            for item in database.parent.iterdir()
+        }
+        before_directory = (
+            database.parent.stat().st_mode,
+            database.parent.stat().st_mtime_ns,
+        )
+
+        with pytest.raises(sqlite3.OperationalError, match="rollback journal"):
+            connect(
+                database,
+                read_only=True,
+                read_only_lock_path=lock_path,
+            )
+
+        after_files = {
+            item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
+            for item in database.parent.iterdir()
+        }
+        after_directory = (
+            database.parent.stat().st_mode,
+            database.parent.stat().st_mtime_ns,
+        )
+        assert after_files == before_files
+        assert after_directory == before_directory
+    finally:
+        writer.rollback()
+        writer.close()
+
+
+def test_read_only_connect_holds_shared_maintenance_lock(tmp_path):
+    database = tmp_path / "state.sqlite"
+    lock_path = tmp_path / "mcp" / "granola_rest_delta.lock"
+    lock_path.parent.mkdir()
+    lock_path.touch()
+    con = connect(database)
+    con.execute("CREATE TABLE probe (value TEXT NOT NULL)")
+    con.execute("INSERT INTO probe VALUES ('committed')")
+    con.commit()
+    con.close()
+
+    read_only = connect(
+        database,
+        read_only=True,
+        read_only_lock_path=lock_path,
+    )
+    assert read_only.in_transaction is True
+    writer_handle = lock_path.open("rb")
+    try:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(writer_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        read_only.close()
+        fcntl.flock(writer_handle.fileno(), fcntl.LOCK_UN)
+        writer_handle.close()
+
+    writer = connect(database, write_lock_path=lock_path)
+    reader_handle = lock_path.open("rb")
+    try:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(reader_handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+    finally:
+        writer.close()
+        fcntl.flock(reader_handle.fileno(), fcntl.LOCK_UN)
+        reader_handle.close()
 
 
 def test_schema_has_no_email_career_claim_or_decision_table(tmp_path):

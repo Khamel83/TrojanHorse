@@ -24,7 +24,7 @@ from .answering import (
 from .config import Config, load_config
 from .db import connect, recover_stale_runs
 from .doctor import doctor
-from .granola_delta import run_delta
+from .granola_delta import LOCK_NAME, run_delta
 from .granola_progress import write_granola_progress
 from .inventory import inventory
 from .mcp_ingest import ingest_mcp_sources
@@ -301,7 +301,10 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="Optional JSON output path outside tracked or non-ignored source.",
+        help=(
+            "Optional JSON output path outside the repository or under the "
+            "ignored work-corpus/state/answer-eval*.json report path."
+        ),
     )
     sub.add_parser("mcp-import", help="Import Granola/Wispr Flow dumps.")
     sub.add_parser(
@@ -349,56 +352,91 @@ def _completion_backend_for_args(args: Any) -> Optional[Any]:
 
 
 def _write_evaluation_output(root: Path, output: Path, text: str) -> None:
-    """Write an explicitly requested report only outside tracked source."""
-    target = output.expanduser().resolve()
+    """Create a new evaluation report outside the repository or in its report slot."""
+    requested = output.expanduser()
+    if requested.is_symlink() or requested.exists():
+        raise ValueError(
+            "evaluation output target must be a new, non-symlink path under "
+            "work-corpus/state/answer-eval*.json or outside the repository"
+        )
+    target = requested.resolve(strict=False)
+    root = root.expanduser().resolve()
     try:
         relative = target.relative_to(root)
     except ValueError:
         relative = None
     if relative is not None:
+        safe_report_dir = root / "work-corpus" / "state"
+        safe_report = (
+            target.parent == safe_report_dir
+            and target.name.startswith("answer-eval")
+            and target.suffix == ".json"
+        )
+        if not safe_report:
+            raise ValueError(
+                "evaluation output inside the repository must use the "
+                "ignored work-corpus/state/answer-eval*.json report path or "
+                "be outside the repository"
+            )
         git_check = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
             capture_output=True,
             text=True,
             check=False,
         )
-        if git_check.returncode == 0:
-            relative_text = str(relative)
-            tracked = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(root),
-                    "ls-files",
-                    "--error-unmatch",
-                    "--",
-                    relative_text,
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
+        if git_check.returncode != 0:
+            raise ValueError(
+                "evaluation output inside the repository requires the "
+                "Git-ignored work-corpus/state/answer-eval*.json report path"
             )
-            ignored = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(root),
-                    "check-ignore",
-                    "-q",
-                    "--no-index",
-                    "--",
-                    relative_text,
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
+        relative_text = str(relative)
+        tracked = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "--error-unmatch",
+                "--",
+                relative_text,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tracked.returncode == 0:
+            raise ValueError(
+                "evaluation output may not overwrite tracked source; use "
+                "work-corpus/state/answer-eval*.json or an outside path"
             )
-            if tracked.returncode == 0 or ignored.returncode != 0:
-                raise ValueError(
-                    "evaluation output must be outside tracked source or under an ignored path"
-                )
+        ignored = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "check-ignore",
+                "-q",
+                "--no-index",
+                "--",
+                relative_text,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if ignored.returncode != 0:
+            raise ValueError(
+                "evaluation output report path must be Git-ignored: "
+                "work-corpus/state/answer-eval*.json"
+            )
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text, encoding="utf-8")
+    try:
+        with target.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError as exc:
+        raise ValueError(
+            "evaluation output target appeared or already exists; choose a new path"
+        ) from exc
 
 
 def _run_read_only_answer(args: Any, root: Path) -> int:
@@ -414,9 +452,11 @@ def _run_read_only_answer(args: Any, root: Path) -> int:
         if args.command == "answer-compare" and not args.allow_sensitive_remote:
             raise ValueError("answer-compare requires --allow-sensitive-remote")
         config = load_config(root)
+        maintenance_lock = config.state_dir / "mcp" / LOCK_NAME
         con = connect(
             config.state_dir / "work_corpus.sqlite",
             read_only=True,
+            read_only_lock_path=maintenance_lock,
         )
         question = " ".join(args.question) if args.command != "answer-eval" else ""
         if args.command == "answer":
@@ -498,12 +538,32 @@ def main(argv: Optional[list[str]] = None) -> int:
         return _run_read_only_answer(args, root)
     config = load_config(root)
     bootstrap(config)
+    if args.command == "granola-delta":
+        try:
+            details = run_delta(
+                config,
+                updated_after=args.updated_after,
+                overlap_seconds=args.overlap_seconds,
+            )
+            print(json.dumps(details, indent=2, ensure_ascii=False, default=str))
+            return 0
+        except KeyboardInterrupt:
+            print("\nCancelled.", file=sys.stderr)
+            return 130
+        except Exception as exc:
+            details = {"error": f"{type(exc).__name__}: {exc}"}
+            print(details["error"], file=sys.stderr)
+            if "--debug" in sys.argv:
+                traceback.print_exc()
+            return 1
+    writer_lock_path = config.state_dir / "mcp" / LOCK_NAME
     con = connect(
         config.state_dir / "work_corpus.sqlite",
         skip_classifications=config.get(
             "normalization",
             "skip_classifications",
         ),
+        write_lock_path=writer_lock_path,
     )
     run_id = _record_start(con, args.command)
     details: Dict[str, Any] = {}
@@ -545,12 +605,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.command == "granola-progress":
             details = write_granola_progress(config, con)
             details["index_verification"] = _record_index_checkpoint(config, con)
-        elif args.command == "granola-delta":
-            details = run_delta(
-                config,
-                updated_after=args.updated_after,
-                overlap_seconds=args.overlap_seconds,
-            )
         elif args.command == "organize":
             run_date = date.fromisoformat(args.run_date) if args.run_date else None
             details = organize_all(

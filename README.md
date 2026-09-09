@@ -90,9 +90,9 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer-compare \
 
 The original packet and complete citation map stay local. The sensitive lane
 receives bounded evidence text after path, URL, e-mail, phone, token, and raw
-identifier redaction. Strict parsing rejects uncited or malformed model output
-and returns trusted evidence fallback; comparison metrics do not claim answer
-accuracy without source inspection.
+identifier redaction. Strict structural parsing rejects malformed or uncited
+model output and returns trusted evidence fallback; comparison metrics do not
+claim answer accuracy without source inspection.
 
 For repeatable review, keep synthetic or manually checked cases in an ignored
 local JSONL file such as `work-corpus/state/answer-eval-cases.jsonl`. Each line
@@ -102,8 +102,9 @@ has this shape:
 {"id":"case-001","question":"...","expected_source_ids":["source-id"],"expected_status":"synthesized","expected_terms":["..."]}
 ```
 
-Run the evaluation to stdout, or choose an ignored output path. Metrics are
-review aids; source inspection remains the acceptance authority:
+Run the evaluation to stdout, or choose a new ignored output path. Existing
+output files and symlinks are rejected. Metrics are review aids; source
+inspection remains the acceptance authority:
 
 ```bash
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer-eval \
