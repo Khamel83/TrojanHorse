@@ -18,6 +18,10 @@ The local answer layer and its final safety fixes are delivered in the pushed
 remote SHA are verified by the completion handoff.
 The post-merge bounded maintenance poll exited 0 with no raw capture append and
 no local stage rebuild.
+The final main-check reran the active suite (`283 passed`), Ruff, compilation,
+plist lint, and diff checks, then answered one bounded existing-corpus question
+with three source/version citations while the database snapshot stayed
+unchanged.
 
 Ingestion, exact search, deterministic organization, and canonical Mac delta
 maintenance are complete at delivered commit

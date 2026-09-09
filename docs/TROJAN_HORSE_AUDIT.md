@@ -2,8 +2,8 @@
 
 Audit date: 2026-09-09
 
-Repository: `main`; audit performed against the working tree after reviewed
-completion design commit `aab25e5`
+Repository: `main`; audit performed against the working tree after the reviewed
+completion design and the local answer boundary verification checkpoint
 Scope: repository, active runtime, local SQLite state, generated acceptance
 reports, provider-capture ledgers, tests, and operations configuration. Raw
 source content and secrets were not copied into this document.
@@ -48,7 +48,7 @@ The decisive checks were:
 
 - SQLite `quick_check`: `ok`.
 - SQLite foreign-key check: `0` violations.
-- Active package suite: `271 passed` under both the default Python 3.13/SQLite
+- Active package suite: `283 passed` under both the default Python 3.13/SQLite
   runtime and the Homebrew Python 3.14/SQLite runtime.
 - Fatal Ruff check, Python compilation, and `git diff --check`: passed.
 - Editable install smoke in an isolated temporary virtual environment: passed,

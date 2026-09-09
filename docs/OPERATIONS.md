@@ -55,6 +55,15 @@ for the full read transaction so supported maintenance writers cannot start
 during the answer; it fails closed if that lock is missing. They do not write
 corpus state.
 
+The sidecar rejection is intentional. A forced writer stop can leave stale
+SQLite `-wal`/`-shm` files even when the main database is consistent. On
+2026-09-09, the lock was free, the WAL was zero bytes, an immutable
+`PRAGMA quick_check` returned `ok`, and only those ephemeral sidecars were
+removed under the exclusive maintenance lock before the final answer check.
+If this happens again, inspect the lock, running writer, WAL size, and
+read-only `quick_check` first. Do not bypass the rejection or remove a
+non-empty WAL.
+
 Use deterministic evidence-only output when a source-backed view is enough:
 
 ```bash
