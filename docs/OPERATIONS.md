@@ -45,6 +45,60 @@ work-corpus --root . report
 Run the commands in this order. The raw source and provider captures remain in
 place. The current active database is `work-corpus/state/work_corpus.sqlite`.
 
+## Read-only answers and evaluation
+
+The answer commands open the existing SQLite file with `mode=ro` and
+`immutable=1`, reject active WAL/SHM sidecars, skip bootstrap and pipeline
+recording, and call exact search without rebuilding the FTS index. They do not
+write corpus state.
+
+Use deterministic evidence-only output when a source-backed view is enough:
+
+```bash
+work-corpus --root . answer "What happened to Project Atlas?"
+```
+
+Use the installed small local model only when synthesis is useful:
+
+```bash
+work-corpus --root . answer "What happened to Project Atlas?" \
+  --backend ollama --model llama3.2:1b
+```
+
+The explicit comparison sends one bounded sanitized packet to the
+`g2k-sensitive` helper. The original local packet stays on the Mac, and the
+remote route is disabled unless the flag is present:
+
+```bash
+work-corpus --root . answer-compare "What happened to Project Atlas?" \
+  --allow-sensitive-remote --model llama3.2:1b
+```
+
+The sanitizer removes source IDs, source/version paths, URLs, e-mail
+addresses, phone numbers, and token-like values from the remote packet while
+retaining bounded evidence text, labels, dates, and locators. The result
+includes packet digests and findings so the boundary can be inspected. A
+strict answer parser rejects malformed, uncited, conflicting, or unsupported
+model output and returns trusted evidence fallback; it never turns model text
+into a source fact. Gateway route/provider identity and retention are not
+inferred from the helper name.
+
+For repeatable local review, keep cases and reports under ignored state paths:
+
+```bash
+work-corpus --root . answer-eval \
+  --cases work-corpus/state/answer-eval-cases.jsonl \
+  --backend evidence
+work-corpus --root . answer-eval \
+  --cases work-corpus/state/answer-eval-cases.jsonl \
+  --allow-sensitive-remote --output work-corpus/state/answer-eval.json
+```
+
+Metrics are review aids. Inspect every reported source/version locator against
+the local source before relying on an answer for a consequential decision.
+Keep prompts, answers, excerpts, and route receipts in ignored local state;
+never commit them.
+
 ## Legacy boundary
 
 The old Atlas bridge is quarantined. See [LEGACY_ATLAS.md](LEGACY_ATLAS.md).

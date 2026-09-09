@@ -1,6 +1,6 @@
 # Local Work Corpus Status
 
-Status date: 2026-09-08
+Status date: 2026-09-09
 Latest report: `2026-09-08T01:47:56-07:00`
 
 ## Current completion boundary
@@ -34,6 +34,14 @@ residual ledger rather than being silently canonicalized. The default query scop
 parseable source is searchable, with original Work, Personal, Mixed, Unknown,
 and sensitivity labels preserved as provenance. `Work` remains an optional
 narrow filter.
+
+The local answer milestone is now implemented over that exact-search seam. The
+read-only `answer` command defaults to evidence-only output with source,
+source-version, and locator fields, while Ollama synthesis is an explicit
+loopback option. `answer-compare` runs local-original, local-sanitized, and
+`g2k-sensitive` lanes from one search result; only the sanitized packet can
+reach the sensitive route. `answer-eval` scores ignored local JSONL cases as a
+manual-review aid and never claims automatic accuracy.
 
 ## Current corpus
 
@@ -124,15 +132,16 @@ and keeps historical task statements out of the current-task view.
 ## Full-system audit boundary
 
 The corpus pipeline is mechanically usable for the captured local archive, and
-the Granola maintenance job is deployed on the canonical Mac host. The
-repository as a whole is not yet a finished assistant because it has no local
-answer-synthesis/API/UI layer.
+the Granola maintenance job is deployed on the canonical Mac host. The active
+package now has a usable local CLI answer/evaluation layer, but it does not
+provide a web API or polished UI.
 The active package provides reproducible installation, CI, inventory, local
 transcription, exact FTS search, deterministic organization, source-backed
-project/task/career views, reports, `doctor`, current raw verification, and a
-tested Granola delta runner. The remaining product edge is local
-answer-synthesis/API/UI. The older root package and Atlas bridge remain historical
-code and are not part of the active boundary. See the [full audit](TROJAN_HORSE_AUDIT.md)
+project/task/career views, reports, `doctor`, current raw verification, a
+tested Granola delta runner, and the read-only answer/evaluation commands. The
+remaining product edge is broader manual answer evaluation or an optional web
+API/UI. The older root package and Atlas bridge remain historical code and are
+not part of the active boundary. See the [full audit](TROJAN_HORSE_AUDIT.md)
 for the ordered completion path and owner input.
 
 ## Reproduction and verification
@@ -162,8 +171,9 @@ current two-pass comparison covering all 2,758 inventoried files and
 - No cloud transcription path is used. Local transcription output is derived
   evidence tied to source-media provenance.
 - No automatic historical task backfill, mailbox access, email-provider
-  integration, Atlas integration, or external model call with raw corpus
-  content is part of this milestone. The 20 already-local `.eml` files are
-  included as captured local evidence.
+  integration, or Atlas integration is part of this milestone. The 20
+  already-local `.eml` files are included as captured local evidence. The
+  sensitive remote answer lane is explicit and receives only a bounded
+  sanitized packet; raw local packets never leave the Mac.
 - The private `All` query includes retained scope/sensitivity records. A future
   external or narrower release view still requires its own explicit review.

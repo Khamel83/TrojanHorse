@@ -1,9 +1,16 @@
 # Local Work Corpus TODO
 
-Updated: 2026-09-08. Reconciled the continuation handoff with repository docs
+Updated: 2026-09-09. Reconciled the continuation handoff with repository docs
 after [Gemini 3.8 Flash High review](docs/superpowers/reviews/2026-09-08-todo-gemini-review.md)
 (verdict: APPROVE). This was a text-only documentation review; ingestion,
-runtime acceptance, and remote verification were not repeated.
+runtime acceptance, and remote verification were not repeated at that checkpoint.
+The local answer milestone below is a separate implementation and verification
+receipt; it does not reopen the completed ingestion gates.
+The requested fresh Gemini CLI review of this update was attempted on
+2026-09-09, but the installed client rejected the account as an unsupported
+Gemini Code Assist tier; the prior Gemini review remains the documented
+approval of the handoff text, while this implementation has separate local
+tests and independent code review receipts.
 
 Ingestion, exact search, deterministic organization, and canonical Mac delta
 maintenance are complete at delivered commit
@@ -17,11 +24,28 @@ provenance. See [Remaining Work](docs/REMAINING_WORK.md),
 [Corpus Status](docs/LOCAL_WORK_CORPUS_STATUS.md),
 [Audit](docs/TROJAN_HORSE_AUDIT.md), and [Operations](docs/OPERATIONS.md).
 
-## Optional next work — not authorized for implementation by this update
+## Milestone 3 — Local answer synthesis and evaluation
 
-- [ ] If requested, design a local answer-synthesis/API/UI layer over existing
-  exact search and source-backed views. Keep raw text local, preserve source
-  locators in every answer, and reuse the existing corpus without a full copy.
+- [x] Add a minimal read-only answer interface over exact search and the
+  source-backed evidence views. The `answer` CLI defaults to deterministic
+  evidence-only output; local Ollama synthesis is explicit and bounded. Every
+  returned citation retains source ID, source version, and locator fields, and
+  source facts remain separate from model synthesis.
+- [x] Add the explicit same-question comparison/evaluation path. The local
+  original packet never leaves the Mac. The `g2k-sensitive` lane receives one
+  bounded, sanitized packet only after `--allow-sensitive-remote`; the packet
+  omits source IDs, paths, URLs, e-mail addresses, phone numbers, and tokens.
+  Evaluation metrics are review aids and keep `accuracy_claim` unset; source
+  inspection remains the acceptance authority.
+- [x] Verify the new CLI against a bounded existing-corpus question without
+  writes. Evidence-only retrieval returned three source/version locators and
+  the database size, mtime, evidence/FTS counts, and pipeline count stayed
+  unchanged. A local `llama3.2:1b` canary and the live sanitized
+  `g2k-sensitive` route were exercised; malformed, uncited, timed-out, or
+  oversized model output fails closed to an evidence fallback.
+- [ ] Manually inspect a broader representative evaluation set before relying
+  on synthesis for consequential decisions. Model agreement is not proof of
+  corpus accuracy.
 - [ ] If useful after the core views are used, refine the 48 generic topic labels,
   canonical people/organization aliases, and 52 retained Zoom linkage states.
   These accepted states do not reopen ingestion or require bulk manual review.

@@ -88,6 +88,12 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer-compare \
   "What happened to Project Atlas?" --allow-sensitive-remote
 ```
 
+The original packet and complete citation map stay local. The sensitive lane
+receives bounded evidence text after path, URL, e-mail, phone, token, and raw
+identifier redaction. Strict parsing rejects uncited or malformed model output
+and returns trusted evidence fallback; comparison metrics do not claim answer
+accuracy without source inspection.
+
 For repeatable review, keep synthetic or manually checked cases in an ignored
 local JSONL file such as `work-corpus/state/answer-eval-cases.jsonl`. Each line
 has this shape:

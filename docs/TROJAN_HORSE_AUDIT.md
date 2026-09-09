@@ -1,6 +1,6 @@
 # TrojanHorse full-scale audit
 
-Audit date: 2026-09-08
+Audit date: 2026-09-09
 
 Repository: `main`; audit performed against the working tree after reviewed
 completion design commit `aab25e5`
@@ -24,11 +24,14 @@ normalized and searchable, and no grouped review queue remains open. The
 older MCP UUID shadow is incomplete, but it is redundant and is not an archive
 blocker.
 
-The remaining work is deliberately small and separate from ingestion:
+The local answer milestone is now implemented as a CLI over the existing exact
+search and source-backed views. The remaining work is deliberately small and
+separate from ingestion:
 
-1. if TrojanHorse is intended to be an assistant rather than a search-and-ledger
-   tool, build a local answer-synthesis/API/UI layer over the evidence views;
-2. optionally refine generic labels, aliases, and retained Zoom linkage states.
+1. manually inspect a representative answer-evaluation set before relying on
+   synthesis for consequential decisions;
+2. optionally add a web/API or polished UI layer, then refine generic labels,
+   aliases, and retained Zoom linkage states.
 
 This does not require the owner to inspect 1,500 task/date/decision rows one by
 one. The approved first pass closed those queues without forcing uncertain
@@ -45,7 +48,8 @@ The decisive checks were:
 
 - SQLite `quick_check`: `ok`.
 - SQLite foreign-key check: `0` violations.
-- Active package suite: `200 passed`.
+- Active package suite: `271 passed` under both the default Python 3.13/SQLite
+  runtime and the Homebrew Python 3.14/SQLite runtime.
 - Fatal Ruff check, Python compilation, and `git diff --check`: passed.
 - Editable install smoke in an isolated temporary virtual environment: passed,
   including `work-corpus --help` and an active boundary test. The host's
@@ -78,14 +82,18 @@ repository root as `trojanhorse-work-corpus`. Its CLI currently provides:
 - deterministic project links, task-proposal scanning, review ledgers, and
   acceptance reports;
 - source-backed project, task-candidate, and career-evidence views;
+- a read-only `answer`, `answer-compare`, and `answer-eval` CLI over exact
+  search, with source/version locators and explicit evidence-versus-synthesis
+  fields;
 - local `doctor` and two-pass `raw-verify` checks; and
 - a tested, locked, overlap-watermarked Granola REST delta runner with
   five-minute macOS launchd and Linux systemd templates. The canonical Mac job
   skips the expensive local rebuild when a poll returns only overlap data.
 
-The runtime does not yet provide a web/API answer-synthesis service, embeddings,
-semantic ranking, or an interactive assistant. Its current query path is exact
-search plus SQLite relationship traversal and deterministic evidence views.
+The runtime provides a local CLI answer layer but does not provide a web/API
+answer-synthesis service, embeddings, semantic ranking, or an interactive UI.
+Its retrieval path remains exact search plus SQLite relationship traversal and
+deterministic evidence views.
 
 ### Current corpus accounting
 
@@ -150,6 +158,29 @@ No item-by-item owner review is required for the current acceptance state.
 Generic topic labels, acceptance of the one partial Zoom result, and the
 unified `All` policy are already recorded decisions.
 
+### Local answer layer and privacy verification
+
+The new answer path is read-only. It opens the corpus with the immutable SQLite
+URI, skips bootstrap and pipeline recording, and calls exact search without an
+FTS rebuild. Evidence-only answers expose source IDs, source versions, and
+locators. Optional local synthesis uses loopback Ollama; the checked-in default
+is the installed `llama3.2:1b` model.
+
+The comparison path uses one search result and three lanes: local original,
+local sanitized, and `g2k-sensitive`. The original packet is never sent to the
+gateway. A bounded live check produced a 4,254-byte sanitized packet with three
+citations and no selected source IDs, version IDs, paths, URLs, e-mail
+addresses, or phone numbers. The database file size, mtime, evidence count,
+FTS count, and pipeline count were unchanged before and after the CLI call.
+
+The live local and sensitive routes were exercised with the same bounded
+question. Strict parsing accepted only the required JSON contract; uncited,
+fenced, oversized, timed-out, or otherwise invalid completions became a
+`model_error` evidence fallback. The evaluator leaves `accuracy_claim` unset
+and names source inspection as the review authority. These runtime checks show
+the boundary and failure behavior; they do not establish that a model answer is
+accurate.
+
 ## What is not finished
 
 ### P0 — closed
@@ -163,13 +194,15 @@ unified `All` policy are already recorded decisions.
    The Linux systemd files remain optional templates for a host containing the
    corpus.
 
-### P1 — optional assistant product layer
+### P1 — manual answer evaluation and optional presentation layer
 
-1. **Build answer synthesis/API/UI if desired.** The source-backed views and
-   exact search are ready inputs. A local answer layer still needs to retrieve
-   evidence, preserve source locators, separate source facts from inferences,
-   and keep raw corpus text local. This is product implementation, not missing
-   ingestion.
+1. **Inspect a broader representative answer set.** Check each returned
+   source/version locator against the local source and record unsupported claims,
+   missing citations, date errors, and conflict handling. Metrics and model
+   agreement do not establish accuracy.
+2. **Add a web/API or polished UI only if needed.** The source-backed views,
+   exact search, and read-only CLI are already usable inputs. Keep raw text
+   local and retain the same sanitized gateway boundary.
 
 ### P2 — optional refinement
 
@@ -198,8 +231,11 @@ review items. The MCP UUID feed remains a redundant shadow with explicit gaps.
 
 ### Usable private assistant finish line
 
-This requires the local assistant/API/UI layer. It does not require manually
-reading the existing review queues.
+The local CLI assistant finish line is met: it retrieves evidence, preserves
+source locators, separates source facts from synthesis, abstains or falls back
+when evidence/model output is insufficient, and has an explicit sanitized
+comparison route. A web/API or polished UI remains optional. Manual source
+inspection is still required before consequential use.
 
 ## Owner input required
 
@@ -231,8 +267,10 @@ already complete; future runs should be deltas, not another historical pull.
 - The Granola API key is not in this checkout; the documented runtime retrieves
   `GRANOLA_API_KEY` from the encrypted homelab vault.
 - The active Granola client is read-only. No provider write-back, Atlas call,
-  mailbox access, cloud transcription, or external raw-corpus model call is
-  part of the active path.
+  mailbox access, or cloud transcription is part of the active path. Loopback
+  Ollama is opt-in. The explicit `g2k-sensitive` route receives only the
+  bounded sanitized packet; the raw local packet and full citation map stay on
+  the Mac.
 - `homelab.yaml` records the canonical runtime as `macmini` managed by the
   user LaunchAgent, while monitoring remains `standby` and health checks remain
   `[]` because no homelab monitor is configured for this local-only job.
