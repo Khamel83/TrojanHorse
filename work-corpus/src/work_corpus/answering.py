@@ -30,6 +30,8 @@ _PHONE_RE = re.compile(
     r"(?<![\w])(?:"
     r"\+\d{1,3}(?:[ \t().-]*\d){6,12}"
     r"|(?:\(\d{3}\)|\d{3})[\s.-]*\d{3}[\s.-]*\d{4}"
+    r"|0\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
+    r"|\d{2}[ \t.-]\d{2}[ \t.-]\d{4}[ \t.-]\d{4}"
     r")(?![\w])"
 )
 _REMOTE_URL_RE = re.compile(
@@ -41,17 +43,38 @@ _REMOTE_URL_RE = re.compile(
     re.IGNORECASE,
 )
 _PATH_TOKEN = r"[^\s<>\"'/,;!?\\:]+"
-_PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*"
+# Keep the component non-greedy so a natural-language boundary can terminate
+# a spaced path before the rest of the answer prose.
+_PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*?"
+_PATH_PROSE_STOP = (
+    r"(?:and|or|but|then|while|after|before|approved|copied|kept|sent|"
+    r"shared|reviewed|opened|saved|from|to|for|with|on|in|at|as|the|a|an)\b"
+)
+_PATH_BOUNDARY = rf"(?=[,;.!?)]|$|[ \t]+{_PATH_PROSE_STOP})"
 _PATH_TERMINAL = (
     rf"(?:{_PATH_COMPONENT}\.[A-Za-z0-9]{{1,32}}"
-    rf"(?![A-Za-z0-9_-])|{_PATH_COMPONENT}(?=[,;.!?)]|$))"
+    rf"(?![A-Za-z0-9_-])|{_PATH_COMPONENT}{_PATH_BOUNDARY})"
 )
 _POSIX_PATH_RE = re.compile(
-    rf"(?<![\w:])/(?:{_PATH_COMPONENT}/)*{_PATH_TERMINAL}"
+    rf"(?<![\w:])(?:"
+    rf"/(?:{_PATH_COMPONENT}/)*{_PATH_TERMINAL}/?"
+    rf"|/(?:{_PATH_COMPONENT}/)+"
+    rf")",
+    re.IGNORECASE,
 )
 _WINDOWS_PATH_RE = re.compile(
-    rf"(?<![\w])[A-Za-z]:[\\/](?:{_PATH_COMPONENT}[\\/])*"
-    rf"{_PATH_TERMINAL}"
+    rf"(?<![\w])[A-Za-z]:[\\/](?:"
+    rf"(?:{_PATH_COMPONENT}[\\/])*{_PATH_TERMINAL}[\\/]?"
+    rf"|(?:{_PATH_COMPONENT}[\\/])+"
+    rf")",
+    re.IGNORECASE,
+)
+_UNC_PATH_RE = re.compile(
+    rf"(?<![\w])(?:\\\\|//)(?:"
+    rf"(?:{_PATH_COMPONENT}[\\/])+{_PATH_TERMINAL}[\\/]?"
+    rf"|(?:{_PATH_COMPONENT}[\\/])+"
+    rf")",
+    re.IGNORECASE,
 )
 
 
@@ -258,6 +281,7 @@ def _remote_text(
         ("email", _EMAIL_RE),
         ("phone", _PHONE_RE),
         ("path", _WINDOWS_PATH_RE),
+        ("path", _UNC_PATH_RE),
         ("path", _POSIX_PATH_RE),
     )
     for kind, pattern in replacements:

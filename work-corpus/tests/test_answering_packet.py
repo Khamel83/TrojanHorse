@@ -158,6 +158,39 @@ def test_remote_packet_redacts_non_http_urls_spaced_paths_and_international_phon
         assert sensitive not in prepared.packet
 
 
+def test_remote_packet_redacts_trailing_unc_and_unprefixed_phone_forms_without_losing_prose():
+    trailing_posix_path = "/Users/Omar/data/"
+    unc_path = r"\\server\share\foo"
+    search_result = {
+        "question": "What did Maya approve for Project Atlas?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    "Maya copied /Users/Omar Smith then approved Project Atlas. "
+                    f"Trailing directory {trailing_posix_path}; UNC {unc_path}; "
+                    "local call 020 7946 0958; international call "
+                    "44 20 7946 0958."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+    packet = json.loads(prepared.packet)
+
+    assert "Maya" in prepared.packet
+    assert "then approved Project Atlas" in prepared.packet
+    assert packet["evidence"][0]["locator"] == "line:11"
+    for sensitive in (
+        trailing_posix_path,
+        unc_path,
+        "020 7946 0958",
+        "44 20 7946 0958",
+    ):
+        assert sensitive not in prepared.packet
+
+
 def test_prepare_evidence_bounds_hits_snippets_and_total_packet():
     search_result = {
         "question": "Which Project Atlas notes mention Maya?",
