@@ -125,6 +125,57 @@ def test_read_only_connect_preserves_schema_and_rejects_mutation(tmp_path):
     assert database.read_bytes() == before
 
 
+def test_read_only_wal_connect_does_not_mutate_a_read_only_database_directory(
+    tmp_path,
+):
+    database = tmp_path / "read-only" / "state.sqlite"
+    con = connect(database)
+    try:
+        con.execute("CREATE TABLE wal_probe (value TEXT NOT NULL)")
+        con.execute("INSERT INTO wal_probe (value) VALUES ('visible')")
+        con.commit()
+        assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    finally:
+        con.close()
+
+    for suffix in ("-shm", "-wal"):
+        database.with_name(database.name + suffix).unlink(missing_ok=True)
+
+    before_files = {
+        item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
+        for item in database.parent.iterdir()
+    }
+    original_directory_mode = database.parent.stat().st_mode & 0o777
+    database.parent.chmod(0o555)
+    before_directory = (
+        database.parent.stat().st_mode,
+        database.parent.stat().st_mtime_ns,
+    )
+    after_files = None
+    after_directory = None
+    try:
+        read_only = connect(database, read_only=True)
+        try:
+            assert read_only.execute(
+                "SELECT value FROM wal_probe"
+            ).fetchone()[0] == "visible"
+        finally:
+            read_only.close()
+        after_files = {
+            item.name: (item.stat().st_mode, item.stat().st_size, item.read_bytes())
+            for item in database.parent.iterdir()
+        }
+        after_directory = (
+            database.parent.stat().st_mode,
+            database.parent.stat().st_mtime_ns,
+        )
+    finally:
+        database.parent.chmod(original_directory_mode)
+
+    assert after_files == before_files
+    assert after_directory == before_directory
+
+
 def test_schema_has_no_email_career_claim_or_decision_table(tmp_path):
     con = connect(tmp_path / "state.sqlite")
     try:

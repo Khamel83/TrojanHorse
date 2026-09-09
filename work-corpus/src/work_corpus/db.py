@@ -1056,7 +1056,11 @@ def connect(
         # not enough because sqlite3 would otherwise create a missing file.
         # ``query_only`` adds a second guard against accidental writes by an
         # answer or inspection path.
-        uri = f"{path.absolute().as_uri()}?mode=ro"
+        # ``immutable=1`` tells SQLite that this snapshot cannot change.  A
+        # normal WAL read-only connection may create ``-shm``/``-wal`` files
+        # while opening or querying, which breaks answer paths in read-only
+        # directories even when ``query_only`` is enabled.
+        uri = f"{path.absolute().as_uri()}?mode=ro&immutable=1"
         con = sqlite3.connect(uri, uri=True)
         con.row_factory = sqlite3.Row
         try:

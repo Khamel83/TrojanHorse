@@ -27,15 +27,31 @@ _EMAIL_RE = re.compile(
     re.IGNORECASE,
 )
 _PHONE_RE = re.compile(
-    r"(?<![\w])(?:\+?\d{1,3}[\s.-]*)?"
-    r"(?:\(\d{3}\)|\d{3})[\s.-]*\d{3}[\s.-]*\d{4}(?![\w])"
+    r"(?<![\w])(?:"
+    r"\+\d{1,3}(?:[ \t().-]*\d){6,12}"
+    r"|(?:\(\d{3}\)|\d{3})[\s.-]*\d{3}[\s.-]*\d{4}"
+    r")(?![\w])"
+)
+_REMOTE_URL_RE = re.compile(
+    r"(?<![@\w./\\:-])(?:"
+    r"[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\"']+"
+    r"|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d+)?"
+    r"(?:/[^\s<>\"']*)?"
+    r")",
+    re.IGNORECASE,
+)
+_PATH_TOKEN = r"[^\s<>\"'/,;!?\\:]+"
+_PATH_COMPONENT = rf"{_PATH_TOKEN}(?:[ \t]+{_PATH_TOKEN})*"
+_PATH_TERMINAL = (
+    rf"(?:{_PATH_COMPONENT}\.[A-Za-z0-9]{{1,32}}"
+    rf"(?![A-Za-z0-9_-])|{_PATH_COMPONENT}(?=[,;.!?)]|$))"
 )
 _POSIX_PATH_RE = re.compile(
-    r"(?<![\w:])/(?:[^\s<>\"'/]+/)+[^\s<>\"'/]+"
+    rf"(?<![\w:])/(?:{_PATH_COMPONENT}/)*{_PATH_TERMINAL}"
 )
 _WINDOWS_PATH_RE = re.compile(
-    r"(?<![\w])[A-Za-z]:[\\/](?:[^\\/\s<>\"']+[\\/])*"
-    r"[^\\/\s<>\"']+"
+    rf"(?<![\w])[A-Za-z]:[\\/](?:{_PATH_COMPONENT}[\\/])*"
+    rf"{_PATH_TERMINAL}"
 )
 
 
@@ -231,6 +247,11 @@ def _remote_text(
     original = str(value or "")
     text = redact_snippet(original)
     if text != original:
+        findings.append(f"{citation_id}:{field}:url_or_secret")
+
+    remote_url_text = _REMOTE_URL_RE.sub("[REDACTED_URL]", text)
+    if remote_url_text != text:
+        text = remote_url_text
         findings.append(f"{citation_id}:{field}:url_or_secret")
 
     replacements = (

@@ -122,6 +122,42 @@ def test_remote_packet_redacts_sensitive_values_and_preserves_safe_words():
     assert "absolute_path" not in packet["evidence"][0]
 
 
+def test_remote_packet_redacts_non_http_urls_spaced_paths_and_international_phones():
+    posix_path = "/Users/Omar Smith/private.sqlite"
+    windows_path = r"C:\Users\Omar Smith\private.sqlite"
+    search_result = {
+        "question": "Which Project Atlas contact did Maya record?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    "Maya and Omar approved Project Atlas. Visit "
+                    "www.example.com/private and ftp://private.example/file; "
+                    f"POSIX {posix_path}; Windows {windows_path}; "
+                    "call +44 20 7946 0958 or +61 2 9374 4000."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+    packet = json.loads(prepared.packet)
+
+    assert "Maya" in prepared.packet
+    assert "Omar" in prepared.packet
+    assert "Project Atlas" in prepared.packet
+    assert packet["evidence"][0]["locator"] == "line:11"
+    for sensitive in (
+        "www.example.com/private",
+        "ftp://private.example/file",
+        posix_path,
+        windows_path,
+        "+44 20 7946 0958",
+        "+61 2 9374 4000",
+    ):
+        assert sensitive not in prepared.packet
+
+
 def test_prepare_evidence_bounds_hits_snippets_and_total_packet():
     search_result = {
         "question": "Which Project Atlas notes mention Maya?",
