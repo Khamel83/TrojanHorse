@@ -12,8 +12,10 @@ Gemini Code Assist tier; the prior Gemini review remains the documented
 approval of the handoff text, while this implementation has separate local
 tests and independent code review receipts.
 
-The local answer layer and its final safety fixes are delivered at commit
-`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`, which is pushed to `main`.
+The local answer layer and its final safety fixes are delivered in the pushed
+`main` history. The implementation commit is
+`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`; the final documentation and
+remote SHA are verified by the completion handoff.
 The post-merge bounded maintenance poll exited 0 with no raw capture append and
 no local stage rebuild.
 
