@@ -36,10 +36,14 @@ _PHONE_RE = re.compile(
 )
 _COMPACT_UK_PHONE_RE = r"(?:0[127]\d{9}|44[127]\d{9})"
 _COMPACT_UK_PHONE_CONTEXT_RE = re.compile(
-    rf"(?P<context>\b(?:calls?|phones?|tel|mobile|contact|number)\b"
-    rf"(?:[ \t]*(?:the|is|at|us|me|number)\b)*[ \t:.-]*?)"
+    rf"(?P<context>\b(?:calls?|phones?|tel|mobile|contact)\b"
+    rf"(?:[ \t]*(?:the|is|at|us|me|number)\b)*[ \t:=().-]*?)"
     rf"(?P<number>{_COMPACT_UK_PHONE_RE})(?![\w])",
     re.IGNORECASE,
+)
+_COMPACT_UK_PHONE_LIST_RE = re.compile(
+    rf"(?P<prefix>\[REDACTED_PHONE\][ \t]*[,;][ \t]*)"
+    rf"(?P<number>{_COMPACT_UK_PHONE_RE})(?![\w])"
 )
 _REMOTE_URL_RE = re.compile(
     r"(?<![@\w./\\:-])(?:"
@@ -299,6 +303,16 @@ def _remote_text(
     )
     if contextual_phone_text != text:
         text = contextual_phone_text
+        findings.append(f"{citation_id}:{field}:phone")
+
+    while True:
+        list_phone_text = _COMPACT_UK_PHONE_LIST_RE.sub(
+            lambda match: f"{match.group('prefix')}[REDACTED_PHONE]",
+            text,
+        )
+        if list_phone_text == text:
+            break
+        text = list_phone_text
         findings.append(f"{citation_id}:{field}:phone")
 
     for sensitive in sorted(

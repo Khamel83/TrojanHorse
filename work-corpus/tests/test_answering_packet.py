@@ -343,6 +343,60 @@ def test_remote_packet_uses_context_for_compact_uk_phones():
         assert phone not in prepared.packet
 
 
+def test_remote_packet_preserves_number_labeled_numeric_evidence():
+    values = (
+        "07123456789",
+        "07123456789",
+        "441234567890",
+    )
+    search_result = {
+        "question": "Which Project Atlas record did Maya approve?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f"Ticket number {values[0]}; "
+                    f"invoice number: {values[1]}; "
+                    f"case number {values[2]}. Maya approved Project Atlas."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert "Ticket number 07123456789" in prepared.packet
+    assert "invoice number: 07123456789" in prepared.packet
+    assert "case number 441234567890" in prepared.packet
+    assert "Maya approved Project Atlas" in prepared.packet
+
+
+def test_remote_packet_redacts_key_value_parenthesized_and_list_phones():
+    key_value_phone = "02079460958"
+    parenthesized_phone = "01632960001"
+    list_phones = ("02079460958", "01632960001")
+    us_phone = "(415)555-2671"
+    search_result = {
+        "question": "Which Project Atlas contact did Maya record?",
+        "results": [
+            _hit(
+                1,
+                snippet=(
+                    f"phone={key_value_phone}; call({parenthesized_phone}); "
+                    f"call {list_phones[0]}, {list_phones[1]}; US {us_phone}. "
+                    "Maya approved Project Atlas."
+                ),
+            )
+        ],
+    }
+
+    prepared = prepare_evidence(search_result, remote_safe=True)
+
+    assert "Maya approved Project Atlas" in prepared.packet
+    for phone in (key_value_phone, parenthesized_phone, *list_phones, us_phone):
+        assert phone not in prepared.packet
+
+
 def test_prepare_evidence_bounds_hits_snippets_and_total_packet():
     search_result = {
         "question": "Which Project Atlas notes mention Maya?",
