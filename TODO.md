@@ -12,6 +12,11 @@ Gemini Code Assist tier; the prior Gemini review remains the documented
 approval of the handoff text, while this implementation has separate local
 tests and independent code review receipts.
 
+The local answer layer and its final safety fixes are delivered at commit
+`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`, which is pushed to `main`.
+The post-merge bounded maintenance poll exited 0 with no raw capture append and
+no local stage rebuild.
+
 Ingestion, exact search, deterministic organization, and canonical Mac delta
 maintenance are complete at delivered commit
 `b8f08ad92ab8b95de7e2a5cc48947b5857a53237`. The handoff reports that
@@ -43,6 +48,11 @@ provenance. See [Remaining Work](docs/REMAINING_WORK.md),
   unchanged. A local `llama3.2:1b` canary and the live sanitized
   `g2k-sensitive` route were exercised; malformed, uncited, timed-out, or
   oversized model output fails closed to an evidence fallback.
+- [x] Keep answer reads and ordinary mutating CLI commands behind the shared
+  Granola maintenance lock, reject active SQLite journal sidecars, and fail
+  closed when the read lock is missing. Evaluation reports use exclusive
+  creation under the ignored state report path and cannot overwrite existing
+  files or symlinks.
 - [ ] Manually inspect a broader representative evaluation set before relying
   on synthesis for consequential decisions. Model agreement is not proof of
   corpus accuracy.
