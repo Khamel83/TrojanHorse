@@ -16,6 +16,7 @@ from work_corpus.answering import (
     GatewaySensitiveBackend,
     MAX_COMPLETION_PROMPT_CHARS,
     OllamaBackend,
+    _answer_messages,
     parse_completion,
     prepare_evidence,
 )
@@ -68,6 +69,14 @@ def test_parse_completion_accepts_a_cited_json_object():
         "citations": ["S1"],
         "stance": "supported",
     }
+
+
+def test_answer_prompt_requires_raw_json_and_known_stance_values():
+    prompt = _answer_messages(_prepared())[0]["content"]
+    assert "raw JSON" in prompt
+    assert "no Markdown fences" in prompt
+    assert "citations must be non-empty" in prompt
+    assert "Never use neutral" in prompt
 
 
 @pytest.mark.parametrize(

@@ -76,7 +76,7 @@ Use a loopback Ollama model when a bounded model synthesis is useful:
 ```bash
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer \
   "What happened to Project Atlas?" --backend ollama \
-  --model llama3.2:3b
+  --model llama3.2:1b
 ```
 
 The comparison command runs local original, local sanitized, and the

@@ -89,23 +89,35 @@ _EVIDENCE_SELECT = """
            s.relative_path, s.source_system, s.classification,
            s.career_value, s.operations_value, s.date_hint,
            COALESCE((
-               SELECT d.date_value
-               FROM date_observation d
-               WHERE d.evidence_id=e.evidence_id
-                  OR (d.evidence_id IS NULL
-                      AND d.source_version_id=e.source_version_id)
-               ORDER BY CASE WHEN d.evidence_id=e.evidence_id THEN 0 ELSE 1 END,
-                        COALESCE(d.confidence, 0) DESC, d.observation_id
+               SELECT candidate.date_value
+               FROM (
+                   SELECT d.date_value,
+                          CASE WHEN d.evidence_id=e.evidence_id THEN 0 ELSE 1 END AS priority,
+                          COALESCE(d.confidence, 0) AS confidence,
+                          d.observation_id
+                   FROM date_observation d
+                   WHERE d.evidence_id=e.evidence_id
+                      OR (d.evidence_id IS NULL
+                          AND d.source_version_id=e.source_version_id)
+               ) AS candidate
+               ORDER BY candidate.priority, candidate.confidence DESC,
+                        candidate.observation_id
                LIMIT 1
            ), s.date_hint) AS observed_date,
            (
-               SELECT d.basis
-               FROM date_observation d
-               WHERE d.evidence_id=e.evidence_id
-                  OR (d.evidence_id IS NULL
-                      AND d.source_version_id=e.source_version_id)
-               ORDER BY CASE WHEN d.evidence_id=e.evidence_id THEN 0 ELSE 1 END,
-                        COALESCE(d.confidence, 0) DESC, d.observation_id
+               SELECT candidate.basis
+               FROM (
+                   SELECT d.basis,
+                          CASE WHEN d.evidence_id=e.evidence_id THEN 0 ELSE 1 END AS priority,
+                          COALESCE(d.confidence, 0) AS confidence,
+                          d.observation_id
+                   FROM date_observation d
+                   WHERE d.evidence_id=e.evidence_id
+                      OR (d.evidence_id IS NULL
+                          AND d.source_version_id=e.source_version_id)
+               ) AS candidate
+               ORDER BY candidate.priority, candidate.confidence DESC,
+                        candidate.observation_id
                LIMIT 1
            ) AS observed_basis
 """
