@@ -15,6 +15,7 @@ import math
 import re
 import socket
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -1491,6 +1492,7 @@ def _base_answer_result(
         "status": "",
         "answer_kind": "",
         "answer": "",
+        "stance": None,
         "citations": citations,
         "citation_ids": [item["citation_id"] for item in citations],
         "citation_map": citation_map,
@@ -1504,6 +1506,7 @@ def _base_answer_result(
         "model": None,
         "backend_metadata": {},
         "metadata": {},
+        "sanitizer_findings": list(prepared.sanitizer_findings),
         "warnings": list(dict.fromkeys([*(warnings or ()), *prepared.sanitizer_findings])),
     }
 
@@ -1539,6 +1542,7 @@ def _fallback_answer(
     result["route"] = str(result.get("backend") or "unknown")
     result["backend_metadata"] = {"completion": "failed"}
     result["metadata"] = result["backend_metadata"]
+    result["stance"] = "insufficient"
     if has_conflict:
         result["answer"] = (
             "The local source evidence contains conflicting records; "
@@ -1591,6 +1595,7 @@ def _answer_prepared(
     if not source_facts and not inferences and not conflicts:
         result["status"] = "no_evidence"
         result["answer_kind"] = "abstention"
+        result["stance"] = "insufficient"
         result["answer"] = (
             result["missing"][0].get("snippet")
             if result["missing"]
@@ -1601,6 +1606,7 @@ def _answer_prepared(
     if (not source_facts and not has_conflict) or not has_citable_evidence:
         result["status"] = "insufficient_evidence"
         result["answer_kind"] = "abstention"
+        result["stance"] = "insufficient"
         result["answer"] = (
             "The available evidence is insufficient for a source-backed answer."
         )
@@ -1611,6 +1617,7 @@ def _answer_prepared(
     if backend == "evidence" and has_conflict:
         result["status"] = "insufficient_evidence"
         result["answer_kind"] = "abstention"
+        result["stance"] = "insufficient"
         result["answer"] = (
             "The local source evidence contains conflicting records; "
             "no synthesis was returned."
@@ -1645,8 +1652,13 @@ def _answer_prepared(
             bool(source_facts),
             has_conflict,
         )
-    except Exception:
+    except Exception as exc:
         _fallback_answer(result, prepared, messages, has_conflict=has_conflict)
+        if isinstance(exc, CompletionParseError) and "unknown citation ID" in str(exc):
+            # Keep the rejected model content out of the result while making
+            # the evaluation harness able to count the invalid citation.
+            result["invalid_citation_count"] = 1
+            result["warnings"].append("completion rejected an invalid citation")
         return result
 
     metadata = _backend_metadata(completion)
@@ -1660,6 +1672,7 @@ def _answer_prepared(
     if metadata.get("model") is not None:
         result["model"] = metadata["model"]
     result["answer"] = parsed["answer"]
+    result["stance"] = parsed["stance"]
     _set_citations(result, parsed["citations"])
     if has_conflict:
         result["warnings"].append("completion acknowledged conflicting evidence")
@@ -1742,7 +1755,12 @@ def compare_answers(
     limit: int = DEFAULT_MAX_HITS,
     allow_sensitive_remote: bool = False,
 ) -> Dict[str, Any]:
-    """Compare two lanes against one search result and remote-safe packet."""
+    """Compare local original, local sanitized, and sensitive lanes.
+
+    The original packet is retained for the local-only lane.  The sanitized
+    packet is prepared once and is the only packet passed to either the local
+    sanitized lane or the gateway-sensitive lane.
+    """
     if not allow_sensitive_remote:
         raise ValueError("answer comparison requires allow_sensitive_remote=True")
     if (
@@ -1773,8 +1791,8 @@ def compare_answers(
     elif remote_backend is not None:
         remote_completion_backend = remote_backend
 
-    # One read-only search feeds one remote-safe packet.  Both lanes receive
-    # the same packet and citation map, so their digests can be compared.
+    # One read-only search feeds two deterministic views.  Only the sanitized
+    # view can reach the gateway-sensitive backend.
     search_result = search(
         con,
         question,
@@ -1783,47 +1801,493 @@ def compare_answers(
         raw_fallback=True,
         rebuild_index=False,
     )
-    prepared = prepare_evidence(
+    local_original_prepared = prepare_evidence(
+        search_result,
+        remote_safe=False,
+        max_hits=limit,
+    )
+    local_sanitized_prepared = prepare_evidence(
         search_result,
         remote_safe=True,
         max_hits=limit,
     )
-    local = _answer_prepared(
+    local_original = _answer_prepared(
         search_result,
-        prepared,
+        local_original_prepared,
         backend=local_backend_name,
         completion_backend=local_completion_backend,
         question=question,
     )
-    remote = _answer_prepared(
+    local_sanitized = _answer_prepared(
         search_result,
-        prepared,
+        local_sanitized_prepared,
+        backend=local_backend_name,
+        completion_backend=local_completion_backend,
+        question=question,
+    )
+    gateway_sensitive = _answer_prepared(
+        search_result,
+        local_sanitized_prepared,
         backend="g2k-sensitive",
         completion_backend=remote_completion_backend,
         question=question,
     )
-    local_digest = local.get("packet_sha256")
-    remote_digest = remote.get("packet_sha256")
-    digest_equal = local_digest == remote_digest == prepared.packet_sha256
+    lanes = {
+        "local_original": local_original,
+        "local_sanitized": local_sanitized,
+        "gateway_sensitive": gateway_sensitive,
+    }
+    original_digest = local_original.get("packet_sha256")
+    sanitized_digest = local_sanitized.get("packet_sha256")
+    gateway_digest = gateway_sensitive.get("packet_sha256")
+    digest_equal = (
+        sanitized_digest
+        == gateway_digest
+        == local_sanitized_prepared.packet_sha256
+    )
+    source_grounded = {
+        name: _lane_source_summary(result)
+        for name, result in lanes.items()
+    }
+    source_grounded["source_fact_ids"] = _source_ids_from_hits(
+        search_result.get("source_facts")
+    )
+    source_grounded["same_cited_sources"] = (
+        set(source_grounded["local_sanitized"]["source_ids"])
+        == set(source_grounded["gateway_sensitive"]["source_ids"])
+    )
+    source_grounded["local_sanitization_changed_sources"] = (
+        set(source_grounded["local_original"]["source_ids"])
+        != set(source_grounded["local_sanitized"]["source_ids"])
+    )
     warnings = list(
         dict.fromkeys(
-            [*local.get("warnings", []), *remote.get("warnings", [])]
+            [
+                *local_original.get("warnings", []),
+                *local_sanitized.get("warnings", []),
+                *gateway_sensitive.get("warnings", []),
+            ]
         )
     )
     return {
         "question": str(search_result.get("question") or question).strip(),
         "status": "compared",
         "answer_kind": "comparison",
-        "local": local,
-        "remote": remote,
-        "packet_sha256": prepared.packet_sha256,
-        "local_packet_sha256": local_digest,
-        "remote_packet_sha256": remote_digest,
+        "lanes": lanes,
+        # ``local`` and ``remote`` preserve the Task 3 shape while the named
+        # lanes make the sanitization boundary explicit for evaluators.
+        "local": local_sanitized,
+        "remote": gateway_sensitive,
+        "local_original": local_original,
+        "local_sanitized": local_sanitized,
+        "gateway_sensitive": gateway_sensitive,
+        "packet_sha256": local_sanitized_prepared.packet_sha256,
+        "original_packet_sha256": original_digest,
+        "sanitized_packet_sha256": sanitized_digest,
+        "local_original_packet_sha256": original_digest,
+        "local_packet_sha256": sanitized_digest,
+        "remote_packet_sha256": gateway_digest,
         "packet_digests": {
-            "local": local_digest,
-            "remote": remote_digest,
+            "local_original": original_digest,
+            "local_sanitized": sanitized_digest,
+            "gateway_sensitive": gateway_digest,
+            "local": sanitized_digest,
+            "remote": gateway_digest,
+        },
+        "packet_digest_equality": {
+            "local_original": original_digest == local_original_prepared.packet_sha256,
+            "local_sanitized": sanitized_digest == local_sanitized_prepared.packet_sha256,
+            "gateway_sensitive": gateway_digest == local_sanitized_prepared.packet_sha256,
+            "local_sanitized_gateway_sensitive": digest_equal,
         },
         "packet_digest_equal": digest_equal,
         "packet_sha256_equal": digest_equal,
+        "sanitizer_findings": list(local_sanitized_prepared.sanitizer_findings),
+        "source_grounded_comparison": source_grounded,
+        "accuracy_claim": None,
+        "review_authority": "source_inspection_required",
         "warnings": warnings,
+    }
+
+
+def _source_ids_from_hits(values: Any) -> List[str]:
+    """Return distinct source IDs from source-backed hit-shaped values."""
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        return []
+    source_ids: List[str] = []
+    for value in values:
+        if not isinstance(value, Mapping):
+            continue
+        source_id = value.get("source_id")
+        if source_id is None:
+            continue
+        text = str(source_id)
+        if text and text not in source_ids:
+            source_ids.append(text)
+    return source_ids
+
+
+def _citation_source_ids(
+    result: Mapping[str, Any],
+) -> tuple[List[str], List[str], List[str]]:
+    """Resolve cited packet IDs to complete local source IDs."""
+    raw_citation_ids = result.get("citation_ids")
+    if not isinstance(raw_citation_ids, Sequence) or isinstance(
+        raw_citation_ids, (str, bytes)
+    ):
+        raw_citation_ids = []
+    citation_ids = [str(value) for value in raw_citation_ids]
+    citation_map = result.get("citation_map")
+    if not isinstance(citation_map, Mapping):
+        citation_map = {}
+    source_ids: List[str] = []
+    invalid: List[str] = []
+    for citation_id in citation_ids:
+        item = citation_map.get(citation_id)
+        if not isinstance(item, Mapping):
+            invalid.append(citation_id)
+            continue
+        source_id = item.get("source_id")
+        if source_id is None and isinstance(item.get("hit"), Mapping):
+            source_id = item["hit"].get("source_id")
+        if source_id is None or not str(source_id):
+            invalid.append(citation_id)
+            continue
+        source_text = str(source_id)
+        if source_text not in source_ids:
+            source_ids.append(source_text)
+    return citation_ids, source_ids, invalid
+
+
+def _lane_source_summary(result: Mapping[str, Any]) -> Dict[str, Any]:
+    citation_ids, source_ids, invalid = _citation_source_ids(result)
+    return {
+        "citation_ids": citation_ids,
+        "source_ids": source_ids,
+        "invalid_citations": invalid,
+        "status": result.get("status"),
+        "stance": result.get("stance"),
+    }
+
+
+def _read_evaluation_cases(cases_path: Union[str, Path]) -> List[Dict[str, Any]]:
+    """Read and validate one local JSONL case file without writing it."""
+    path = Path(cases_path).expanduser()
+    if not path.is_file():
+        raise ValueError(f"evaluation cases file does not exist: {path}")
+    cases: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ValueError("evaluation cases file could not be read") from exc
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line, object_pairs_hook=_strict_object_pairs)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"evaluation case line {line_number} is invalid JSON") from exc
+        if not isinstance(value, dict):
+            raise ValueError(f"evaluation case line {line_number} must be an object")
+        required = {"id", "question", "expected_source_ids", "expected_status"}
+        if not required.issubset(value):
+            missing = sorted(required - set(value))
+            raise ValueError(
+                f"evaluation case line {line_number} is missing: {', '.join(missing)}"
+            )
+        case_id = value.get("id")
+        question = value.get("question")
+        expected_source_ids = value.get("expected_source_ids")
+        expected_status = value.get("expected_status")
+        expected_terms = value.get("expected_terms", [])
+        if not isinstance(case_id, str) or not case_id.strip():
+            raise ValueError(f"evaluation case line {line_number} id must be text")
+        if case_id in seen_ids:
+            raise ValueError(f"evaluation case id is duplicated: {case_id}")
+        if not isinstance(question, str) or not question.strip():
+            raise ValueError(f"evaluation case {case_id} question must be text")
+        if not isinstance(expected_source_ids, list) or any(
+            not isinstance(item, str) or not item for item in expected_source_ids
+        ):
+            raise ValueError(
+                f"evaluation case {case_id} expected_source_ids must be text IDs"
+            )
+        if not isinstance(expected_status, str) or not expected_status.strip():
+            raise ValueError(f"evaluation case {case_id} expected_status must be text")
+        if not isinstance(expected_terms, list) or any(
+            not isinstance(item, str) or not item for item in expected_terms
+        ):
+            raise ValueError(
+                f"evaluation case {case_id} expected_terms must be text when supplied"
+            )
+        seen_ids.add(case_id)
+        cases.append(
+            {
+                "id": case_id,
+                "question": question,
+                "expected_source_ids": list(dict.fromkeys(expected_source_ids)),
+                "expected_status": expected_status,
+                "expected_terms": list(dict.fromkeys(expected_terms)),
+            }
+        )
+    return sorted(cases, key=lambda item: item["id"])
+
+
+def _normalise_evaluation_backends(backends: Any) -> List[tuple[str, Any]]:
+    if isinstance(backends, Mapping):
+        items = list(backends.items())
+    elif isinstance(backends, Sequence) and not isinstance(backends, (str, bytes)):
+        items = []
+        for backend in backends:
+            name = backend if isinstance(backend, str) else getattr(backend, "name", None)
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("evaluation backends require names")
+            items.append((name, backend))
+    else:
+        raise ValueError("backends must be a mapping or sequence")
+    normalised: List[tuple[str, Any]] = []
+    seen: set[str] = set()
+    for name, backend in items:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("evaluation backend names must be text")
+        if name in seen:
+            raise ValueError(f"evaluation backend is duplicated: {name}")
+        if isinstance(backend, str):
+            if backend not in {"evidence", "ollama", "g2k-sensitive"}:
+                raise ValueError(f"unsupported evaluation backend: {backend}")
+        elif not callable(getattr(backend, "complete", None)):
+            raise ValueError(f"evaluation backend {name} has no complete method")
+        seen.add(name)
+        normalised.append((name, backend))
+    if not normalised:
+        raise ValueError("at least one evaluation backend is required")
+    return sorted(normalised, key=lambda item: item[0])
+
+
+def _evaluation_backend_kind(name: str, backend: Any) -> str:
+    lowered = name.casefold().replace("_", "-")
+    if isinstance(backend, str):
+        return backend
+    backend_name = str(getattr(backend, "name", "")).casefold()
+    if (
+        lowered in {"remote", "gateway", "gateway-sensitive", "g2k", "g2k-sensitive"}
+        or backend_name in {"remote", "gateway", "gateway-sensitive", "g2k", "g2k-sensitive"}
+    ):
+        return "g2k-sensitive"
+    if backend_name == "evidence":
+        return "evidence"
+    return "ollama"
+
+
+def _score_evaluation_case(
+    case: Mapping[str, Any],
+    result: Mapping[str, Any],
+    *,
+    elapsed_seconds: float,
+) -> Dict[str, Any]:
+    citation_ids, cited_source_ids, invalid_citations = _citation_source_ids(result)
+    rejected_invalid_count = result.get("invalid_citation_count", 0)
+    if not isinstance(rejected_invalid_count, int) or rejected_invalid_count < 0:
+        rejected_invalid_count = 0
+    expected_source_ids = [str(item) for item in case["expected_source_ids"]]
+    expected_set = set(expected_source_ids)
+    cited_set = set(cited_source_ids)
+    matched_source_ids = [item for item in cited_source_ids if item in expected_set]
+    if cited_set:
+        citation_precision = len(cited_set & expected_set) / len(cited_set)
+    else:
+        citation_precision = 1.0 if not expected_set else 0.0
+    citation_recall = (
+        len(cited_set & expected_set) / len(expected_set) if expected_set else 1.0
+    )
+    actual_status = str(result.get("status") or "")
+    expected_status = str(case["expected_status"])
+    abstention_statuses = {
+        "no_evidence",
+        "insufficient_evidence",
+        "model_abstention",
+        "abstention",
+    }
+    expected_abstention = expected_status in abstention_statuses
+    actual_abstention = actual_status in abstention_statuses
+    answer_text = str(result.get("answer") or "")
+    lowered_answer = answer_text.casefold()
+    has_conflict = bool(result.get("conflicts"))
+    conflict_acknowledged = bool(
+        has_conflict
+        and (
+            str(result.get("stance") or "") in {"mixed", "insufficient"}
+            or any(
+                term in lowered_answer
+                for term in ("conflict", "disagree", "inconsistent", "different")
+            )
+        )
+    )
+    expected_terms = [str(item) for item in case.get("expected_terms", [])]
+    matched_terms = [term for term in expected_terms if term.casefold() in lowered_answer]
+    missing_terms = [term for term in expected_terms if term not in matched_terms]
+    term_coverage = len(matched_terms) / len(expected_terms) if expected_terms else 1.0
+    return {
+        "status": actual_status,
+        "answer_kind": result.get("answer_kind"),
+        "answer": answer_text,
+        "citation_ids": citation_ids,
+        "cited_source_ids": cited_source_ids,
+        "expected_source_ids": expected_source_ids,
+        "matched_source_ids": matched_source_ids,
+        "citation_precision": citation_precision,
+        "citation_recall": citation_recall,
+        "invalid_citations": invalid_citations,
+        "invalid_citation_count": max(len(invalid_citations), rejected_invalid_count),
+        "expected_status": expected_status,
+        "expected_status_match": actual_status == expected_status,
+        "expected_abstention": expected_abstention,
+        "actual_abstention": actual_abstention,
+        "abstention_match": expected_abstention == actual_abstention,
+        "correct_abstention": expected_abstention and actual_abstention,
+        "conflict_expected": has_conflict,
+        "conflict_acknowledged": conflict_acknowledged,
+        "expected_terms": expected_terms,
+        "matched_terms": matched_terms,
+        "missing_terms": missing_terms,
+        "term_coverage": term_coverage,
+        "sanitizer_findings": list(result.get("sanitizer_findings") or []),
+        "elapsed_seconds": round(max(0.0, elapsed_seconds), 6),
+        "route": result.get("route"),
+        "model": result.get("model"),
+        "backend_metadata": _json_value(result.get("backend_metadata") or {}),
+        "packet_sha256": result.get("packet_sha256"),
+    }
+
+
+def evaluate_cases(
+    con: Any,
+    cases_path: Union[str, Path],
+    *,
+    backends: Any,
+    allow_sensitive_remote: bool = False,
+) -> Dict[str, Any]:
+    """Evaluate local JSONL cases using source-grounded review metrics.
+
+    The returned metrics are evidence for manual review.  They are never an
+    automatic accuracy or correctness claim, and this function does not write
+    the case file, prompts, answers, or corpus state.
+    """
+    cases = _read_evaluation_cases(cases_path)
+    backend_specs = _normalise_evaluation_backends(backends)
+    prepared_backends: List[tuple[str, str, Optional[CompletionBackend]]] = []
+    for name, backend in backend_specs:
+        kind = _evaluation_backend_kind(name, backend)
+        if kind == "g2k-sensitive" and not allow_sensitive_remote:
+            raise ValueError(
+                "g2k-sensitive evaluation requires allow_sensitive_remote=True"
+            )
+        if isinstance(backend, str):
+            completion_backend = None
+        else:
+            completion_backend = backend
+        prepared_backends.append((name, kind, completion_backend))
+
+    evaluated_cases: List[Dict[str, Any]] = []
+    route_metadata: Dict[str, List[Dict[str, Any]]] = {
+        name: [] for name, _kind, _backend in prepared_backends
+    }
+    for case in cases:
+        lane_scores: Dict[str, Dict[str, Any]] = {}
+        for name, kind, completion_backend in prepared_backends:
+            started = time.monotonic()
+            try:
+                result = answer(
+                    con,
+                    case["question"],
+                    backend=kind,
+                    completion_backend=completion_backend,
+                    allow_sensitive_remote=allow_sensitive_remote,
+                )
+            except Exception as exc:
+                # Keep one malformed case from hiding the rest of the local
+                # evaluation.  Do not include provider exception text.
+                result = {
+                    "status": "evaluation_error",
+                    "answer_kind": "evaluation_error",
+                    "answer": "",
+                    "citation_ids": [],
+                    "citation_map": {},
+                    "conflicts": [],
+                    "sanitizer_findings": [],
+                    "route": kind,
+                    "model": None,
+                    "backend_metadata": {},
+                    "packet_sha256": None,
+                    "error_type": type(exc).__name__,
+                }
+            elapsed = time.monotonic() - started
+            score = _score_evaluation_case(case, result, elapsed_seconds=elapsed)
+            if "error_type" in result:
+                score["error_type"] = result["error_type"]
+            lane_scores[name] = score
+            route_metadata[name].append(
+                {
+                    "route": score.get("route"),
+                    "model": score.get("model"),
+                }
+            )
+        evaluated_cases.append(
+            {
+                "id": case["id"],
+                "question": case["question"],
+                "expected_source_ids": case["expected_source_ids"],
+                "expected_status": case["expected_status"],
+                "expected_terms": case["expected_terms"],
+                "backends": lane_scores,
+            }
+        )
+
+    backend_metadata: Dict[str, Dict[str, Any]] = {}
+    summary: Dict[str, Dict[str, Any]] = {}
+    for name, entries in route_metadata.items():
+        routes = sorted(
+            {str(item["route"]) for item in entries if item.get("route") is not None}
+        )
+        models = sorted(
+            {str(item["model"]) for item in entries if item.get("model") is not None}
+        )
+        metadata: Dict[str, Any] = {
+            "route": routes[0] if len(routes) == 1 else None,
+            "model": models[0] if len(models) == 1 else None,
+            "routes": routes,
+            "models": models,
+        }
+        backend_metadata[name] = metadata
+        scores = [item["backends"][name] for item in evaluated_cases]
+        summary[name] = {
+            "case_count": len(scores),
+            "expected_status_matches": sum(
+                bool(item["expected_status_match"]) for item in scores
+            ),
+            "correct_abstentions": sum(
+                bool(item["correct_abstention"]) for item in scores
+            ),
+            "mean_citation_precision": (
+                sum(float(item["citation_precision"]) for item in scores) / len(scores)
+                if scores
+                else 0.0
+            ),
+            "mean_citation_recall": (
+                sum(float(item["citation_recall"]) for item in scores) / len(scores)
+                if scores
+                else 0.0
+            ),
+        }
+    return {
+        "status": "evaluated",
+        "answer_kind": "evaluation",
+        "cases": evaluated_cases,
+        "backends": [name for name, _kind, _backend in prepared_backends],
+        "backend_metadata": backend_metadata,
+        "summary": summary,
+        "allow_sensitive_remote": allow_sensitive_remote,
+        "accuracy_claim": None,
+        "review_authority": "source_inspection_required",
     }

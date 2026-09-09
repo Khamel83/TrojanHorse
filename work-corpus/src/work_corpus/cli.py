@@ -4,6 +4,7 @@ import argparse
 from datetime import date
 import json
 from pathlib import Path
+import subprocess
 import sys
 import time
 import traceback
@@ -18,6 +19,7 @@ from .answering import (
     OllamaBackend,
     answer as answer_question,
     compare_answers,
+    evaluate_cases,
 )
 from .config import Config, load_config
 from .db import connect, recover_stale_runs
@@ -259,6 +261,48 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(DEFAULT_GATEWAY_HELPER),
     )
+    eval_parser = sub.add_parser(
+        "answer-eval",
+        help="Evaluate local JSONL answer cases without corpus writes.",
+    )
+    eval_parser.add_argument("--cases", type=Path, required=True)
+    eval_parser.add_argument(
+        "--allow-sensitive-remote",
+        action="store_true",
+        help="Include the explicitly authorized g2k-sensitive lane.",
+    )
+    eval_parser.add_argument(
+        "--backend",
+        choices=("evidence", "ollama"),
+        default="ollama",
+        help="Local backend used for evaluation (default: ollama).",
+    )
+    eval_parser.add_argument("--model", "--ollama-model", dest="model", default=DEFAULT_OLLAMA_MODEL)
+    eval_parser.add_argument(
+        "--ollama-url",
+        "--ollama-base-url",
+        "--base-url",
+        dest="ollama_url",
+        default=DEFAULT_OLLAMA_URL,
+    )
+    eval_parser.add_argument(
+        "--timeout",
+        "--timeout-seconds",
+        dest="timeout",
+        type=float,
+        default=DEFAULT_ANSWER_TIMEOUT_SECONDS,
+    )
+    eval_parser.add_argument(
+        "--gateway-helper",
+        type=Path,
+        default=Path(DEFAULT_GATEWAY_HELPER),
+    )
+    eval_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Optional JSON output path outside tracked or non-ignored source.",
+    )
     sub.add_parser("mcp-import", help="Import Granola/Wispr Flow dumps.")
     sub.add_parser(
         "granola-progress",
@@ -304,6 +348,59 @@ def _completion_backend_for_args(args: Any) -> Optional[Any]:
     return GatewaySensitiveBackend(args.gateway_helper.expanduser(), args.timeout)
 
 
+def _write_evaluation_output(root: Path, output: Path, text: str) -> None:
+    """Write an explicitly requested report only outside tracked source."""
+    target = output.expanduser().resolve()
+    try:
+        relative = target.relative_to(root)
+    except ValueError:
+        relative = None
+    if relative is not None:
+        git_check = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if git_check.returncode == 0:
+            relative_text = str(relative)
+            tracked = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "ls-files",
+                    "--error-unmatch",
+                    "--",
+                    relative_text,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            ignored = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "check-ignore",
+                    "-q",
+                    "--no-index",
+                    "--",
+                    relative_text,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if tracked.returncode == 0 or ignored.returncode != 0:
+                raise ValueError(
+                    "evaluation output must be outside tracked source or under an ignored path"
+                )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
 def _run_read_only_answer(args: Any, root: Path) -> int:
     """Run answer commands without bootstrap, pipeline rows, or DB writes."""
     con = None
@@ -321,7 +418,7 @@ def _run_read_only_answer(args: Any, root: Path) -> int:
             config.state_dir / "work_corpus.sqlite",
             read_only=True,
         )
-        question = " ".join(args.question)
+        question = " ".join(args.question) if args.command != "answer-eval" else ""
         if args.command == "answer":
             result = answer_question(
                 con,
@@ -332,7 +429,7 @@ def _run_read_only_answer(args: Any, root: Path) -> int:
                 completion_backend=_completion_backend_for_args(args),
                 allow_sensitive_remote=args.allow_sensitive_remote,
             )
-        else:
+        elif args.command == "answer-compare":
             result = compare_answers(
                 con,
                 question,
@@ -349,7 +446,41 @@ def _run_read_only_answer(args: Any, root: Path) -> int:
                 limit=args.limit,
                 allow_sensitive_remote=True,
             )
-        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        else:
+            cases_path = args.cases.expanduser()
+            if not cases_path.is_absolute():
+                cases_path = root / cases_path
+            if args.backend == "evidence":
+                local_backend: Any = "evidence"
+            else:
+                local_backend = OllamaBackend(
+                    args.model,
+                    args.ollama_url,
+                    args.timeout,
+                )
+            backends: Dict[str, Any] = {"local": local_backend}
+            if args.allow_sensitive_remote:
+                backends["g2k-sensitive"] = GatewaySensitiveBackend(
+                    args.gateway_helper.expanduser(),
+                    args.timeout,
+                )
+            result = evaluate_cases(
+                con,
+                cases_path,
+                backends=backends,
+                allow_sensitive_remote=args.allow_sensitive_remote,
+            )
+        output = json.dumps(
+            result,
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+        if args.command == "answer-eval" and args.output is not None:
+            _write_evaluation_output(root, args.output, output + "\n")
+        else:
+            print(output)
         return 0
     except Exception as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -363,7 +494,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()
-    if args.command in {"answer", "answer-compare"}:
+    if args.command in {"answer", "answer-compare", "answer-eval"}:
         return _run_read_only_answer(args, root)
     config = load_config(root)
     bootstrap(config)

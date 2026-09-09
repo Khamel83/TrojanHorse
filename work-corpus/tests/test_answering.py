@@ -396,10 +396,12 @@ def test_compare_answers_searches_once_and_shares_one_remote_safe_packet():
         answering.search = original_search
 
     assert len(calls) == 1
-    assert local.calls == 1
+    assert local.calls == 2
     assert remote.calls == 1
     assert local.messages[-1]["content"] == remote.messages[-1]["content"]
+    assert local.messages[0]["content"] != local.messages[-1]["content"]
     assert "maya@example.test" not in local.messages[-1]["content"]
     assert "/Users/Omar Smith/private.sqlite" not in local.messages[-1]["content"]
     assert result["local_packet_sha256"] == result["remote_packet_sha256"]
     assert result["packet_sha256_equal"] is True
+    assert result["local_original_packet_sha256"] != result["local_packet_sha256"]

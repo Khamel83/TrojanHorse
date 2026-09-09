@@ -61,6 +61,52 @@ PYTHONPATH=work-corpus/src python3 -m work_corpus --root . doctor
 PYTHONPATH=work-corpus/src python3 -m work_corpus --root . raw-verify
 ```
 
+### Source-grounded answers and local evaluation
+
+The read-only `answer` command defaults to an evidence-only response with
+source IDs and locators. It does not invoke a model or write corpus state:
+
+```bash
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer \
+  "What happened to Project Atlas?"
+```
+
+Use a loopback Ollama model when a bounded model synthesis is useful:
+
+```bash
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer \
+  "What happened to Project Atlas?" --backend ollama \
+  --model llama3.2:3b
+```
+
+The comparison command runs local original, local sanitized, and the
+gateway-sensitive lane. The last lane requires explicit authorization and
+receives only the sanitized evidence packet:
+
+```bash
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer-compare \
+  "What happened to Project Atlas?" --allow-sensitive-remote
+```
+
+For repeatable review, keep synthetic or manually checked cases in an ignored
+local JSONL file such as `work-corpus/state/answer-eval-cases.jsonl`. Each line
+has this shape:
+
+```json
+{"id":"case-001","question":"...","expected_source_ids":["source-id"],"expected_status":"synthesized","expected_terms":["..."]}
+```
+
+Run the evaluation to stdout, or choose an ignored output path. Metrics are
+review aids; source inspection remains the acceptance authority:
+
+```bash
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer-eval \
+  --cases work-corpus/state/answer-eval-cases.jsonl
+PYTHONPATH=work-corpus/src python3 -m work_corpus --root . answer-eval \
+  --cases work-corpus/state/answer-eval-cases.jsonl \
+  --allow-sensitive-remote --output work-corpus/state/answer-eval.json
+```
+
 For a one-time complete Granola archive, run the read-only API client on
 homelab, where `GRANOLA_API_KEY` is stored in the encrypted `maya` vault, and
 stream its JSON output into this repository. The command below does not place

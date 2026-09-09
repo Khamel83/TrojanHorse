@@ -143,6 +143,7 @@ def test_cli_command_set_has_no_email_or_atlas_command():
         "query",
         "answer",
         "answer-compare",
+        "answer-eval",
         "mcp-import",
         "granola-progress",
         "granola-delta",
