@@ -268,3 +268,9 @@ The delivered acceptance included 200 passing tests, Ruff, compilation, shell
 syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
 overlap-only poll with no append or rebuild. Recheck only the layers affected by
 future changes; do not present these historical results as new test runs.
+<!-- janitor:begin:todo -->
+- [x] Record local answer boundary verification and update milestone 3 documentation with verified receipts.
+- [x] Harden local answer evaluation boundary and citation handling (`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`).
+- [x] Implement local answer evaluation metrics and prompt/sanitizer safety fixes.
+- [x] Implement read-only answer evidence preparation and orchestration CLI.
+<!-- janitor:end:todo -->

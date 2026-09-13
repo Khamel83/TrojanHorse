@@ -111,3 +111,8 @@ does not replace raw evidence or copy raw sensitive text.
 **Project source link**: A confirmed relationship from an explicit non-generic
 Capacities `Project` record to a source-backed evidence record. A filename or
 free-text mention alone does not create this link.
+<!-- janitor:begin:recent -->
+- Recorded final runtime validation in `docs/` following local answer layer implementation and evaluation boundary hardening.
+- Clarified final answer milestone verification and receipt documentation across repo docs.
+- Added local answer evaluation metrics, prompt/sanitizer fixes, and read-only answer orchestration.
+<!-- janitor:end:recent -->
