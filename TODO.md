@@ -269,8 +269,12 @@ syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
 overlap-only poll with no append or rebuild. Recheck only the layers affected by
 future changes; do not present these historical results as new test runs.
 <!-- janitor:begin:todo -->
-- [x] Record local answer boundary verification and update milestone 3 documentation with verified receipts.
-- [x] Harden local answer evaluation boundary and citation handling (`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`).
-- [x] Implement local answer evaluation metrics and prompt/sanitizer safety fixes.
-- [x] Implement read-only answer evidence preparation and orchestration CLI.
+## Remaining work
+
+- [ ] Manually inspect a broader representative evaluation set before relying on synthesized answers for consequential decisions. Model agreement is not evidence that the corpus is accurate.
+- [ ] Optionally refine the 48 retained generic topic labels, canonical people and organization aliases, and 52 accepted Zoom linkage states after the core views have been used. These states do not reopen ingestion or require bulk review.
+- [ ] Consider semantic ranking as a later optional refinement while preserving the same local-data boundary.
+- [ ] Prioritize any assistant UI or API expansion only if requested; the documented minimal local answer interface is already delivered.
+
+No mandatory ingestion blocker, historical review queue, product-policy decision, or approved maintenance deployment input is documented as remaining. Mailbox access, Atlas integration, cloud raw-data processing, graph/vector infrastructure, structured decision features, automatic historical task backfill, provider write-back, and polished career-document generation remain explicitly deferred.
 <!-- janitor:end:todo -->

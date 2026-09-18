@@ -112,7 +112,12 @@ does not replace raw evidence or copy raw sensitive text.
 Capacities `Project` record to a source-backed evidence record. A filename or
 free-text mention alone does not create this link.
 <!-- janitor:begin:recent -->
-- Recorded final runtime validation in `docs/` following local answer layer implementation and evaluation boundary hardening.
-- Clarified final answer milestone verification and receipt documentation across repo docs.
-- Added local answer evaluation metrics, prompt/sanitizer fixes, and read-only answer orchestration.
+## Recent work
+
+- Delivered the local answer layer in the pushed `main` history. The documented implementation commit is `4e9da4a3864ce158171e0f7330dbde69d6a7ad97`, followed by documentation commits recording answer-boundary and final runtime validation.
+- Added a minimal read-only `answer` CLI over exact search and source-backed evidence views. Deterministic evidence-only output is the default; local Ollama synthesis is explicit and bounded, and citations retain source ID, source version, and locator fields.
+- Added same-question comparison and evaluation. Remote `g2k-sensitive` use requires explicit authorization and receives only a bounded sanitized packet; documented sanitization excludes source IDs, paths, URLs, email addresses, phone numbers, and tokens.
+- Hardened trust and storage boundaries: malformed, uncited, timed-out, or oversized model output falls back to evidence-only results; reads use the shared maintenance lock; active SQLite journal sidecars and missing read locks fail closed; evaluation reports cannot overwrite existing files or symlinks.
+- The documented final check reported `283 passed`, plus successful Ruff, compilation, plist lint, and diff checks. A bounded existing-corpus answer returned three source/version citations without changing the recorded database snapshot. These are published acceptance receipts, not newly rerun checks.
+- Ingestion, deterministic organization, unified-corpus search, source-backed views, and scheduled Granola delta maintenance remain documented as complete. The post-merge bounded maintenance poll reportedly exited 0 without appending a raw capture or rebuilding local stages.
 <!-- janitor:end:recent -->
