@@ -269,12 +269,10 @@ syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
 overlap-only poll with no append or rebuild. Recheck only the layers affected by
 future changes; do not present these historical results as new test runs.
 <!-- janitor:begin:todo -->
-## Remaining work
+## Active work
 
-- [ ] Manually inspect a broader representative evaluation set before relying on synthesized answers for consequential decisions. Model agreement is not evidence that the corpus is accurate.
-- [ ] Optionally refine the 48 retained generic topic labels, canonical people and organization aliases, and 52 accepted Zoom linkage states after the core views have been used. These states do not reopen ingestion or require bulk review.
-- [ ] Consider semantic ranking as a later optional refinement while preserving the same local-data boundary.
-- [ ] Prioritize any assistant UI or API expansion only if requested; the documented minimal local answer interface is already delivered.
-
-No mandatory ingestion blocker, historical review queue, product-policy decision, or approved maintenance deployment input is documented as remaining. Mailbox access, Atlas integration, cloud raw-data processing, graph/vector infrastructure, structured decision features, automatic historical task backfill, provider write-back, and polished career-document generation remain explicitly deferred.
+- [ ] Manually inspect a broader representative evaluation set before relying on synthesis for consequential decisions. Model agreement is not proof of corpus accuracy.
+- [ ] If useful after the core views are used, refine the 48 generic topic labels, canonical people or organization aliases, and 52 retained Zoom linkage states. These accepted states do not reopen ingestion or require bulk manual review.
+- [ ] Consider semantic ranking only as a later optional refinement under the same local-data boundary.
+- [ ] Prioritize further synthesis, API, or UI product work only when requested; the remaining product layer is separate from the completed ingestion, search, organization, and maintenance paths.
 <!-- janitor:end:todo -->
