@@ -112,17 +112,36 @@ does not replace raw evidence or copy raw sensitive text.
 Capacities `Project` record to a source-backed evidence record. A filename or
 free-text mention alone does not create this link.
 <!-- janitor:begin:recent -->
-## Recent activity
+## Recent
 
-- 2026-10-05 source-only managed-rule repair for PR #9 started from candidate
-  `917f43c6a6ac3c23e884d6952e1b9d22d02bda7d`. The rule now selects the latest
-  trusted, non-dismissed OCI reviewer Bot PASS for the exact current commit and
-  rejects stale, superseded or contradictory PASS. This repair performed no
-  runtime, provider, or deployment operation; durable receipt and downstream
-  effect remain separate facts to verify after merge.
-- `98e067e050f723f4793d094616983c1da61487f0` synchronized the managed shared-agent documentation contract (`docs: sync shared agent rules (#7)`).
-- Earlier managed-rule synchronization commits were also published at `fb32a56f5768a598d784046d507560d6caceea25`, `15f7904dab3847914d21ab43f190b807980aed24`, and `610a46bc9a0b0a07f84b3bf419de99c063f7e5ff`.
-- The local answer layer is recorded as delivered in pushed `main` history, with implementation commit `4e9da4a3864ce158171e0f7330dbde69d6a7ad97`. The final documented main-check reported 283 passing tests plus Ruff, compilation, plist-lint, and diff checks; a bounded existing-corpus answer returned three source/version citations without changing the database snapshot.
-- Ingestion, exact search, deterministic organization, and canonical Mac delta maintenance remain complete at delivered commit `b8f08ad92ab8b95de7e2a5cc48947b5857a53237`. The canonical maintenance poll exited 0 without appending raw capture or rebuilding local stages.
-- The repository audit distinguishes the packaged, tested, locally verifiable active runtime and scheduled canonical Mac maintenance from the remaining product layer: local answer synthesis, API, and UI. Optional semantic refinement remains deferred.
+As of source commit `0fdece42c4f3440cdcc13b55c0e03887617d27bf`, the Local Work
+Corpus stands as recorded in the remote TODO: ingestion, exact search,
+deterministic organization, and the canonical Mac Granola delta maintenance
+path were complete at delivered commit
+`b8f08ad92ab8b95de7e2a5cc48947b5857a53237`; the acceptance checkpoint reported
+that `origin/main` matched that commit, a receipt from that point rather than a
+freshly measured identity for `0fdece4`.
+
+Milestone 3 — Local answer synthesis and evaluation is delivered in the
+pushed `main` history. The implementation commit is
+`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`; the final documentation and remote
+SHA are verified by the completion handoff. The recent commit summaries record
+past activity hardening the local answer evaluation boundary: evaluation
+metrics, rejected-citation-ID preservation, read-only answer orchestration,
+completion backends, backend trust boundaries, WAL-sidecar fail-closed
+behavior, prompt/SQLite-view compatibility, and packet/path redaction,
+culminating in docs receipts for the final runtime validation and the answer
+milestone/boundary verification. The post-merge bounded maintenance poll exited
+0 with no raw capture append and no local stage rebuild; the final main-check
+reran the active suite (`283 passed`), Ruff, compilation, plist lint, and diff
+checks, then answered one bounded existing-corpus question with three
+source/version citations while the database snapshot stayed unchanged. These
+are receipts, not freshly measured totals.
+
+Open Milestone 3 work remains a downstream product edge, not an ingestion
+gate: manually inspect a broader representative evaluation set before relying
+on synthesis for consequential decisions; optionally refine the 48 generic
+topic labels, canonical people/organization aliases, and 52 retained Zoom
+linkage states after the core views are used; and consider semantic ranking
+only as a later optional refinement under the same local-data boundary.
 <!-- janitor:end:recent -->

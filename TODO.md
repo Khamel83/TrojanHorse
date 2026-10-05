@@ -269,16 +269,40 @@ syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
 overlap-only poll with no append or rebuild. Recheck only the layers affected by
 future changes; do not present these historical results as new test runs.
 <!-- janitor:begin:todo -->
-- [x] 2026-10-05: Repair PR #9's managed merge rule to require the latest
-  trusted, non-dismissed OCI reviewer Bot PASS for the exact current commit;
-  stale, superseded or contradictory PASS does not qualify. This is a
-  source-only documentation repair; no runtime, provider, or deployment
-  operation was performed by this repair, and downstream effect remains to be
-  verified separately.
 ## Active work
 
-- [ ] Manually inspect a broader representative evaluation set before relying on synthesis for consequential decisions. Model agreement is not proof of corpus accuracy.
-- [ ] If useful after the core views are used, refine the 48 generic topic labels, canonical people or organization aliases, and 52 retained Zoom linkage states. These accepted states do not reopen ingestion or require bulk manual review.
-- [ ] Consider semantic ranking only as a later optional refinement under the same local-data boundary.
-- [ ] Prioritize further synthesis, API, or UI product work only when requested; the remaining product layer is separate from the completed ingestion, search, organization, and maintenance paths.
+- [ ] Manually inspect a broader representative evaluation set before relying
+  on synthesis for consequential decisions. Model agreement is not proof of
+  corpus accuracy.
+- [ ] If useful after the core views are used, refine the 48 generic topic
+  labels, canonical people/organization aliases, and 52 retained Zoom linkage
+  states. These accepted states do not reopen ingestion or require bulk manual
+  review.
+- [ ] Consider semantic ranking only as a later optional refinement under the
+  same local-data boundary.
+
+## Retained completion evidence
+
+Milestone 3 — Local answer synthesis and evaluation is delivered in the pushed
+`main` history (implementation commit `4e9da4a3864ce158171e0f7330dbde69d6a7ad97`;
+final documentation and remote SHA verified by the completion handoff): a
+read-only `answer` CLI over exact search and source-backed evidence views, an
+explicit same-question comparison/evaluation path gated by
+`--allow-sensitive-remote` sending one bounded sanitized `g2k-sensitive`
+packet that omits source IDs, paths, URLs, e-mail addresses, phone numbers, and
+tokens, bounded existing-corpus verification with three source/version
+citations while the database snapshot stayed unchanged, and shared Granola
+maintenance-lock reads that reject active WAL sidecars and fail closed when the
+read lock is missing. The post-merge bounded maintenance poll exited 0 with no
+raw capture append and no local stage rebuild; the final main-check reran the
+active suite (`283 passed`), Ruff, compilation, plist lint, and diff checks,
+then answered one bounded existing-corpus question with three source/version
+citations while the database snapshot stayed unchanged.
+
+Ingestion, exact search, deterministic organization, and canonical Mac delta
+maintenance remain complete at delivered commit
+`b8f08ad92ab8b95de7e2a5cc48947b5857a53237`; the Milestone 1 and Milestone 2
+acceptance receipts and the full-scale repository audit remain preserved in the
+historical records. Counts and verification results are receipts from those
+checkpoints, not freshly measured totals.
 <!-- janitor:end:todo -->
