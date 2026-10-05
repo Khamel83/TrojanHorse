@@ -114,6 +114,12 @@ free-text mention alone does not create this link.
 <!-- janitor:begin:recent -->
 ## Recent activity
 
+- 2026-10-05 source-only managed-rule repair for PR #9 started from candidate
+  `917f43c6a6ac3c23e884d6952e1b9d22d02bda7d`. The rule now selects the latest
+  trusted, non-dismissed OCI reviewer Bot PASS for the exact current commit and
+  rejects stale, superseded or contradictory PASS. This repair performed no
+  runtime, provider, or deployment operation; durable receipt and downstream
+  effect remain separate facts to verify after merge.
 - `98e067e050f723f4793d094616983c1da61487f0` synchronized the managed shared-agent documentation contract (`docs: sync shared agent rules (#7)`).
 - Earlier managed-rule synchronization commits were also published at `fb32a56f5768a598d784046d507560d6caceea25`, `15f7904dab3847914d21ab43f190b807980aed24`, and `610a46bc9a0b0a07f84b3bf419de99c063f7e5ff`.
 - The local answer layer is recorded as delivered in pushed `main` history, with implementation commit `4e9da4a3864ce158171e0f7330dbde69d6a7ad97`. The final documented main-check reported 283 passing tests plus Ruff, compilation, plist-lint, and diff checks; a bounded existing-corpus answer returned three source/version citations without changing the database snapshot.
