@@ -272,7 +272,9 @@ future changes; do not present these historical results as new test runs.
 - [x] 2026-10-05: Repair PR #9's managed merge rule to require the latest
   trusted, non-dismissed OCI reviewer Bot PASS for the exact current commit;
   stale, superseded or contradictory PASS does not qualify. This is a
-  source-only documentation repair with no runtime or downstream effect.
+  source-only documentation repair; no runtime, provider, or deployment
+  operation was performed by this repair, and downstream effect remains to be
+  verified separately.
 ## Active work
 
 - [ ] Manually inspect a broader representative evaluation set before relying on synthesis for consequential decisions. Model agreement is not proof of corpus accuracy.

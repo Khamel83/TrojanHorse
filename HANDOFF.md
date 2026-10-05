@@ -13,8 +13,10 @@ as authorized.
 ## Runtime and effects
 
 - Source scope: `AGENTS.md`, `TODO.md`, `CONTEXT.md`, and this handoff only.
-- Deployed runtime, provider operation, durable runtime receipt, and downstream
-  effect: unchanged; none was performed by this source-only repair.
+- Source operation: no runtime, provider, or deployment operation was performed
+  by this repair.
+- Durable runtime receipt and downstream effect: not established by this
+  source-only change; verify them separately after merge.
 
 ## Next verification
 
