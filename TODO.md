@@ -269,6 +269,10 @@ syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
 overlap-only poll with no append or rebuild. Recheck only the layers affected by
 future changes; do not present these historical results as new test runs.
 <!-- janitor:begin:todo -->
+- [x] 2026-10-05: Repair PR #9's managed merge rule to require the latest
+  trusted, non-dismissed OCI reviewer Bot PASS for the exact current commit;
+  stale, superseded or contradictory PASS does not qualify. This is a
+  source-only documentation repair with no runtime or downstream effect.
 ## Active work
 
 - [ ] Manually inspect a broader representative evaluation set before relying on synthesis for consequential decisions. Model agreement is not proof of corpus accuracy.
