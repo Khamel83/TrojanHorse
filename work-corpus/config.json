@@ -21,7 +21,12 @@
       "precedence": 33
     },
     "mcp_granola": "data/mcp/granola",
-    "mcp_wispr_flow": "data/mcp/wispr_flow"
+    "mcp_wispr_flow": "data/mcp/wispr_flow",
+    "professional_packages": {
+      "path": "data/derived_inputs/usc_professional_packages",
+      "source_system": "professional_package",
+      "precedence": 15
+    }
   },
   "inventory": {
     "ignore_directories": [

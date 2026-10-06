@@ -1,5 +1,32 @@
 # Local Work Corpus
 
+## Current local evidence and product decision — 2026-10-05
+
+The H002 complete package is now copied byte-for-byte into
+`data/derived_inputs/usc_professional_packages/Omar_Complete_Package_2026-10-05_H002`.
+The canonical ignored local config uses source system `professional_package`;
+the tracked default config includes the same root for reproducibility.
+There are 116 inventoried files, 108 normalized documents, 35 registered project
+cards and a preserved 230-row combined historical evidence ledger. All 35 card
+definitions and 20 H001 candidate aliases were verified. Raw iCloud content,
+prior evidence IDs and 3,188 derived-file hashes are preserved; tasks remain zero.
+Receipts and the SQLite backup are private under
+`work-corpus/corpus/reports/professional-package-intake-20261005/`.
+
+Package files are curated derivatives and drafts; they are not independent new
+historical events. Original evidence IDs, dates, locators, attribution and source
+hashes remain in their ledgers. The owner correction attributes Shoah work to
+Christina with Omar's limited managerial involvement; Libraries remains separate.
+No package scripts, publishing instructions or described automations were run.
+
+Professional memory is the provisional first product, pending owner preference.
+Technical ingestion and an answer CLI exist; repeatable owner use and broader
+answer correctness remain unverified. The next step is five source-inspected
+questions over the imported cards, then a minimal local entry point if warranted.
+See [the product plan](docs/PROFESSIONAL_MEMORY_PLAN.md). No new application was
+implemented or deployed by this intake. Source changes are local and unpushed;
+the existing dirty primary checkout was preserved.
+
 A private source-evidence corpus supporting operating memory and career evidence.
 Behavior is specified in the design document; execution is tracked in TODO.md.
 Historical context is preserved in docs/superpowers/plans/2026-09-06-context-history.md.

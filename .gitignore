@@ -263,3 +263,9 @@ config.json.backup
 .beads/beads.db
 .beads/bd.sock
 .beads/export_hashes.db
+
+# Local private evidence intake receipts and inspection scripts
+private-review/
+
+# Private professional corpus packages remain local
+/data/derived_inputs/usc_professional_packages/

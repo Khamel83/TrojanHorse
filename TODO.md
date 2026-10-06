@@ -1,5 +1,28 @@
 # Local Work Corpus TODO
 
+## Current checkpoint — professional package intake, 2026-10-05
+
+- [x] Preserve and verify the owner-supplied H002 complete package: 116 files;
+  all package and imported-copy hashes match. Original H001/H002 exports are
+  repeated evidence, not new historical events.
+- [x] Import 108 supported documents into the canonical local corpus; inventory
+  five ZIPs and three CSS/Python files without executing supplied scripts.
+- [x] Register and retrieve all 35 project card definitions and verify 20 H001
+  candidate aliases. Preserve the 230-row combined evidence ledger and Shoah
+  owner correction. Current tasks remain zero.
+- [x] Preserve every prior evidence ID and the hashes of 3,188 existing derived
+  files. Retain a pre-import SQLite backup and private intake/verification receipts.
+- [ ] Evaluate five professional-memory questions using the existing answer CLI,
+  with passage inspection and contribution/status boundaries; see
+  [the provisional product plan](docs/PROFESSIONAL_MEMORY_PLAN.md).
+- [ ] After that gate, provide and validate a small local entry point with actual
+  owner use. A retrievable archive is not proof of a useful everyday workflow.
+
+These checks establish local intake and retrieval only. No publication,
+production application deployment, Drive synchronization or scheduler activation
+was performed. The documentation/config branch is local and unpushed.
+Earlier technical milestone receipts below retain their historical scope.
+
 Updated: 2026-09-09. Reconciled the continuation handoff with repository docs
 after [Gemini 3.8 Flash High review](docs/superpowers/reviews/2026-09-08-todo-gemini-review.md)
 (verdict: APPROVE). This was a text-only documentation review; ingestion,
