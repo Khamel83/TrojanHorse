@@ -1,93 +1,70 @@
-# Professional package intake handoff — 2026-10-05
+# TrojanHorse handoff — 2026-10-06
 
-## Done and verified
+## Delivered and verified
 
-Fetched `origin/main` at `d041b1bd91931e8d3cd0980e2de3d0baabc2cf2f` and created
-isolated branch `evidence/professional-package-intake-20261005`. The primary
-checkout's pre-existing dirty work was preserved. This branch changes the source
-root configuration and documentation; it does not change parser or query code.
+**24 actual iCloud reminders:** Trojan-Mine 12; Trojan-Delegated 12. All 24 native
+IDs/title/body/completion/list/account fields match saved delivery readbacks and
+final snapshots. Zero pending/uncertain/failed. Seven initial status-unknown items
+say Confirm current status. They are not later contradictions/Evidence needed.
+Delegated distribution: Bruce 3, Kevin 1, Kalila 3, Justine 3, Dylan 2.
+No Maya rename/migration/deletion or unrelated reminder writes occurred.
 
-Found the supplied folder at
-`/Users/macmini/Library/Mobile Documents/com~apple~CloudDocs/Omar_Complete_Package_2026-10-05_H002`.
-Copied all 116 files into the canonical TrojanHorse data directory and independently
-verified all hashes against the original and package manifest. H001/H002 frozen
-exports are byte-identical to the existing exports, not new historical events.
+Private canonical report:
+`/Volumes/2TB_SSD/GitHub/TrojanHorse/work-corpus/corpus/reports/work-brain-bootstrap-20261006/`.
+Start with FINAL_VERIFICATION.json, REMINDERS_DELIVERY.json, COVERAGE.md and
+REVIEWED_BATCH.json. Source files, extraction facts, RECENCY_RECONCILIATION.json,
+OWNER_OVERRIDES.json, effect ledger and separate work-state database remain there.
+Every reminder has exact source/version/excerpt hash and locator. Early native
+transport uncertainty was reconciled against the same reserved markers; final
+24 unique IDs prove no duplicate creation. Old task/evidence tables were not reset.
 
-Canonical local runtime: 116 new source/version records, 108 normalized documents,
-282 additional evidence records, 35 project entities. All 35 card definitions are
-retrievable and 20 H001 candidate aliases resolve through the supplied crosswalk.
-The combined historical ledger remains 230 rows. Five ZIPs remain inventory-only;
-CSS and two Python files are retained without text extraction or execution.
-Previous evidence IDs and 3,188 derived-file hashes are unchanged. Tasks remain zero.
+42 recent items screened, 30 work meetings captured and reviewed (September 9 through
+October 5), 12 excluded. 94 candidate facts consolidated into the batch; no complete
+historical archive rereview. The same 30 work sources are staged at canonical
+`data/mcp/wispr_flow/work-brain-bootstrap-20261006.json`; this staging is not a new
+full normalized-corpus ingestion claim. H001/H002 import remains retained (116 files,
+108 normalized docs, 35 projects, 20 aliases); no frozen card/source bytes rewritten.
 
-Private durable receipts and the pre-import SQLite backup:
-`/Volumes/2TB_SSD/GitHub/TrojanHorse/work-corpus/corpus/reports/professional-package-intake-20261005/`.
-Use `IMPORT_RECEIPT.json`, `INTAKE_MANIFEST.json` and `FINAL_VERIFICATION.json`.
-The canonical ignored local config and tracked default source root both identify
-`professional_package`. Captured package publication/Drive/scheduler claims were
-not independently verified or activated. No external publication or communication
-occurred. This branch is local and unpushed; local corpus intake is already effective.
+G2K text-only adversarial review returned REVISE, changes were made, final APPROVE
+applies to [the final plan](docs/REMINDERS_IMPLEMENTATION_PLAN_FINAL.md), SHA256
+`30fc23459eeda17febdd359b1d619a79179a8c5c4965085d205b13fc063419ea`.
+Full review responses/receipts and unchanged plan bytes are in the private canonical
+report. No transcript passages were sent to the generic G2K reviewer. Plan approval
+is distinct from source attribution and native delivery proof.
 
-## Current work second-brain direction
+59 focused tests pass: task reducer, bridge, existing task tests and source-batch
+validation. Ruff/diff checks pass. Native caller is this local Python/osascript
+session; these results do not prove an unattended launchd caller's permission.
 
-Owner clarification supersedes the prior professional-memory-first gate. The
-product continuously consumes Wispr meetings and pasted email/Slack, maintains
-people/projects and own/delegated tasks, and reconciles completion into Reminders.
-Explicit owner “done” is accepted immediately; open tasks never silently age out.
-The owner subsequently narrowed the first release: Reminders plus paste input,
-no dashboard/project web views. A later clear outstanding-work contradiction
-returns the same completed task as Evidence needed. Matching confirmation clears
-it. Completion confirmation never assesses quality.
-Read `docs/WORK_SECOND_BRAIN.md` for the contract and ordered acceptance sequence.
+## Source and restart
 
-Current source branch: `feature/work-second-brain`, isolated from the dirty primary
-checkout, starts from fetched main and includes the prior package-intake commit.
-No push, production deployment or native list mutation occurred.
+Active worktree `/Volumes/2TB_SSD/GitHub/.worktrees/trojanhorse-work-brain`, local
+branch `feature/work-second-brain`. Origin/main freshly fetched and default branch
+verified at `d041b1bd91931e8d3cd0980e2de3d0baabc2cf2f`. Primary checkout's dirty
+LLM-OVERVIEW.md and fixture deletion remain preserved. New code is local; no push
+or web production deployment. Previous working records are archived under
+`docs/history/working-records-before-bootstrap-20261006/`.
 
-Read-only native probe/list discovery resolved Maya — Mine and Maya — Delegated
-in iCloud: five reminders, all completed. IDs and caller receipts are private under
-this worktree's ignored `private-review/`. No open backlog was inferred. The existing
-Wispr capture importer is reusable, but no scheduled Wispr runner is established;
-zero person entities means the colleague directory still needs identity resolution.
-The infrastructure catalog declares no TrojanHorse runtime host or Cloudflare app.
+Bootstrap CLI: `PYTHONPATH=work-corpus/src python3 work-corpus/scripts/bootstrap_reminders.py`
+with --batch REVIEWED_BATCH.json, --state reminders_effects.sqlite, --receipt
+REMINDERS_DELIVERY.json using the exact canonical private paths. Do not rerun
+blindly after owner edits/completions: changed fields become conflicts, never an
+excuse to duplicate or restore the initial state. Existing reservations/IDs must
+be reconciled. Native delivery uses exact account/list IDs and marker receipts.
 
-Verified first implementation: `work-corpus/src/work_corpus/work_state.py` retains
-provenance-bearing events and projects own/delegated task state. Owner completion
-and reopening are explicit; stale replay cannot resurrect finished work, retries
-deduplicate, open work does not expire, ambiguous terminal events remain review.
-36 new plus 10 existing task tests pass; focused Ruff and diff checks pass.
-The new outstanding/confirmed events implement done -> evidence needed -> done,
-including an older email supplied as new confirmation. The source date is retained
-separately; old-source replay and mere repeated assignments cannot reopen work. This
-is an API requiring trusted validated input, not text extraction or a running inbox.
-It was not initialized against the live database.
+## Remaining product work / next verification
 
-Native discovery receipts are durably copied into the canonical ignored report
-`work-corpus/corpus/reports/work-brain-definition-20261005/`.
+No unattended Wispr consumer, deployed paste endpoint, installed checkbox feedback
+loop or Cloudflare site is active. The current session's source connector is not
+an unattended API. Next inspect access from the real planned installed caller;
+then prove one natural new work meeting -> retained source -> reconciled task ->
+Reminders receipt. Install/read back checkbox feedback before claiming ledger sync.
+A later clear same-task outstanding statement must update the existing task to
+Evidence needed, preserve edited fields and clear on matching confirmation. The
+reducer tests cover that state cycle; live intake/sync acceptance remains open.
 
-## Current design gate — owner asked to think before building
-
-Further implementation/wiring is paused for project/task reasoning. Inspected
-Reflex fetched source `3b86410e8847666cbfff79f61c7a7a0fbc56d660`, preserving its
-dirty checkout and making no provider calls or changes. The bounded judgment
-API could support work-project association, task association and event-relation
-questions. Existing repository-routing semantics are not a work-project profile.
-
-Read `docs/PROJECT_AND_TASK_REASONING.md`. The owner subsequently clarified that the iCloud package is already the project/
-participant blueprint. A private PROJECT_BLUEPRINT.jsonl and BLUEPRINT_RECEIPT.json
-were saved under canonical `work-corpus/corpus/reports/work-brain-blueprint-20261005/`:
-35 existing IDs, 20 H001 aliases, exact role/attribution context and verified hashes.
-No original-source edits, new project IDs or provider calls occurred. This is a
-context seed, not live wiring. Do not require Omar to recreate his project list.
-
-Next step: walk one assignment/completion or returning-work passage through a
-relevant subset of these cards. Resolve an uncertain decision by retrieving its
-linked source context; retain corrections. Do not perform another archive sweep
-or require comprehensive taxonomy/evaluation before the first useful sequence. Returning tasks should gain
-attention, not automatic estimates of bigger effort. The 46-test reducer cannot
-establish real-world identity matching because its inputs already contain IDs.
-No intake/Reminders wiring, threshold selection, provider transfer or deployment
-should proceed as a consequence of this review. Native lists remain untouched.
-
-The prior unrelated managed-rule repair gates remain archived in
-`docs/handoffs/2026-10-05-managed-rule-repair-before-package-intake.md`.
+Owner said to handle completed-task corrections tomorrow and not to spend effort
+on Maya migration. Newer event information defaults authoritative; old capture
+replay is not a new event. Shoah is Christina execution with Omar supervision and
+almost no direct connection; Libraries is separate Omar work. These corrections
+are retained independently of immutable raw history.

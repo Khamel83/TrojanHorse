@@ -1,0 +1,360 @@
+# Local Work Corpus TODO
+
+## Current checkpoint — work second brain, 2026-10-05
+
+The owner narrowed the first release to current own/delegated to-do lists in
+Apple Reminders, fed by Wispr and a simple pasted-email/Slack input. Checking off
+a task means done. A later explicit outstanding-work contradiction returns the
+same task as Evidence needed; matching confirmation clears it. This tracks
+completion, not deliverable quality. Dashboards and separate project/people web
+views are deferred. Asking questions is secondary.
+See [the product contract](docs/WORK_SECOND_BRAIN.md).
+
+**Current gate: design review before further implementation.** The owner asked
+to investigate Reflex and settle project/task identity, recurrence and scope
+before building more. Read [the reasoning review](docs/PROJECT_AND_TASK_REASONING.md).
+The existing reducer is a tested first slice, not validation of semantic matching.
+
+- [x] Inspect fetched Reflex source and its profiles/policy without calls or edits.
+- [x] Seed the project/context map from the owner-supplied iCloud package: all 35
+  cards, 20 H001 aliases, exact role/attribution passages and source hashes retained.
+  Private blueprint and receipt saved; no new IDs, source edits or provider calls.
+- [ ] Walk one assignment/completion or returning-work sequence through relevant
+  seeded cards. Expand context only for uncertain decisions, then retain corrections.
+  Do not require a taxonomy redesign or comprehensive evaluation before the first flow.
+- [ ] Use Reflex for bounded decisions where it helps; resolve only the necessary
+  questions before resuming intake/Reminders wiring. No dashboard is required.
+
+
+- [x] Historical complete-package intake: 116 files, 108 normalized documents,
+  35 retrievable project definitions, 20 H001 aliases, 230-row retained ledger.
+  Original bytes, previous evidence IDs and 3,188 derived hashes remain intact.
+- [x] Inspect active runtime: Wispr snapshot ingestion exists; no Wispr scheduled
+  delta, task completion reconciler, people directory, web intake or Reminders
+  bridge is established. Granola's delta is a separate existing lane.
+- [x] Read native Reminders target lists: Maya — Mine has three reminders and
+  Maya — Delegated two; all five completed. Exact IDs retained privately. No writes.
+- [x] Verify the isolated deterministic work-event/task-state core against
+  owner completion, old replay, duplicates, employee ownership and long-open tasks.
+  36 new tests plus 10 existing task tests pass; focused Ruff and diff checks pass.
+  Includes later contradiction and older-email confirmation without duplicates.
+  This API is not yet wired into intake or the live corpus.
+- [ ] Wire Wispr and durable paste intake to source-cited assignment, completion
+  and outstanding-work matching; no dashboard or web project view required.
+- [ ] Bind the Mac Reminders caller, reconcile existing Maya writer ownership,
+  migrate the two exact lists without deleting history, and verify create/update/
+  complete plus readback, manual-completion feedback, Evidence needed and clearing
+  it with matching confirmation.
+- [ ] Prepare Cloudflare Pages/Access release at trojan.khamel.com and verify the
+  end-to-end meeting/paste -> same task -> Reminders workflow through the
+  reviewed deployment path. No runtime host/Cloudflare app is established yet.
+
+Private source material stays ignored. This work is local and unpushed. Earlier
+technical milestone receipts below remain historical, not product acceptance.
+
+Updated: 2026-09-09. Reconciled the continuation handoff with repository docs
+after [Gemini 3.8 Flash High review](docs/superpowers/reviews/2026-09-08-todo-gemini-review.md)
+(verdict: APPROVE). This was a text-only documentation review; ingestion,
+runtime acceptance, and remote verification were not repeated at that checkpoint.
+The local answer milestone below is a separate implementation and verification
+receipt; it does not reopen the completed ingestion gates.
+The requested fresh Gemini CLI review of this update was attempted on
+2026-09-09, but the installed client rejected the account as an unsupported
+Gemini Code Assist tier; the prior Gemini review remains the documented
+approval of the handoff text, while this implementation has separate local
+tests and independent code review receipts.
+
+The local answer layer and its final safety fixes are delivered in the pushed
+`main` history. The implementation commit is
+`4e9da4a3864ce158171e0f7330dbde69d6a7ad97`; the final documentation and
+remote SHA are verified by the completion handoff.
+The post-merge bounded maintenance poll exited 0 with no raw capture append and
+no local stage rebuild.
+The final main-check reran the active suite (`283 passed`), Ruff, compilation,
+plist lint, and diff checks, then answered one bounded existing-corpus question
+with three source/version citations while the database snapshot stayed
+unchanged.
+
+Ingestion, exact search, deterministic organization, and canonical Mac delta
+maintenance are complete at delivered commit
+`b8f08ad92ab8b95de7e2a5cc48947b5857a53237`. The handoff reports that
+`origin/main` matched that commit. Counts and verification results below are
+receipts from that acceptance checkpoint, not freshly measured totals.
+
+No ingestion blocker or mandatory historical review queue remains. The default
+query includes all nonblank parseable sources and preserves original labels as
+provenance. See [Remaining Work](docs/REMAINING_WORK.md),
+[Corpus Status](docs/LOCAL_WORK_CORPUS_STATUS.md),
+[Audit](docs/TROJAN_HORSE_AUDIT.md), and [Operations](docs/OPERATIONS.md).
+
+## Milestone 3 — Local answer synthesis and evaluation
+
+- [x] Add a minimal read-only answer interface over exact search and the
+  source-backed evidence views. The `answer` CLI defaults to deterministic
+  evidence-only output; local Ollama synthesis is explicit and bounded. Every
+  returned citation retains source ID, source version, and locator fields, and
+  source facts remain separate from model synthesis.
+- [x] Add the explicit same-question comparison/evaluation path. The local
+  original packet never leaves the Mac. The `g2k-sensitive` lane receives one
+  bounded, sanitized packet only after `--allow-sensitive-remote`; the packet
+  omits source IDs, paths, URLs, e-mail addresses, phone numbers, and tokens.
+  Evaluation metrics are review aids and keep `accuracy_claim` unset; source
+  inspection remains the acceptance authority.
+- [x] Verify the new CLI against a bounded existing-corpus question without
+  writes. Evidence-only retrieval returned three source/version locators and
+  the database size, mtime, evidence/FTS counts, and pipeline count stayed
+  unchanged. A local `llama3.2:1b` canary and the live sanitized
+  `g2k-sensitive` route were exercised; malformed, uncited, timed-out, or
+  oversized model output fails closed to an evidence fallback.
+- [x] Keep answer reads and ordinary mutating CLI commands behind the shared
+  Granola maintenance lock, reject active SQLite journal sidecars, and fail
+  closed when the read lock is missing. Evaluation reports use exclusive
+  creation under the ignored state report path and cannot overwrite existing
+  files or symlinks.
+- [ ] Manually inspect a broader representative evaluation set before relying
+  on synthesis for consequential decisions. Model agreement is not proof of
+  corpus accuracy.
+- [ ] If useful after the core views are used, refine the 48 generic topic labels,
+  canonical people/organization aliases, and 52 retained Zoom linkage states.
+  These accepted states do not reopen ingestion or require bulk manual review.
+- [ ] Consider semantic ranking only as a later optional refinement under the
+  same local-data boundary.
+
+## Completed work — historical acceptance receipts
+
+The approved full-scale completion design and implementation plan are now
+recorded in [the canonical completion spec](docs/superpowers/specs/2026-09-07-canonical-work-corpus-completion.md)
+and [its implementation plan](docs/superpowers/plans/2026-09-07-canonical-work-corpus-completion.md).
+The plan was executed in order on 2026-09-07. The canonical Mac launchd
+maintenance job was installed and its first supervised delta succeeded on
+2026-09-08; the Linux systemd files remain optional templates.
+
+Read [the plan](docs/superpowers/plans/2026-09-06-corpus-completion-handoff.md)
+and [review](docs/superpowers/reviews/2026-09-06-corpus-completion-opus-review.md).
+The adaptive throughput amendment is recorded in
+[its implementation plan](docs/superpowers/plans/2026-09-06-granola-adaptive-batching.md).
+The one-time Granola REST archive gate is now complete; the MCP UUID feed is
+retained as a separate shadow diagnostic. Checked items below have acceptance-checkpoint
+evidence, and the original completed Tasks 0–9 and historical gates remain documented in
+[the original plan](docs/superpowers/plans/2026-09-04-local-work-corpus-implementation.md).
+
+## Milestone 1 — Finish ingestion and verify search
+
+- [x] 1. Establish one writer: inspect and temporarily pause heartbeat
+  `continue-granola-corpus-capture`, preserve its settings, inspect dirty state,
+  and make a WAL-consistent SQLite backup before repair. Preserve raw files.
+  Evidence: the existing automation was inspected; it was no longer present in
+  the current automation registry during finalization. SQLite backup
+  `work-corpus/state/backups/work_corpus-before-repair-20260907T044105Z.sqlite`
+  passes `PRAGMA quick_check`; raw evidence remains in place.
+- [x] 2. Reconcile every saved Granola batch against inventory, imported evidence
+  and search. The read-only REST backfill registered one 559-note capture,
+  imported all 559 API IDs, and indexed them. Two successful repeat imports
+  returned identical `items=1324`, `updated_items=1324`, `source_files=41`,
+  `malformed=0`, and `errors=0` results. See
+  `work-corpus/state/granola_acceptance.json` for the source/evidence/query
+  ledger.
+- [x] 3. Rebuild progress from exact IDs and persisted outcomes. The checkpoint
+  now separates MCP UUID capture/import/search sets from the REST API's 559
+  unique `not_...` IDs, reports the two summary-only API notes, and retains
+  retry/rate-limit accounting. The old 194/142/363 counters are not used.
+- [x] 4. Use the read-only REST API for the one-time archive instead of waiting
+  on the historical heartbeat. It fetched all 559 API-listed notes across 19
+  pages; 559 summaries and 557 transcripts are preserved, imported, and
+  searchable. The two API notes with empty transcript arrays remain preserved as
+  explicit summary-only records. The tested MCP ten-ID/five-ID adaptive policy
+  remains documented for an optional future shadow refresh; no recurring
+  heartbeat was recreated for duplicate historical calls.
+- [x] 5. Match available Capacities payloads to pointer identities; record specific
+  unresolved targets. Repair Wispr date-field mapping and preserve only genuinely
+  missing event dates.
+  Verify existing OneNote coverage and retain quiet Zoom/artifact terminal outcomes.
+  No new exports required; no signed-URL fetches or unnecessary retranscription.
+  Evidence: 563 typed pointers, 557 matched pointers, 451 local payload targets,
+  1,216 confirmed payload relationships, and 6 explicit `pointer_missing_file_size`
+  reviews. Wispr has 13/13 local capture and retrieval dates, all 12 meeting
+  start/end/provider-modified dates, and the scratchpad's provider-modified
+  date; the scratchpad has no event date in its source object;
+  OneNote is 29/29 files and 295/295 pages; Zoom has 230 succeeded and 1
+  partial terminal result with 0 eligible media lacking terminal status.
+- [x] 6. Close ingestion milestone with evidence: exact Granola REST identity
+  coverage, representative unified-All and Work-scope query checks, preserved source hashes,
+  retry/terminal accounting, and regression tests. The residual interpretation
+  and organization work is documented in `docs/REMAINING_WORK.md`.
+
+## Milestone 2 — Organize the evidence
+
+Start after milestone 1 is verified; resume from persisted checkpoints.
+
+- [x] 7. Apply existing rules to scope, sensitivity, duplicate/version, date and
+  meeting-link queues, then apply the safe first-pass defaults. Preserve all
+  eligible parseable content. Record reasons and evidence for resolved and
+  unresolved items; never force uncertain merges.
+  Evidence: the organizer saw 443 scope, 1,396 sensitivity, 312 duplicate,
+  310 version, 1,561 task-date, 350 task-scope, 52 meeting-link, 0 current
+  Wispr-date, and 1 Zoom-quality candidates. The first pass resolved 4,411
+  policy-stable rows, selected 622 provisional display records, and left 68
+  grouped exceptions: 6 payload, 48 entity, 4 scope, 9 sensitivity, and 1 Zoom
+  quality. The approved first pass then resolved all 68 grouped rows, retained
+  six payload gaps as unresolved metadata, recorded 48 generic topic labels,
+  included the scope/sensitivity records in the unified private query, and
+  accepted the one partial Zoom result. The old 13 Wispr-date rows were
+  superseded after the field mapping repair; no ambiguous canonical identity
+  was forced.
+- [x] 8. Populate supported people, projects, organizations and aliases with source
+  locators. Use existing entities APIs and minimal resumable orchestration.
+  Evidence: 9 explicit Project entities, 9 aliases, and 27 evidence-backed
+  project source links were created. No people or organizations were promoted
+  without a safe canonical alias; 48 titles are recorded as generic topic labels
+  in `first_pass_topic_labels.csv` rather than promoted to entities.
+- [x] 9. Populate supported relationships and explicit task proposals through
+  existing APIs. Anchor current tasks to runtime's 14-day window or future events;
+  keep old commitments historical. Unknown dates remain review items. Zero current
+  tasks can be correct. Verify repeat execution does not duplicate derived records.
+  Evidence: 1,930 evidence records were scanned; task rows and current task rows
+  remain 0. Two same-date organizer runs retained 1,243 relationship rows and
+  identical entity/review counts.
+- [x] 10. Produce a concrete residual list: source IDs/locators, reason unresolved,
+  work the agent attempted, and the smallest user decision needed. Do not present
+  every queue entry as a mandatory manual task. Keep sensitive details local.
+  Evidence: `work-corpus/state/residual_ledger.json` and
+  `work-corpus/corpus/reports/residual_ledger.csv` contain 0 pending entries;
+  the first-pass response sheet is an empty exception sheet. Bounded accepted
+  topic labels are in `work-corpus/corpus/reports/first_pass_topic_labels.csv`.
+
+## Final acceptance and handoff
+
+- [x] 11. Refresh reports in dependency order and run appropriate tests. Verify
+  source preservation, provenance, representative searches and derived links/tasks.
+  Historical test results are not validation of new changes. Evidence: the
+  current report is generated after organization and first-pass triage, both
+  indexes are fresh (72,198 FTS rows and 1,243 relationship rows), and the
+  current raw-immutability comparison is passed for all 2,758 files.
+  Representative Work-scope and default All-scope query checks remain
+  recorded. The active suite passes 200 tests, with fatal Ruff, compile, and
+  diff-whitespace checks also passing.
+- [x] 12. Update README, glossary, status, spec and checklist with verified results.
+  Commit scoped code/docs/tests and push under existing user authorization. Verify
+  remote commit identity; leave raw data/runtime state outside Git.
+  Evidence: README, CONTEXT.md, the design checkpoint, status, remaining-work
+  map, and this checklist record the 2026-09-08 results. The completion commit
+  contains only the scoped code/docs/tests; raw data and unrelated untracked
+  files remain outside Git. Remote identity is verified after push.
+
+## Full-scale repository audit — 2026-09-07
+
+This audit separates the captured evidence archive from the unfinished product
+and operations layers. It does not require the owner to inspect the 1,500-plus
+review rows one by one; the approved first pass already handled those queues.
+See [the full audit](docs/TROJAN_HORSE_AUDIT.md) for evidence, findings, and
+the completion path.
+
+- [x] Reconcile live SQLite counts with the generated report: 2,758 source
+  records/source versions, 1,869 normalization records, 72,199 evidence rows,
+  72,198 FTS rows, 1,243 relationships, and 0 pending review rows.
+- [x] Separate the complete Granola REST archive from the incomplete but
+  redundant MCP shadow: 559 REST notes imported/searchable, 559 summaries, 557
+  transcripts, 2 summary-only notes.
+- [x] Verify the captured-provider and local-transcription boundary: 13 Wispr
+  records imported/searchable, 231 Zoom groups, 230 succeeded, 1 partial, and
+  0 eligible final media without a transcript or terminal status.
+- [x] Correct report terminology so source versions and normalization records
+  are separate metrics; record a fresh two-pass raw-preservation proof for all
+  2,758 current files; parse and index the 20 already-local `.eml` files; and
+  retain the 49 non-final Zoom `.zoom`/`.tmp` artifacts as inventory-only.
+- [x] Record the repository-level status: active `work-corpus/` tests pass;
+  the root legacy package/test runner is quarantined, while the active package
+  now has reproducible installation, CI, doctor, and raw verification paths.
+- [x] Make `work-corpus/` the single supported entry point and quarantine the
+  legacy `TrojanHorse/`, `th`, and Atlas bridge lane.
+- [x] Add reproducible installation, optional-parser dependencies, CI, a
+  repository-level test command, and safe `doctor` and `raw-verify` commands.
+- [x] Build the source-backed project, task, and career evidence views. The
+  current scan covers 1,930 evidence units for task proposals, produces 0
+  current task rows by design, and exposes 1,951 retained task candidates.
+- [x] Add the scheduled Granola delta path, lock, checkpoint, and five-minute
+  scheduler templates. The canonical Mac launchd job is installed at
+  `~/Library/LaunchAgents/com.khamel83.work-corpus-granola-delta.plist` and
+  its supervised first run exited 0 with a persisted checkpoint. The Linux
+  systemd files remain optional templates for a host containing the corpus.
+
+### Owner input required to finish the product
+
+1. No product decision is currently required: the approved policy is the
+   unified local `work-corpus/` runtime, local `.eml` parsing, generic topic
+   labels, and source-backed views.
+2. No deployment input remains for the approved maintenance path. The canonical
+   Mac job uses the local full corpus and retrieves the Granola secret from the
+   homelab broker over SSH; the secret remains outside this checkout.
+3. A later assistant-synthesis/UI pass can be prioritized after the current
+   evidence views are used; it is not required for archive/search completion.
+
+## Explicitly deferred features
+
+Mailbox access, Atlas integration, cloud raw-data processing, graph/vector infrastructure,
+structured decision feature development, automatic historical task backfill and
+polished career-document generation remain outside this handoff. Career evidence
+continues as a derived use of the same source-backed corpus.
+
+## Continuation instructions
+
+Read this checklist and the canonical docs above. Preserve completed ingestion
+and organization gates. Start new product work only when requested; the optional
+assistant layer is the remaining substantive product edge.
+
+Use the installed `com.khamel83.work-corpus-granola-delta` LaunchAgent for
+bounded Granola maintenance. At the acceptance checkpoint it ran at load and
+every 300 seconds with last observed exit code 0. Changed-note polls append one
+mode-0600 raw capture and run six local stages. Overlap-only polls record a poll
+ID, retain the previous capture path, append no raw file, and skip the rebuild.
+The job retrieves its secret at runtime through the homelab broker over SSH.
+
+Do not run another historical Granola full pull, recreate the old MCP heartbeat
+to close ingestion, or create another full corpus copy. Scan the entire corpus
+with raw verification only when a fresh preservation receipt is needed. Preserve
+older overlap captures as valid raw evidence. Keep the full corpus on the Mac
+and preserve unrelated tracked edits and untracked bootstrap/corpus material.
+Provider write-back remains outside scope.
+
+The delivered acceptance included 200 passing tests, Ruff, compilation, shell
+syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
+overlap-only poll with no append or rebuild. Recheck only the layers affected by
+future changes; do not present these historical results as new test runs.
+<!-- janitor:begin:todo -->
+## Active work
+
+- [ ] Manually inspect a broader representative evaluation set before relying
+  on synthesis for consequential decisions. Model agreement is not proof of
+  corpus accuracy.
+- [ ] If useful after the core views are used, refine the 48 generic topic
+  labels, canonical people/organization aliases, and 52 retained Zoom linkage
+  states. These accepted states do not reopen ingestion or require bulk manual
+  review.
+- [ ] Consider semantic ranking only as a later optional refinement under the
+  same local-data boundary.
+
+## Retained completion evidence
+
+Milestone 3 — Local answer synthesis and evaluation is delivered in the pushed
+`main` history (implementation commit `4e9da4a3864ce158171e0f7330dbde69d6a7ad97`;
+final documentation and remote SHA verified by the completion handoff): a
+read-only `answer` CLI over exact search and source-backed evidence views, an
+explicit same-question comparison/evaluation path gated by
+`--allow-sensitive-remote` sending one bounded sanitized `g2k-sensitive`
+packet that omits source IDs, paths, URLs, e-mail addresses, phone numbers, and
+tokens, bounded existing-corpus verification with three source/version
+citations while the database snapshot stayed unchanged, and shared Granola
+maintenance-lock reads that reject active WAL sidecars and fail closed when the
+read lock is missing. The post-merge bounded maintenance poll exited 0 with no
+raw capture append and no local stage rebuild; the final main-check reran the
+active suite (`283 passed`), Ruff, compilation, plist lint, and diff checks,
+then answered one bounded existing-corpus question with three source/version
+citations while the database snapshot stayed unchanged.
+
+Ingestion, exact search, deterministic organization, and canonical Mac delta
+maintenance remain complete at delivered commit
+`b8f08ad92ab8b95de7e2a5cc48947b5857a53237`; the Milestone 1 and Milestone 2
+acceptance receipts and the full-scale repository audit remain preserved in the
+historical records. Counts and verification results are receipts from those
+checkpoints, not freshly measured totals.
+<!-- janitor:end:todo -->
