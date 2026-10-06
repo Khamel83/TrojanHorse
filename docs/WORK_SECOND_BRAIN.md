@@ -1,6 +1,6 @@
 # TrojanHorse: keep the work to-do lists current
 
-Owner clarification: 2026-10-05. This narrows the first release to Apple Reminders
+Owner clarification: 2026-10-05; delivery checkpoint: 2026-10-06. This narrows the first release to Apple Reminders
 and a simple authenticated paste input. The broader historical work memory stays
 behind it; dashboards and separate project/people web views are deferred.
 
@@ -54,17 +54,19 @@ its body. Keep its identity and previous confirmation. Synchronize manual checkb
 changes back into task state. Provider retries must not create duplicates or
 turn projected checkbox changes into new user instructions.
 
-The existing Maya lists must retain their history and exact identities during
-cutover. Reconcile the prior writer before enabling TrojanHorse's writer. Existing
-read-only discovery found five reminders, all completed; no native writes have
-been made. Exact IDs and receipts remain private.
+The owner removed Maya migration from scope. Use the project-owned Trojan-Mine
+and Trojan-Delegated lists. The bootstrap wrote only to these two lists, preserving
+other lists. Exact account/list/item IDs and receipts remain private.
+
+Newer event information is the default current truth for the same work. A specific
+mistake can be recorded as counterevidence. Capture time never replaces event time.
+Initial Confirm current status is distinct from a later Evidence needed contradiction.
 
 ## Delivery sequence
 
-**Design gate first:** the owner requested a project/task identity and recurrence
-review before further building. The steps below are queued implementation, not
-a direction to resume now. See [the reasoning review](PROJECT_AND_TASK_REASONING.md).
-
+The design gate passed: G2K requested revisions and then approved the exact
+[final plan](REMINDERS_IMPLEMENTATION_PLAN_FINAL.md). The task reducer and native
+bootstrap bridge are implemented. The remaining continuous workflow is below.
 
 1. Task transitions: open -> done -> evidence needed -> confirmed done. Verify old
    imports, duplicate input, wrong-task references and manual owner completion.
@@ -83,10 +85,16 @@ confirmation clears it, and all changes remain attached to the same task.
 
 ## Verified state and remaining wiring
 
-Historical package intake remains verified and preserved. The isolated task-state
-API now supports the confirmation cycle. Its 36 tests plus 10 existing task tests
-pass; focused Ruff passes. It is not yet initialized in the live corpus, connected
-to Wispr/LLM intake or connected to Reminders. No Cloudflare deployment or list
-cutover has occurred. Those are the next implementation steps, not capabilities
-established by this document. Existing infrastructure inspection has no declared
-TrojanHorse runtime host; deployment placement remains an implementation gate.
+Historical package intake remains verified and preserved: 116 files, 108 normalized
+documents, 35 project cards and 20 aliases. Thirty recent work meetings were reviewed
+from 42 screened sources; 12 were excluded. Ninety-four candidate facts were
+chronologically reconciled into 24 native reminders: 12 own, 12 delegated. Seven
+say Confirm current status. Every item and source locator/hash was verified; final
+readback found 24 unique IDs and zero unresolved delivery results. Dates are in
+bodies; no timed alerts were created. Fifty-nine focused tests and Ruff pass.
+
+The isolated work-state database retains 24 task events/tasks separately from the
+historical corpus. Source is published on `feature/work-second-brain`, unmerged.
+No unattended Wispr consumer, paste endpoint, installed checkbox-feedback loop or
+Cloudflare deployment is active. Session connector capture is not daemon access.
+Next verify the actual installed caller and a natural meeting/checkbox/paste cycle.

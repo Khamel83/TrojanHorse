@@ -1,5 +1,11 @@
 # TrojanHorse REST API Documentation
 
+> Historical Atlas/REST documentation below. It is not the active work-second-brain
+> API or deployment contract. Use [operations](docs/OPERATIONS.md),
+> [handoff](HANDOFF.md) and [the approved plan](docs/REMINDERS_IMPLEMENTATION_PLAN_FINAL.md).
+> No TrojanHorse web/paste endpoint is deployed as of 2026-10-06.
+
+
 TrojanHorse provides a comprehensive REST API that allows external systems to integrate with your personal knowledge base. The API exposes all core functionality including processing, searching, and promoting notes to Atlas.
 
 ## 🚀 Quick Start

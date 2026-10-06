@@ -47,5 +47,6 @@ not an installed continuous product. Unattended Wispr capture, pasted-input endp
 checkbox feedback and Cloudflare hosting remain unaccepted/uninstalled.
 
 Source: isolated `feature/work-second-brain` worktree, main freshly fetched at
-`d041b1bd91931e8d3cd0980e2de3d0baabc2cf2f`. Primary dirty work is preserved.
+`d041b1bd91931e8d3cd0980e2de3d0baabc2cf2f`. Primary dirty work is preserved. Source is published on
+`origin/feature/work-second-brain`, unmerged into main.
 Earlier context is [archived](docs/history/working-records-before-bootstrap-20261006/CONTEXT.md).

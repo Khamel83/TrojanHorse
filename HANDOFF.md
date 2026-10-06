@@ -41,8 +41,8 @@ session; these results do not prove an unattended launchd caller's permission.
 Active worktree `/Volumes/2TB_SSD/GitHub/.worktrees/trojanhorse-work-brain`, local
 branch `feature/work-second-brain`. Origin/main freshly fetched and default branch
 verified at `d041b1bd91931e8d3cd0980e2de3d0baabc2cf2f`. Primary checkout's dirty
-LLM-OVERVIEW.md and fixture deletion remain preserved. New code is local; no push
-or web production deployment. Previous working records are archived under
+LLM-OVERVIEW.md and fixture deletion remain preserved. Source is pushed to `origin/feature/work-second-brain`, unmerged. No web
+production deployment. Previous working records are archived under
 `docs/history/working-records-before-bootstrap-20261006/`.
 
 Bootstrap CLI: `PYTHONPATH=work-corpus/src python3 work-corpus/scripts/bootstrap_reminders.py`

@@ -1,5 +1,20 @@
 # Comprehensive Testing Guide for TrojanHorse
 
+> Historical Atlas/REST documentation below. It is not the active work-second-brain
+> API or deployment contract. Use [operations](docs/OPERATIONS.md),
+> [handoff](HANDOFF.md) and [the approved plan](docs/REMINDERS_IMPLEMENTATION_PLAN_FINAL.md).
+> No TrojanHorse web/paste endpoint is deployed as of 2026-10-06.
+
+Current focused reducer/Reminders/source-validation checks: 59 passed.
+
+```bash
+PYTHONPATH=work-corpus/src pytest -q --no-cov work-corpus/tests/test_reminders_batch.py work-corpus/tests/test_reminders_bridge.py work-corpus/tests/test_work_state.py work-corpus/tests/test_tasks.py
+```
+
+Native acceptance separately verified 24 distinct reminders and exact final fields.
+Tests do not prove unattended source access or checkbox/paste integration.
+
+
 This guide covers all aspects of testing the TrojanHorse REST API integration, including unit tests, integration tests, and manual validation procedures.
 
 ## 🚀 Quick Start

@@ -1,8 +1,10 @@
-# Project and task reasoning — design review before further implementation
+# Project and task reasoning — bounded matching contract
 
 Owner direction, 2026-10-05: investigate Reflex and think through the probabilistic
 identity/scope decisions before building further. Reminders remains the working
-surface. This is a design proposal, not an activated policy or provider integration.
+surface. The initial design pause ended with the October 6 G2K-approved plan
+and verified 24-reminder bootstrap. Reflex remains investigated but unintegrated;
+automatic source interpretation remains open. See [HANDOFF](../HANDOFF.md).
 
 ## What was inspected
 
@@ -58,7 +60,8 @@ The implemented task-state reducer begins AFTER the hard interpretation has
 already happened: a task ID, person identity, event relation and provenance are
 supplied by the caller. Its passing tests do not establish that a real meeting
 will be assigned to the right project or close/reopen the right task. The missing
-semantic contract must be settled before wiring it to a provider or Reminders.
+semantic contract guides the remaining automatic intake; the reviewed bootstrap
+already used source-verified, chronologically reconciled candidates with native receipts.
 
 A short active project list improves the candidate problem. It does not solve
 identity alone. The same people discuss several projects; the same deliverable

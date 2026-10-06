@@ -33,7 +33,7 @@
   authority; verify paste -> retained source -> same task -> native receipt.
   No dashboard/project/people web views are needed.
 
-Current branch is local and unpushed. Native reminders are delivered; no web service
+Current branch is published as `origin/feature/work-second-brain`, unmerged. Native reminders are delivered; no web service
 or continuous intake is deployed. Private acceptance records:
 `work-corpus/corpus/reports/work-brain-bootstrap-20261006/` in the canonical checkout.
 Read [HANDOFF.md](HANDOFF.md) for exact source/runtime boundaries and restart.

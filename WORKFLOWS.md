@@ -5,6 +5,17 @@
 > implementation gates are in [WORK_SECOND_BRAIN.md](docs/WORK_SECOND_BRAIN.md).
 > Use `work-corpus` for existing corpus operations.
 
+## Current workflow — 2026-10-06
+
+Use Trojan-Mine and Trojan-Delegated in Apple Reminders. The reviewed bootstrap
+placed 12 items in each; seven status-unknown commitments are labelled explicitly.
+Check off means done. Newer event information defaults current truth; no Maya
+migration is required. Automatic future Wispr/paste intake and checkbox-to-ledger
+feedback remain open. See [TODO](TODO.md) and [HANDOFF](HANDOFF.md).
+
+The remaining command examples are historical and must not be used as proof of
+current unattended functionality.
+
 This document describes the specific user workflows for using TrojanHorse with your daily productivity tools.
 
 ## Quick Reference

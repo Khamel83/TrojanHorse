@@ -10,9 +10,13 @@ Historical professional evidence export and
 question answering are supported outputs.
 
 Read [the current product contract](docs/WORK_SECOND_BRAIN.md) and [TODO](TODO.md).
-The existing archive/import/search/answer runtime is working; automatic Wispr
-intake, live task reconciliation, Cloudflare intake and Reminders delivery are
-implementation work, not deployed capabilities.
+The existing archive/import/search/answer runtime is working; the reviewed bootstrap delivered 24 native reminders (12 Trojan-Mine, 12
+Trojan-Delegated), with unique IDs and exact readback receipts. Automatic Wispr
+intake, live completion reconciliation and Cloudflare paste intake remain open.
+See the [G2K-approved plan](docs/REMINDERS_IMPLEMENTATION_PLAN_FINAL.md),
+[handoff](HANDOFF.md) and [owner recency rule](docs/OWNER_RECENCY_ADDENDUM.md).
+Source is published on `feature/work-second-brain`; it is not merged into main.
+Private transcripts, task batches and native receipt databases remain local.
 
 > Current work: the local archive, `.eml` normalization, deterministic
 > organization, source-backed views, and the unified-corpus first pass are
@@ -185,7 +189,7 @@ append one mode-0600 raw capture and run the local stages; overlap-only results
 record a poll receipt without appending another raw file or rebuilding the
 indexes. The homelab is a secret broker only; no raw corpus copy is made there.
 
-The current acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
+The September archive acceptance artifacts are [the JSON status report](work-corpus/corpus/reports/status.json),
 [the human-readable report](work-corpus/corpus/reports/what_we_have_and_need.md),
 [the organization acceptance state](work-corpus/state/organization_acceptance.json),
 [the residual ledger](work-corpus/corpus/reports/residual_ledger.csv),
@@ -213,7 +217,8 @@ unique notes across 19 list pages, with 559 summaries and 557 transcripts; all
 20 normalized documents, 60 evidence units, 60 FTS rows, and 20 email-header
 date observations. The deterministic organization pass produced 9 explicit
 projects and 27 evidence-backed project links, while the views expose 1,951
-task candidates and 71,834 career evidence units; current task rows remain 0.
+task candidates and 71,834 career evidence units; historical task rows were 0 at that checkpoint. The separate October bootstrap
+work-state database has 24 tasks; these counts describe different databases.
 The unified first pass has 0 pending review rows and records 48 ambiguous
 titles as generic topic labels without inferring identities. Wispr Flow has
 13/13 capture and retrieval dates, with start, end, and provider-modified dates

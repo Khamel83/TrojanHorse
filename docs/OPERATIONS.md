@@ -4,6 +4,22 @@ The supported runtime is the local `work-corpus` package. It reads raw files
 under `data/` and writes rebuildable state under `work-corpus/corpus/` and
 `work-corpus/state/`.
 
+## Reminders bootstrap and restart — 2026-10-06
+
+The reviewed private batch delivered 24 actual reminders. Read [HANDOFF](../HANDOFF.md)
+and the [approved plan](REMINDERS_IMPLEMENTATION_PLAN_FINAL.md) before any replay.
+The private batch/effect ledger/readback receipts live in canonical
+work-corpus/corpus/reports/work-brain-bootstrap-20261006/.
+
+`work-corpus/scripts/bootstrap_reminders.py` accepts --batch, --state and --receipt.
+It verifies source identity/version/excerpt before native effects and uses exact
+account/list bindings plus reserved markers. Reconcile existing reservations first;
+owner-edited or completed items must not be overwritten to reproduce an old receipt.
+Never delete markers, clear the ledger or create a second item to hide a conflict.
+Raw transcripts and receipt IDs are not Git artifacts. No background consumer is
+installed by this command. Future unattended capture, paste intake and checkbox
+feedback require installed-caller and natural-run acceptance.
+
 ## Install
 
 From a clean checkout:

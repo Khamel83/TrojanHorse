@@ -1,5 +1,24 @@
 # Local Work Corpus Status
 
+## Current work second-brain checkpoint — 2026-10-06
+
+The verified bootstrap delivered 24 source-backed iCloud reminders, 12 in each
+Trojan list, with 24 unique native IDs and zero unresolved delivery results.
+Seven items request status confirmation. The supplied historical package remains
+retained; raw sources and native receipts are private. G2K reviewed/revised/approved
+the [final plan](REMINDERS_IMPLEMENTATION_PLAN_FINAL.md), whose reviewed bytes
+remain unchanged. Newer event information defaults current truth; imported old
+meetings retain their original dates. No Maya migration is required.
+
+The reducer/native bridge have 59 focused passing tests. No unattended Wispr
+consumer, pasted-message endpoint, installed checkbox-feedback loop or Cloudflare
+site is active. Next verify installed-caller access and one natural source/task/
+checkbox workflow. Source is published on `feature/work-second-brain`, unmerged.
+Read [TODO](../TODO.md) and [HANDOFF](../HANDOFF.md) for the active sequence.
+
+The dated September record below is historical archive acceptance, not a current
+live-task or always-updated product claim. Its original counts were not rerun.
+
 Status date: 2026-09-09
 Latest report: `2026-09-08T01:47:56-07:00`
 
