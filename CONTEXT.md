@@ -4,8 +4,12 @@
 
 TrojanHorse is Omar's work second brain: automatic intake of live meetings plus
 pasted email/Slack, continuously maintained projects, people, own/delegated tasks
-and evidence-backed completion, projected into Apple Reminders. Explicit owner
-“done” is authoritative. Open tasks do not expire after fourteen days. Historical
+and completion confirmation, projected into Apple Reminders. Explicit owner
+“done” is accepted immediately. A later explicit statement that the same work is
+still outstanding returns it as Evidence needed; matching pasted confirmation
+clears it. This does not assess quality. The first release has no dashboard or
+separate web project/people views: Reminders plus a simple paste input.
+Open tasks do not expire after fourteen days. Historical
 proposals remain distinct from the new live-task event projection.
 [WORK_SECOND_BRAIN.md](docs/WORK_SECOND_BRAIN.md) owns the current product contract.
 Question-based memory is secondary; the provisional prior plan is superseded.
@@ -27,7 +31,9 @@ Shell reachability does not prove unattended caller permission.
 The infrastructure catalog has no declared TrojanHorse runtime host. No Cloudflare
 Pages/Access app, private context service or Reminders bridge was deployed. The
 new deterministic event reducer is an isolated first slice, not a running inbox.
-Its 25 tests and 10 existing task tests pass; focused Ruff/diff checks pass.
+Its 36 tests and 10 existing task tests pass; focused Ruff/diff checks pass.
+The new outstanding/confirmed events support the confirmation cycle while
+keeping original message time separate from the later confirmation time.
 The API creates only namespaced work_* tables when explicitly initialized; no
 live database migration or provider writes were performed.
 The primary dirty checkout and live corpus remain preserved. Source changes are

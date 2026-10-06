@@ -2,8 +2,11 @@
 
 TrojanHorse is Omar's work second brain. It should continuously turn Wispr
 meetings and pasted email/Slack into updated projects, people, own/delegated tasks
-and completion evidence, with Apple Reminders as a working surface. Explicit
-owner completion is authoritative. Historical professional evidence export and
+and completion confirmation, with Apple Reminders as the working surface.
+Checking a task off means done; later explicit contradictions return it as
+Evidence needed, cleared by matching confirmation. The first release needs only
+Reminders and an authenticated paste box; dashboards are deferred.
+Historical professional evidence export and
 question answering are supported outputs.
 
 Read [the current product contract](docs/WORK_SECOND_BRAIN.md) and [TODO](TODO.md).

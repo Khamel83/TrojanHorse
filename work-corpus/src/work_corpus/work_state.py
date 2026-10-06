@@ -9,10 +9,17 @@ set authority/evidence fields; untrusted pasted text cannot authorize itself.
 
 owner_id identifies the person responsible for delivery. person_id is the fixed
 requester/accountability context of this task, NOT the speaker or author of an
-individual source event. project_id is also fixed; reassignment/context changes
+individual source event. person_id and project_id can be null when unknown;
+task creation does not require a project directory. Context is fixed; changes
 need a separate explicit migration. Unknown source-only terminal events require
 review. Explicit owner completion can create a completed shell without inventing
 an assignment, because the owner's statement itself establishes the task/state.
+Later explicit outstanding-work evidence can move completed work to
+evidence_needed. A matched confirmation clears that state; this module never
+assesses the quality of the deliverable.
+For confirmed events, occurred_at is the time confirmation was supplied; retain
+the underlying email/message time separately as source_occurred_at. Importing
+an old message is not itself permission to emit a new confirmation event.
 """
 from __future__ import annotations
 
@@ -22,13 +29,13 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Optional
 
-KINDS = {"assigned", "completed", "cancelled", "reopened", "due_changed"}
+KINDS = {"assigned", "completed", "confirmed", "cancelled", "reopened", "due_changed", "outstanding"}
 _REQUIRED = {
     "event_id", "task_id", "source_id", "source_version_id", "locator",
     "occurred_at", "captured_at", "owner_id", "person_id", "project_id",
     "kind", "authority",
 }
-_OPTIONAL = {"due_date", "matched_task", "evidence_quality", "title"}
+_OPTIONAL = {"due_date", "matched_task", "evidence_quality", "title", "source_occurred_at"}
 
 
 def _timestamp(value: str) -> datetime:
@@ -69,10 +76,16 @@ def _validated(event: Mapping[str, Any]) -> Dict[str, Any]:
     if _REQUIRED - payload.keys() or payload.keys() - (_REQUIRED | _OPTIONAL):
         raise ValueError("missing or unknown event fields")
     for key in _REQUIRED:
+        if key in {"person_id", "project_id"} and payload[key] is None:
+            continue
         if not isinstance(payload[key], str) or not payload[key].strip():
             raise ValueError("event field %s must be a nonempty string" % key)
     _timestamp(payload["occurred_at"])
     _timestamp(payload["captured_at"])
+    if "source_occurred_at" in payload and payload["source_occurred_at"] is not None:
+        _timestamp(payload["source_occurred_at"])
+    if payload["kind"] == "confirmed" and "source_occurred_at" not in payload:
+        raise ValueError("confirmed requires the underlying source time, or null if unknown")
     if payload["kind"] not in KINDS:
         raise ValueError("unknown event kind")
     if payload["authority"] not in {"owner_explicit", "source_explicit", "model_inferred"}:
@@ -100,9 +113,9 @@ def _decision(payload: Dict[str, Any]) -> tuple:
         return "accepted", "explicit owner instruction"
     if payload["authority"] == "model_inferred":
         return "review", "inferred event requires review"
-    if payload["kind"] in {"completed", "cancelled"}:
+    if payload["kind"] in {"completed", "confirmed", "cancelled", "outstanding"}:
         if payload.get("matched_task") is not True or payload.get("evidence_quality") not in {"direct", "strong"}:
-            return "review", "terminal event requires an explicit task match and direct or strong evidence"
+            return "review", "state change requires an explicit task match and direct or strong source evidence"
     return "accepted", "validated source event"
 
 
@@ -140,19 +153,27 @@ def _project(con: sqlite3.Connection, task_id: str, omar_owner_id: str) -> Optio
         elif kind == "assigned":
             # Repeated promises or late imports do not resurrect completed work.
             continue
-        elif kind == "completed":
+        elif kind in {"completed", "confirmed"}:
             state["status"] = "completed"
+        elif kind == "outstanding":
+            # A later explicit contradiction requests confirmation. Repeated
+            # mentions/assignments alone cannot overturn an owner checkbox.
+            if state["status"] not in {"completed", "evidence_needed"}:
+                continue
+            state["status"] = "evidence_needed"
         elif kind == "cancelled":
             state["status"] = "cancelled"
         elif kind == "reopened":
             state["status"] = "open"
         elif kind == "due_changed":
             state["due_date"] = event["due_date"]
-        if kind in {"assigned", "completed", "cancelled", "reopened"}:
+        if kind in {"assigned", "completed", "confirmed", "cancelled", "reopened", "outstanding"}:
             state["status_event_id"] = event["event_id"]
             state["status_authority"] = event["authority"]
             state["status_occurred_at"] = event["occurred_at"]
             state["status_source"] = {key: event[key] for key in ("source_id", "source_version_id", "locator")}
+            if "source_occurred_at" in event:
+                state["status_source"]["occurred_at"] = event["source_occurred_at"]
         state["last_event_id"] = event["event_id"]
         state["occurred_at"] = event["occurred_at"]
         state["authority"] = event["authority"]

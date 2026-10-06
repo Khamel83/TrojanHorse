@@ -179,3 +179,108 @@ def test_due_change_preserves_completion_authority_and_provenance(con):
     assert task["last_event_id"] == "reschedule"
     assert task["status_event_id"] == "owner-done"
     assert task["status_authority"] == "owner_explicit"
+
+
+def test_checkbox_then_later_outstanding_then_pasted_confirmation(con):
+    apply_event(con, event())
+    apply_event(con, event("checkbox", kind="completed", authority="owner_explicit",
+                           occurred_at="2026-10-08"))
+    result = apply_event(con, event("still-outstanding", kind="outstanding",
+                                   occurred_at="2026-10-12", matched_task=True,
+                                   evidence_quality="direct", source_id="later-meeting"))
+    assert result["status"] == "accepted"
+    assert result["task"]["status"] == "evidence_needed"
+    assert result["task"]["task_id"] == "report"
+    assert len(list_tasks(con)) == 1
+    result = apply_event(con, event("confirmation", kind="completed",
+                                   occurred_at="2026-10-13", source_id="pasted-slack",
+                                   locator="message:1", matched_task=True,
+                                   evidence_quality="direct"))
+    assert result["task"]["status"] == "completed"
+    assert result["task"]["status_source"]["source_id"] == "pasted-slack"
+    assert con.execute("SELECT COUNT(*) FROM work_task_events").fetchone()[0] == 4
+
+
+def test_old_outstanding_imported_later_cannot_undo_checkbox(con):
+    apply_event(con, event())
+    apply_event(con, event("checkbox", kind="completed", authority="owner_explicit",
+                           occurred_at="2026-10-10"))
+    apply_event(con, event("old-outstanding", kind="outstanding", occurred_at="2026-10-08",
+                           captured_at="2026-10-20", matched_task=True, evidence_quality="direct"))
+    assert get_task(con, "report")["status"] == "completed"
+    assert get_task(con, "report")["status_event_id"] == "checkbox"
+
+
+@pytest.mark.parametrize("changes", [
+    {"matched_task": False, "evidence_quality": "direct"},
+    {"matched_task": True, "evidence_quality": "ambiguous"},
+    {"matched_task": True, "evidence_quality": "strong", "authority": "model_inferred"},
+])
+def test_unclear_future_mention_does_not_request_confirmation(con, changes):
+    apply_event(con, event())
+    apply_event(con, event("checkbox", kind="completed", authority="owner_explicit"))
+    result = apply_event(con, event("unclear", kind="outstanding", occurred_at="2026-10-12", **changes))
+    assert result["status"] == "review"
+    assert result["task"]["status"] == "completed"
+
+
+def test_employee_confirmation_does_not_clear_omars_evidence_needed(con):
+    apply_event(con, event())
+    apply_event(con, event("checkbox", kind="completed", authority="owner_explicit"))
+    apply_event(con, event("outstanding", kind="outstanding", occurred_at="2026-10-12",
+                           matched_task=True, evidence_quality="direct"))
+    apply_event(con, event("employee-assignment", task_id="employee-report",
+                           owner_id="employee", person_id="employee"))
+    apply_event(con, event("employee-confirmation", task_id="employee-report",
+                           owner_id="employee", person_id="employee", kind="completed",
+                           authority="owner_explicit"))
+    assert get_task(con, "report")["status"] == "evidence_needed"
+
+
+def test_cancelled_work_is_not_reopened_by_an_outstanding_mention(con):
+    apply_event(con, event())
+    apply_event(con, event("cancel", kind="cancelled", authority="owner_explicit"))
+    apply_event(con, event("outstanding", kind="outstanding", occurred_at="2026-10-12",
+                           matched_task=True, evidence_quality="direct"))
+    assert get_task(con, "report")["status"] == "cancelled"
+
+
+def test_pasted_older_email_can_confirm_after_newer_meeting_contradiction(con):
+    apply_event(con, event())
+    apply_event(con, event("checkbox", kind="completed", authority="owner_explicit",
+                           occurred_at="2026-10-08"))
+    apply_event(con, event("outstanding", kind="outstanding", occurred_at="2026-10-12",
+                           matched_task=True, evidence_quality="direct"))
+    result = apply_event(con, event("pasted-confirmation", kind="confirmed",
+                                   occurred_at="2026-10-13", captured_at="2026-10-13",
+                                   source_occurred_at="2026-10-08", source_id="old-email",
+                                   matched_task=True, evidence_quality="direct"))
+    assert result["task"]["status"] == "completed"
+    assert result["task"]["status_occurred_at"] == "2026-10-13"
+    assert result["task"]["status_source"]["occurred_at"] == "2026-10-08"
+    assert apply_event(con, event("pasted-confirmation", kind="confirmed",
+                                 occurred_at="2026-10-13", captured_at="2026-10-13",
+                                 source_occurred_at="2026-10-08", source_id="old-email",
+                                 matched_task=True, evidence_quality="direct"))["status"] == "duplicate"
+
+
+def test_confirmation_source_date_cannot_be_silently_replaced_with_paste_date(con):
+    with pytest.raises(ValueError, match="underlying source time"):
+        apply_event(con, event("confirmation", kind="confirmed",
+                               matched_task=True, evidence_quality="direct"))
+
+
+def test_confirmation_with_unknown_email_date_does_not_require_guessing(con):
+    apply_event(con, event())
+    result = apply_event(con, event("confirmation", kind="confirmed",
+                                   occurred_at="2026-10-13", source_occurred_at=None,
+                                   matched_task=True, evidence_quality="direct"))
+    assert result["task"]["status"] == "completed"
+    assert result["task"]["status_source"]["occurred_at"] is None
+
+
+def test_plain_todo_does_not_require_project_or_requester_classification(con):
+    result = apply_event(con, event(project_id=None, person_id=None))
+    assert result["task"]["status"] == "open"
+    assert result["task"]["list"] == "mine"
+    assert result["task"]["project_id"] is None

@@ -2,10 +2,12 @@
 
 ## Current checkpoint — work second brain, 2026-10-05
 
-The owner clarified the actual product: proactive work memory with live Wispr
-intake, pasted email/Slack, maintained projects and own/delegated tasks, completion
-reconciliation and Apple Reminders. Asking questions is secondary. The earlier
-professional-memory evaluation gate is superseded by this workflow.
+The owner narrowed the first release to current own/delegated to-do lists in
+Apple Reminders, fed by Wispr and a simple pasted-email/Slack input. Checking off
+a task means done. A later explicit outstanding-work contradiction returns the
+same task as Evidence needed; matching confirmation clears it. This tracks
+completion, not deliverable quality. Dashboards and separate project/people web
+views are deferred. Asking questions is secondary.
 See [the product contract](docs/WORK_SECOND_BRAIN.md).
 
 - [x] Historical complete-package intake: 116 files, 108 normalized documents,
@@ -18,16 +20,17 @@ See [the product contract](docs/WORK_SECOND_BRAIN.md).
   Maya — Delegated two; all five completed. Exact IDs retained privately. No writes.
 - [x] Verify the isolated deterministic work-event/task-state core against
   owner completion, old replay, duplicates, employee ownership and long-open tasks.
-  25 new tests plus 10 existing task tests pass; focused Ruff and diff checks pass.
+  36 new tests plus 10 existing task tests pass; focused Ruff and diff checks pass.
+  Includes later contradiction and older-email confirmation without duplicates.
   This API is not yet wired into intake or the live corpus.
-- [ ] Add durable paste intake and Wispr delta, with structured source-cited
-  interpretation, people/project resolution and completion matching.
-- [ ] Produce Mine/Delegated/Projects and authenticated private context views.
+- [ ] Wire Wispr and durable paste intake to source-cited assignment, completion
+  and outstanding-work matching; no dashboard or web project view required.
 - [ ] Bind the Mac Reminders caller, reconcile existing Maya writer ownership,
   migrate the two exact lists without deleting history, and verify create/update/
-  complete plus readback and manual-completion feedback.
+  complete plus readback, manual-completion feedback, Evidence needed and clearing
+  it with matching confirmation.
 - [ ] Prepare Cloudflare Pages/Access release at trojan.khamel.com and verify the
-  end-to-end meeting/paste -> task -> Reminders -> context workflow through the
+  end-to-end meeting/paste -> same task -> Reminders workflow through the
   reviewed deployment path. No runtime host/Cloudflare app is established yet.
 
 Private source material stays ignored. This work is local and unpushed. Earlier

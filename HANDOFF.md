@@ -33,7 +33,11 @@ occurred. This branch is local and unpushed; local corpus intake is already effe
 Owner clarification supersedes the prior professional-memory-first gate. The
 product continuously consumes Wispr meetings and pasted email/Slack, maintains
 people/projects and own/delegated tasks, and reconciles completion into Reminders.
-Explicit owner “done” is authoritative; open tasks never silently age out.
+Explicit owner “done” is accepted immediately; open tasks never silently age out.
+The owner subsequently narrowed the first release: Reminders plus paste input,
+no dashboard/project web views. A later clear outstanding-work contradiction
+returns the same completed task as Evidence needed. Matching confirmation clears
+it. Completion confirmation never assesses quality.
 Read `docs/WORK_SECOND_BRAIN.md` for the contract and ordered acceptance sequence.
 
 Current source branch: `feature/work-second-brain`, isolated from the dirty primary
@@ -51,7 +55,10 @@ Verified first implementation: `work-corpus/src/work_corpus/work_state.py` retai
 provenance-bearing events and projects own/delegated task state. Owner completion
 and reopening are explicit; stale replay cannot resurrect finished work, retries
 deduplicate, open work does not expire, ambiguous terminal events remain review.
-25 new plus 10 existing task tests pass; focused Ruff and diff checks pass. This
+36 new plus 10 existing task tests pass; focused Ruff and diff checks pass.
+The new outstanding/confirmed events implement done -> evidence needed -> done,
+including an older email supplied as new confirmation. The source date is retained
+separately; old-source replay and mere repeated assignments cannot reopen work. This
 is an API requiring trusted validated input, not text extraction or a running inbox.
 It was not initialized against the live database.
 
@@ -59,11 +66,13 @@ Native discovery receipts are durably copied into the canonical ignored report
 `work-corpus/corpus/reports/work-brain-definition-20261005/`.
 
 Next verification: wire a durable paste source and live Wispr intake into
-structured, source-cited events and exercise one assignment/completion sequence.
+structured, source-cited events and exercise the assignment/checkbox/contradiction/
+pasted-confirmation cycle on one task. Reminders is the only required task UI.
 Do not rerun historical extraction. After local workflow validation, bind and
 verify the installed Mac Reminders caller and migrate exact Maya list ownership
 without losing history or running competing writers. Prepare the Pages/Access
-release as a concrete reviewable change before any production approval gate.
+paste-only release as a concrete reviewable change before any production approval
+gate. No dashboard is required. No native list mutations occurred in this update.
 
 The prior unrelated managed-rule repair gates remain archived in
 `docs/handoffs/2026-10-05-managed-rule-repair-before-package-intake.md`.
