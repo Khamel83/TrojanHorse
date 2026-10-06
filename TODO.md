@@ -10,6 +10,19 @@ completion, not deliverable quality. Dashboards and separate project/people web
 views are deferred. Asking questions is secondary.
 See [the product contract](docs/WORK_SECOND_BRAIN.md).
 
+**Current gate: design review before further implementation.** The owner asked
+to investigate Reflex and settle project/task identity, recurrence and scope
+before building more. Read [the reasoning review](docs/PROJECT_AND_TASK_REASONING.md).
+The existing reducer is a tested first slice, not validation of semantic matching.
+
+- [x] Inspect fetched Reflex source and its profiles/policy without calls or edits.
+- [ ] Walk retained source sequences through project identity, task identity and
+  relation decisions; distinguish same unfinished work, new work, recurrence and
+  categorization error. Returning work gains attention, not automatic effort size.
+- [ ] Settle the bounded semantic questions and evaluate Reflex's contribution
+  before resuming intake/Reminders wiring. No dashboard is required.
+
+
 - [x] Historical complete-package intake: 116 files, 108 normalized documents,
   35 retrievable project definitions, 20 H001 aliases, 230-row retained ledger.
   Original bytes, previous evidence IDs and 3,188 derived hashes remain intact.

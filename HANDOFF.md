@@ -65,14 +65,21 @@ It was not initialized against the live database.
 Native discovery receipts are durably copied into the canonical ignored report
 `work-corpus/corpus/reports/work-brain-definition-20261005/`.
 
-Next verification: wire a durable paste source and live Wispr intake into
-structured, source-cited events and exercise the assignment/checkbox/contradiction/
-pasted-confirmation cycle on one task. Reminders is the only required task UI.
-Do not rerun historical extraction. After local workflow validation, bind and
-verify the installed Mac Reminders caller and migrate exact Maya list ownership
-without losing history or running competing writers. Prepare the Pages/Access
-paste-only release as a concrete reviewable change before any production approval
-gate. No dashboard is required. No native list mutations occurred in this update.
+## Current design gate — owner asked to think before building
+
+Further implementation/wiring is paused for project/task reasoning. Inspected
+Reflex fetched source `3b86410e8847666cbfff79f61c7a7a0fbc56d660`, preserving its
+dirty checkout and making no provider calls or changes. The bounded judgment
+API could support work-project association, task association and event-relation
+questions. Existing repository-routing semantics are not a work-project profile.
+
+Read `docs/PROJECT_AND_TASK_REASONING.md`. Next step: reason through retained
+source sequences and agree how to distinguish same outstanding work, new work,
+recurring instances and incorrect categorization. Returning tasks should gain
+attention, not automatic estimates of bigger effort. The 46-test reducer cannot
+establish real-world identity matching because its inputs already contain IDs.
+No intake/Reminders wiring, threshold selection, provider transfer or deployment
+should proceed as a consequence of this review. Native lists remain untouched.
 
 The prior unrelated managed-rule repair gates remain archived in
 `docs/handoffs/2026-10-05-managed-rule-repair-before-package-intake.md`.

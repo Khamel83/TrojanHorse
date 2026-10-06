@@ -2,6 +2,16 @@
 
 ## Current product authority — 2026-10-05
 
+The owner requested design review before more building. Implementation wiring is
+paused while project/task identity and recurrence are worked through. Reflex was
+inspected at fetched `3b86410e8847666cbfff79f61c7a7a0fbc56d660`: it supports
+versioned typed judgments and candidate distributions, not automatic work-project
+creation or state changes. Its existing repository-routing profile needs a work
+profile rather than reuse of __new_repo__. No provider calls/Reflex edits occurred.
+Read [PROJECT_AND_TASK_REASONING.md](docs/PROJECT_AND_TASK_REASONING.md).
+A returning task may indicate unfinished work, new scope, recurrence or incorrect
+matching. Escalate attention separately from scope/effort. Reminders remains the UI.
+
 TrojanHorse is Omar's work second brain: automatic intake of live meetings plus
 pasted email/Slack, continuously maintained projects, people, own/delegated tasks
 and completion confirmation, projected into Apple Reminders. Explicit owner

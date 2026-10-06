@@ -61,6 +61,11 @@ been made. Exact IDs and receipts remain private.
 
 ## Delivery sequence
 
+**Design gate first:** the owner requested a project/task identity and recurrence
+review before further building. The steps below are queued implementation, not
+a direction to resume now. See [the reasoning review](PROJECT_AND_TASK_REASONING.md).
+
+
 1. Task transitions: open -> done -> evidence needed -> confirmed done. Verify old
    imports, duplicate input, wrong-task references and manual owner completion.
 2. Wire new Wispr content and a durable paste input to those transitions. Verify
