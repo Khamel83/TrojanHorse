@@ -1,27 +1,37 @@
 # Local Work Corpus TODO
 
-## Current checkpoint — professional package intake, 2026-10-05
+## Current checkpoint — work second brain, 2026-10-05
 
-- [x] Preserve and verify the owner-supplied H002 complete package: 116 files;
-  all package and imported-copy hashes match. Original H001/H002 exports are
-  repeated evidence, not new historical events.
-- [x] Import 108 supported documents into the canonical local corpus; inventory
-  five ZIPs and three CSS/Python files without executing supplied scripts.
-- [x] Register and retrieve all 35 project card definitions and verify 20 H001
-  candidate aliases. Preserve the 230-row combined evidence ledger and Shoah
-  owner correction. Current tasks remain zero.
-- [x] Preserve every prior evidence ID and the hashes of 3,188 existing derived
-  files. Retain a pre-import SQLite backup and private intake/verification receipts.
-- [ ] Evaluate five professional-memory questions using the existing answer CLI,
-  with passage inspection and contribution/status boundaries; see
-  [the provisional product plan](docs/PROFESSIONAL_MEMORY_PLAN.md).
-- [ ] After that gate, provide and validate a small local entry point with actual
-  owner use. A retrievable archive is not proof of a useful everyday workflow.
+The owner clarified the actual product: proactive work memory with live Wispr
+intake, pasted email/Slack, maintained projects and own/delegated tasks, completion
+reconciliation and Apple Reminders. Asking questions is secondary. The earlier
+professional-memory evaluation gate is superseded by this workflow.
+See [the product contract](docs/WORK_SECOND_BRAIN.md).
 
-These checks establish local intake and retrieval only. No publication,
-production application deployment, Drive synchronization or scheduler activation
-was performed. The documentation/config branch is local and unpushed.
-Earlier technical milestone receipts below retain their historical scope.
+- [x] Historical complete-package intake: 116 files, 108 normalized documents,
+  35 retrievable project definitions, 20 H001 aliases, 230-row retained ledger.
+  Original bytes, previous evidence IDs and 3,188 derived hashes remain intact.
+- [x] Inspect active runtime: Wispr snapshot ingestion exists; no Wispr scheduled
+  delta, task completion reconciler, people directory, web intake or Reminders
+  bridge is established. Granola's delta is a separate existing lane.
+- [x] Read native Reminders target lists: Maya — Mine has three reminders and
+  Maya — Delegated two; all five completed. Exact IDs retained privately. No writes.
+- [x] Verify the isolated deterministic work-event/task-state core against
+  owner completion, old replay, duplicates, employee ownership and long-open tasks.
+  25 new tests plus 10 existing task tests pass; focused Ruff and diff checks pass.
+  This API is not yet wired into intake or the live corpus.
+- [ ] Add durable paste intake and Wispr delta, with structured source-cited
+  interpretation, people/project resolution and completion matching.
+- [ ] Produce Mine/Delegated/Projects and authenticated private context views.
+- [ ] Bind the Mac Reminders caller, reconcile existing Maya writer ownership,
+  migrate the two exact lists without deleting history, and verify create/update/
+  complete plus readback and manual-completion feedback.
+- [ ] Prepare Cloudflare Pages/Access release at trojan.khamel.com and verify the
+  end-to-end meeting/paste -> task -> Reminders -> context workflow through the
+  reviewed deployment path. No runtime host/Cloudflare app is established yet.
+
+Private source material stays ignored. This work is local and unpushed. Earlier
+technical milestone receipts below remain historical, not product acceptance.
 
 Updated: 2026-09-09. Reconciled the continuation handoff with repository docs
 after [Gemini 3.8 Flash High review](docs/superpowers/reviews/2026-09-08-todo-gemini-review.md)

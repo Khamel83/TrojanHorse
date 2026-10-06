@@ -1,5 +1,10 @@
 # TrojanHorse Workflows
 
+> Historical workflow proposal: the legacy `th` package has missing modules and
+> these commands are not the supported active runtime. Current intent and
+> implementation gates are in [WORK_SECOND_BRAIN.md](docs/WORK_SECOND_BRAIN.md).
+> Use `work-corpus` for existing corpus operations.
+
 This document describes the specific user workflows for using TrojanHorse with your daily productivity tools.
 
 ## Quick Reference

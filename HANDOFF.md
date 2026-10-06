@@ -28,17 +28,42 @@ The canonical ignored local config and tracked default source root both identify
 not independently verified or activated. No external publication or communication
 occurred. This branch is local and unpushed; local corpus intake is already effective.
 
-## Product gap and next verification
+## Current work second-brain direction
 
-The archive, retrieval and answer CLI exist; an everyday owner workflow remains
-unproven. Professional memory is the provisional first product, pending owner
-preference. Read `docs/PROFESSIONAL_MEMORY_PLAN.md`; evaluate its five questions
-through the existing read-only answer layer and inspect the original supporting
-passages before building another interface. Shoah must retain Christina's ownership
-and Omar's limited managerial involvement; Libraries remains a separate engagement.
-Package marketing copy must not override the factual ledger or introduce new proof.
-No broad historical extraction is needed for this next step.
+Owner clarification supersedes the prior professional-memory-first gate. The
+product continuously consumes Wispr meetings and pasted email/Slack, maintains
+people/projects and own/delegated tasks, and reconciles completion into Reminders.
+Explicit owner “done” is authoritative; open tasks never silently age out.
+Read `docs/WORK_SECOND_BRAIN.md` for the contract and ordered acceptance sequence.
 
-Earlier unrelated managed-rule repair gates were not executed by this intake.
-Their prior handoff bytes are preserved at
+Current source branch: `feature/work-second-brain`, isolated from the dirty primary
+checkout, starts from fetched main and includes the prior package-intake commit.
+No push, production deployment or native list mutation occurred.
+
+Read-only native probe/list discovery resolved Maya — Mine and Maya — Delegated
+in iCloud: five reminders, all completed. IDs and caller receipts are private under
+this worktree's ignored `private-review/`. No open backlog was inferred. The existing
+Wispr capture importer is reusable, but no scheduled Wispr runner is established;
+zero person entities means the colleague directory still needs identity resolution.
+The infrastructure catalog declares no TrojanHorse runtime host or Cloudflare app.
+
+Verified first implementation: `work-corpus/src/work_corpus/work_state.py` retains
+provenance-bearing events and projects own/delegated task state. Owner completion
+and reopening are explicit; stale replay cannot resurrect finished work, retries
+deduplicate, open work does not expire, ambiguous terminal events remain review.
+25 new plus 10 existing task tests pass; focused Ruff and diff checks pass. This
+is an API requiring trusted validated input, not text extraction or a running inbox.
+It was not initialized against the live database.
+
+Native discovery receipts are durably copied into the canonical ignored report
+`work-corpus/corpus/reports/work-brain-definition-20261005/`.
+
+Next verification: wire a durable paste source and live Wispr intake into
+structured, source-cited events and exercise one assignment/completion sequence.
+Do not rerun historical extraction. After local workflow validation, bind and
+verify the installed Mac Reminders caller and migrate exact Maya list ownership
+without losing history or running competing writers. Prepare the Pages/Access
+release as a concrete reviewable change before any production approval gate.
+
+The prior unrelated managed-rule repair gates remain archived in
 `docs/handoffs/2026-10-05-managed-rule-repair-before-package-intake.md`.

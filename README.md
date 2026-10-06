@@ -1,5 +1,16 @@
 # TrojanHorse: Local Work Corpus
 
+TrojanHorse is Omar's work second brain. It should continuously turn Wispr
+meetings and pasted email/Slack into updated projects, people, own/delegated tasks
+and completion evidence, with Apple Reminders as a working surface. Explicit
+owner completion is authoritative. Historical professional evidence export and
+question answering are supported outputs.
+
+Read [the current product contract](docs/WORK_SECOND_BRAIN.md) and [TODO](TODO.md).
+The existing archive/import/search/answer runtime is working; automatic Wispr
+intake, live task reconciliation, Cloudflare intake and Reminders delivery are
+implementation work, not deployed capabilities.
+
 > Current work: the local archive, `.eml` normalization, deterministic
 > organization, source-backed views, and the unified-corpus first pass are
 > complete for the captured local sources. The older MCP UUID shadow feed is

@@ -1,45 +1,37 @@
 # Local Work Corpus
 
-## Current local evidence and product decision — 2026-10-05
+## Current product authority — 2026-10-05
 
-The H002 complete package is now copied byte-for-byte into
-`data/derived_inputs/usc_professional_packages/Omar_Complete_Package_2026-10-05_H002`.
-The canonical ignored local config uses source system `professional_package`;
-the tracked default config includes the same root for reproducibility.
-There are 116 inventoried files, 108 normalized documents, 35 registered project
-cards and a preserved 230-row combined historical evidence ledger. All 35 card
-definitions and 20 H001 candidate aliases were verified. Raw iCloud content,
-prior evidence IDs and 3,188 derived-file hashes are preserved; tasks remain zero.
-Receipts and the SQLite backup are private under
-`work-corpus/corpus/reports/professional-package-intake-20261005/`.
+TrojanHorse is Omar's work second brain: automatic intake of live meetings plus
+pasted email/Slack, continuously maintained projects, people, own/delegated tasks
+and evidence-backed completion, projected into Apple Reminders. Explicit owner
+“done” is authoritative. Open tasks do not expire after fourteen days. Historical
+proposals remain distinct from the new live-task event projection.
+[WORK_SECOND_BRAIN.md](docs/WORK_SECOND_BRAIN.md) owns the current product contract.
+Question-based memory is secondary; the provisional prior plan is superseded.
 
-Package files are curated derivatives and drafts; they are not independent new
-historical events. Original evidence IDs, dates, locators, attribution and source
-hashes remain in their ledgers. The owner correction attributes Shoah work to
-Christina with Omar's limited managerial involvement; Libraries remains separate.
-No package scripts, publishing instructions or described automations were run.
+The complete professional package remains imported privately: 116 files, 108
+normalized documents, 35 retrievable project definitions, 20 H001 candidate aliases
+and a retained 230-row historical ledger. Prior evidence/derived files are preserved.
+Receipts remain in `work-corpus/corpus/reports/professional-package-intake-20261005/`.
+Package derivatives do not constitute new underlying historical events.
 
-Professional memory is the provisional first product, pending owner preference.
-Technical ingestion and an answer CLI exist; repeatable owner use and broader
-answer correctness remain unverified. The next step is five source-inspected
-questions over the imported cards, then a minimal local entry point if warranted.
-See [the product plan](docs/PROFESSIONAL_MEMORY_PLAN.md). No new application was
-implemented or deployed by this intake. Source changes are local and unpushed;
-the existing dirty primary checkout was preserved.
+Read-only runtime inspection found 13 captured Wispr items, 1,118 Granola items,
+44 project entities, zero person entities and zero historical task rows. Names in
+source text are not a completed identity directory. Wispr snapshot import exists
+but no automatic Wispr delta runner is established. The native Reminders lists
+Maya — Mine and Maya — Delegated resolve in iCloud; all five existing reminders
+are completed. Exact IDs/probe receipts are private. No list changes were performed.
+Shell reachability does not prove unattended caller permission.
 
-A private source-evidence corpus supporting operating memory and career evidence.
-Behavior is specified in the design document; execution is tracked in TODO.md.
-Historical context is preserved in docs/superpowers/plans/2026-09-06-context-history.md.
-
-The current operational checkpoint is recorded in
-`docs/LOCAL_WORK_CORPUS_STATUS.md` and `docs/REMAINING_WORK.md`. Ingestion,
-deterministic organization, the approved unified-corpus first pass, source-backed
-views, and the tested Granola delta path are complete for the captured local
-sources. The repository-level audit is in `docs/TROJAN_HORSE_AUDIT.md`: the
-active runtime is packaged, tested, locally verifiable, and scheduled on the
-canonical Mac host; the remaining product layer is local answer
-synthesis/API/UI. Optional semantic refinement remains a separate downstream
-step.
+The infrastructure catalog has no declared TrojanHorse runtime host. No Cloudflare
+Pages/Access app, private context service or Reminders bridge was deployed. The
+new deterministic event reducer is an isolated first slice, not a running inbox.
+Its 25 tests and 10 existing task tests pass; focused Ruff/diff checks pass.
+The API creates only namespaced work_* tables when explicitly initialized; no
+live database migration or provider writes were performed.
+The primary dirty checkout and live corpus remain preserved. Source changes are
+in isolated `feature/work-second-brain`, local and unpushed.
 
 ## Language
 
@@ -77,7 +69,7 @@ it does not establish a person, project, or organization identity.
 
 **Review item**: An uncertain parse, classification, merge, date, task, or relationship proposal.
 
-**Current task**: An explicit commitment from a future event or an event/meeting dated within the previous 14 calendar days at run time.
+**Historical current-task proposal**: The legacy extractor applies a fourteen-day event-date window. This is not the new live-task lifetime rule. A live task stays open until completed, cancelled or explicitly superseded.
 
 **Coverage run**: A resumable local pass that accounts for every eligible final Zoom media item.
 
