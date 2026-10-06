@@ -31,6 +31,27 @@ Source pointers, pinned to the inspected commit:
 - https://github.com/Khamel83/reflex/blob/3b86410e8847666cbfff79f61c7a7a0fbc56d660/docs/evaluation.md
 - https://github.com/Khamel83/reflex/blob/3b86410e8847666cbfff79f61c7a7a0fbc56d660/docs/provider.md
 
+## Start from the owner's blueprint
+
+The owner clarified that the iCloud package already supplies the project map and
+participant context. Do not rediscover the taxonomy or ask him to restate it.
+A private seed file has been derived from all 35 existing cards, retaining their
+P IDs, 20 H001 candidate aliases, current-reading precedence, original file hashes,
+exact role/attribution passage locators and pointers to the 230-row evidence ledger.
+No new project IDs, inferred active statuses or unsupported person identities were
+created. Role names remain in their source context rather than flattened into a
+new authoritative directory. All 35 cards contain retained attribution context.
+
+Private artifacts:
+`work-corpus/corpus/reports/work-brain-blueprint-20261005/PROJECT_BLUEPRINT.jsonl`
+and `BLUEPRINT_RECEIPT.json`. These are routing/context seeds, not new historical
+facts and not a live integration. Original package bytes remain unchanged.
+
+Use the supplied project descriptions and participant evidence first. An incoming
+passage selects relevant cards; those cards supply context for commitment matching.
+A date/lifecycle hint narrows retrieval but cannot declare every historical card
+active or prevent a closed project from being recognized.
+
 ## The hard problem
 
 The implemented task-state reducer begins AFTER the hard interpretation has
@@ -126,19 +147,29 @@ unmatched information. When a reference genuinely cannot be resolved, retain it
 and surface a specific clarification in Reminders rather than inventing a match
 or requiring a separate dashboard. Most clear cases should flow automatically.
 
-## Design evidence needed before implementation resumes
+## Bounded iteration instead of a complete taxonomy exercise
 
-Work through a small set of actual source sequences already retained locally:
-new project mandate; shared participants across two projects; a repeated promise;
-checkbox followed by outstanding evidence; old-email confirmation; new version
-request; monthly recurrence; incorrect employee match; multi-project meeting;
-old source replay. For each, record expected project identity, task identity,
-relation and visible reminder behavior. Use clear passages with ambiguities and
-counterexamples, not only easy examples. Do not reopen the whole archive.
+Work one incoming passage through the existing blueprint first:
 
-Compare ordinary structured LLM interpretation with a Reflex-assisted judgment on
-the same candidates before claiming improvement. Candidate retrieval misses and
-judgment mistakes are different failures. Start with offline examples/design
-walkthrough; any future live evaluation first resolves the private-data route.
-No provider integration, thresholds or production deployment is authorized by this
-review alone. The owner's current instruction is to think before building further.
+1. Retrieve a few plausible cards and their participant/role context. Exact known
+   IDs or aliases are deterministic hints; ambiguous language needs interpretation.
+2. Decide project, task and relation using that bounded context. Accept clear cases
+   without expanding the context or requiring the owner to approve routine matches.
+3. If a particular decision is uncertain, retrieve the linked source passage or
+   adjacent context and reconsider that decision. Do not restart every decision
+   or rescan the archive. A focused second pass is the proposed normal bound;
+   unresolved references can remain pending in Reminders with a precise question.
+4. Retain the match and any owner correction so the next item starts with more
+   knowledge. Broaden a project boundary only when the actual new context warrants
+   it. Information collection continues even when one interpretation is unresolved.
+
+Start with one assignment followed by a completion or returning-work reference.
+Use retained source sequences when useful; do not require a large evaluation set
+or a comprehensive ontology before the first useful flow. Expand cases as real
+uncertainties appear. Reflex can supply the bounded judgments where it helps;
+its effect must be distinguished from candidate retrieval. Provider/data-routing
+and production concerns remain separate from this local design walkthrough.
+
+The immediate next step is applying this process to the seeded corpus, not more
+blank-slate architecture. The earlier owner request to think before more building
+still holds; no runtime wiring or external calls occurred in this clarification.

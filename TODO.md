@@ -16,11 +16,14 @@ before building more. Read [the reasoning review](docs/PROJECT_AND_TASK_REASONIN
 The existing reducer is a tested first slice, not validation of semantic matching.
 
 - [x] Inspect fetched Reflex source and its profiles/policy without calls or edits.
-- [ ] Walk retained source sequences through project identity, task identity and
-  relation decisions; distinguish same unfinished work, new work, recurrence and
-  categorization error. Returning work gains attention, not automatic effort size.
-- [ ] Settle the bounded semantic questions and evaluate Reflex's contribution
-  before resuming intake/Reminders wiring. No dashboard is required.
+- [x] Seed the project/context map from the owner-supplied iCloud package: all 35
+  cards, 20 H001 aliases, exact role/attribution passages and source hashes retained.
+  Private blueprint and receipt saved; no new IDs, source edits or provider calls.
+- [ ] Walk one assignment/completion or returning-work sequence through relevant
+  seeded cards. Expand context only for uncertain decisions, then retain corrections.
+  Do not require a taxonomy redesign or comprehensive evaluation before the first flow.
+- [ ] Use Reflex for bounded decisions where it helps; resolve only the necessary
+  questions before resuming intake/Reminders wiring. No dashboard is required.
 
 
 - [x] Historical complete-package intake: 116 files, 108 normalized documents,

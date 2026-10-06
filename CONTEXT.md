@@ -3,7 +3,12 @@
 ## Current product authority — 2026-10-05
 
 The owner requested design review before more building. Implementation wiring is
-paused while project/task identity and recurrence are worked through. Reflex was
+paused while one bounded project/task sequence is worked through. The owner's
+35-card iCloud package is the blueprint, not raw material for a new taxonomy.
+A private PROJECT_BLUEPRINT.jsonl retains all card IDs, 20 H001 aliases, exact
+role/attribution passages and file hashes; do not request the project map again.
+Use a relevant subset, inspect more context only for an uncertain decision and
+retain the correction. Broader evaluation is not a prerequisite for this first flow. Reflex was
 inspected at fetched `3b86410e8847666cbfff79f61c7a7a0fbc56d660`: it supports
 versioned typed judgments and candidate distributions, not automatic work-project
 creation or state changes. Its existing repository-routing profile needs a work

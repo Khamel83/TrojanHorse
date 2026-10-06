@@ -73,9 +73,17 @@ dirty checkout and making no provider calls or changes. The bounded judgment
 API could support work-project association, task association and event-relation
 questions. Existing repository-routing semantics are not a work-project profile.
 
-Read `docs/PROJECT_AND_TASK_REASONING.md`. Next step: reason through retained
-source sequences and agree how to distinguish same outstanding work, new work,
-recurring instances and incorrect categorization. Returning tasks should gain
+Read `docs/PROJECT_AND_TASK_REASONING.md`. The owner subsequently clarified that the iCloud package is already the project/
+participant blueprint. A private PROJECT_BLUEPRINT.jsonl and BLUEPRINT_RECEIPT.json
+were saved under canonical `work-corpus/corpus/reports/work-brain-blueprint-20261005/`:
+35 existing IDs, 20 H001 aliases, exact role/attribution context and verified hashes.
+No original-source edits, new project IDs or provider calls occurred. This is a
+context seed, not live wiring. Do not require Omar to recreate his project list.
+
+Next step: walk one assignment/completion or returning-work passage through a
+relevant subset of these cards. Resolve an uncertain decision by retrieving its
+linked source context; retain corrections. Do not perform another archive sweep
+or require comprehensive taxonomy/evaluation before the first useful sequence. Returning tasks should gain
 attention, not automatic estimates of bigger effort. The 46-test reducer cannot
 establish real-world identity matching because its inputs already contain IDs.
 No intake/Reminders wiring, threshold selection, provider transfer or deployment
