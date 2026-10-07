@@ -251,6 +251,14 @@ Use g2k/OMP when available instead of creating another provider integration.
 Use GitHub issues and pull requests for durable work. Do not assume that local
 provider credentials, filesystem state, or a local g2k daemon exists. See
 `INFRA.md` for the machine-specific access path and boundaries.
+
+Before a g2k review or API call, read g2k's current README:
+https://github.com/Khamel83/g2k/blob/main/README.md.
+For plan reviews use `g2k-review --quality high --caller PROJECT < plan.md`
+(or explicit `frontier`). It has no tools or implementation authority and saves
+a private OCI receipt before printing. Do not invent receipt paths under a
+repository `data/` directory, local provider credentials, or a local daemon.
+The interactive `g2k -p` command runs OMP and is not the tool-free review path.
 <!-- janitor:end:capability -->
 <!-- janitor:begin:working-docs -->
 ## Keep the working docs current
@@ -308,11 +316,8 @@ not own another task list. Keep completed evidence with its source links.
 Use stable task IDs when available. Explicit GitHub links identify related
 records; matching text alone does not establish a dependency or completion.
 A pull request that finishes a TODO line puts `Closes-TODO: <the line's text>`
-in its body. The text must match exactly one open TODO line; if it matches none
-or more than one, Janitor leaves all TODO lines unchanged and reports the
-ambiguous closure. A TODO line that gets its own issue or PR carries that full
-URL. After merge, Janitor ticks unambiguously identified lines and appends the
-evidence link.
+in its body; a TODO line that gets its own issue or PR carries that full URL.
+After merge, Janitor ticks such lines and appends the evidence link.
 Development progress and runtime acceptance are separate facts. Missing or
 stale source evidence stays unknown. Generated summaries must not become new
 copies of the underlying tasks. Janitor distributes this contract; Infra's
