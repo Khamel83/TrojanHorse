@@ -10,9 +10,18 @@ deterministic organization, the approved unified-corpus first pass, source-backe
 views, and the tested Granola delta path are complete for the captured local
 sources. The repository-level audit is in `docs/TROJAN_HORSE_AUDIT.md`: the
 active runtime is packaged, tested, locally verifiable, and scheduled on the
-canonical Mac host; the remaining product layer is local answer
-synthesis/API/UI. Optional semantic refinement remains a separate downstream
-step.
+canonical Mac host. The local `answer`/`answer-compare`/`answer-eval` CLI layer
+is delivered; the remaining product edge is a broader manual answer evaluation
+and an optional web/API or UI layer. Optional semantic refinement remains a
+separate downstream step.
+
+The single canonical ordered plan for outstanding work is
+[`docs/REPO_PLAN.md`](docs/REPO_PLAN.md). Task prose and acceptance receipts
+stay in `TODO.md` and the other owning records. The repository rationalization
+audit (2026-10-10) is tracked by the coordinator
+[#16](https://github.com/Khamel83/TrojanHorse/issues/16); its classification and
+coverage evidence is in
+[`docs/history/2026-10-10-repository-rationalization.md`](docs/history/2026-10-10-repository-rationalization.md).
 
 ## Language
 

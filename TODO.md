@@ -247,8 +247,9 @@ continues as a derived use of the same source-backed corpus.
 ## Continuation instructions
 
 Read this checklist and the canonical docs above. Preserve completed ingestion
-and organization gates. Start new product work only when requested; the optional
-assistant layer is the remaining substantive product edge.
+and organization gates. Start new product work only when requested; the
+delivered local answer CLI's open edge is a broader manual answer evaluation and
+an optional web/API or UI layer.
 
 Use the installed `com.khamel83.work-corpus-granola-delta` LaunchAgent for
 bounded Granola maintenance. At the acceptance checkpoint it ran at load and
@@ -268,6 +269,27 @@ The delivered acceptance included 200 passing tests, Ruff, compilation, shell
 syntax, plist lint, diff checks, doctor, live launchd reload, and a successful
 overlap-only poll with no append or rebuild. Recheck only the layers affected by
 future changes; do not present these historical results as new test runs.
+
+## Repository rationalization — 2026-10-10
+
+The owner-authorized documentation audit ([#17](https://github.com/Khamel83/TrojanHorse/issues/17))
+reconciled every visible outstanding TODO and open issue/PR against the
+captured native intake packet (`docs/reconciliation/intake-2026-10-10.json` and
+its read part; 17/17 records read, 2 open, none omitted). The single canonical
+ordered plan is [`docs/REPO_PLAN.md`](docs/REPO_PLAN.md); its classification,
+coverage and unknowns are in
+[`docs/history/2026-10-10-repository-rationalization.md`](docs/history/2026-10-10-repository-rationalization.md).
+The coordinator ([#16](https://github.com/Khamel83/TrojanHorse/issues/16)) stays
+parked/tracking-only.
+
+The three unchecked milestone items above and the audit's P2 items remain open:
+they are owner-gated, manual, or conditional, and this audit claims no runtime
+acceptance. One uncovered ready maintenance job (test coverage in lower-covered
+modules) is proposed through the plan's ready-jobs marker. Proposed native
+dispositions: #17 completes with the documentation PR merge; #16 stays open;
+#1–#15 are closed/merged evidence, with #13 superseded by #14. No implementation
+was enqueued and no code or runtime changed.
+
 <!-- janitor:begin:todo -->
 ## Active work
 
