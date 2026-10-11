@@ -71,3 +71,27 @@ def test_doctor_can_exclude_its_own_active_run(tmp_path: Path):
 
     payload = json.loads((config.state_dir / "doctor.json").read_text())
     assert payload["pipeline"]["running_rows_after_recovery"] == 0
+
+
+def test_doctor_opens_its_own_connection_when_none_is_supplied(tmp_path: Path):
+    config = load_config(tmp_path)
+
+    text = doctor(config)
+
+    assert "WORK CORPUS DOCTOR" in text
+    assert (config.state_dir / "doctor.json").is_file()
+    payload = json.loads((config.state_dir / "doctor.json").read_text())
+    assert payload["supported_runtime"] == "work-corpus"
+
+
+def test_doctor_reports_legacy_runtime_absent_without_the_root_package(tmp_path: Path):
+    config = load_config(tmp_path)
+    con = connect(config.state_dir / "doctor.sqlite")
+    try:
+        doctor(config, con)
+    finally:
+        con.close()
+
+    payload = json.loads((config.state_dir / "doctor.json").read_text())
+    assert payload["legacy_runtime"]["status"] == "absent"
+    assert payload["legacy_runtime"]["present_paths"] == []
