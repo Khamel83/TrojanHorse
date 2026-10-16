@@ -154,3 +154,6 @@ topic labels, canonical people/organization aliases, and 52 retained Zoom
 linkage states after the core views are used; and consider semantic ranking
 only as a later optional refinement under the same local-data boundary.
 <!-- janitor:end:recent -->
+## Fleet CI cancellation - source checkpoint (October 16, 2026)
+
+`.github/workflows/ci.yml` has a prepared source change on `feat/fleet-ci-cancellation-20261016` that coalesces superseded pull-request runs and leaves main, manual, release, and scheduled runs non-canceling. Native CI, review, and normal merge remain pending; no runtime change is claimed.

@@ -328,3 +328,6 @@ acceptance receipts and the full-scale repository audit remain preserved in the
 historical records. Counts and verification results are receipts from those
 checkpoints, not freshly measured totals.
 <!-- janitor:end:todo -->
+## Fleet CI cancellation - source checkpoint (October 16, 2026)
+
+- [ ] `.github/workflows/ci.yml` has a prepared PR-only concurrency cancellation change on `feat/fleet-ci-cancellation-20261016`; native CI, review, and normal merge remain pending. No runtime change is claimed.
